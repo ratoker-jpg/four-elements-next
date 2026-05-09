@@ -8845,7 +8845,9 @@ if (directionalAnim) {
     ? window.FE_HARVESTER_DIR_MAP
     : u.type === 'light_tank'
       ? window.FE_LIGHT_TANK_DIR_MAP
-      : window.FE_BUILDER_DIR_MAP;
+      : u.type === 'scout'
+        ? window.FE_SCOUT_DIR_MAP
+        : window.FE_BUILDER_DIR_MAP;
   dir = unitDir8(u, dirMap);
 
   const useMoveFrames = u.type === 'builder' && window.FE_BUILDER_USE_MOVE_FRAMES === true;
@@ -8868,7 +8870,9 @@ if (directionalAnim) {
       ? window.FE_HARVESTER_DIR_OFFSETS
       : u.type === 'light_tank'
         ? window.FE_LIGHT_TANK_DIR_OFFSETS
-        : null;
+        : u.type === 'scout'
+          ? window.FE_SCOUT_DIR_OFFSETS
+          : null;
   const targetOffset = dirOffsets?.[dir] || { x:0, y:0 };
 
   // Плавное визуальное сглаживание offset-а при смене направления.
@@ -8928,7 +8932,9 @@ drawSprite(unitImage, rx, ry, profile.size, {
       ? anchorScreenY - 48 * z
       : u.type === 'harvester'
         ? anchorScreenY - 64 * z
-        : anchorScreenY - profile.size[1] * z * unitAnchorY + profile.hpOffset * z;
+        : u.type === 'scout'
+          ? anchorScreenY - 52 * z
+          : anchorScreenY - profile.size[1] * z * unitAnchorY + profile.hpOffset * z;
 
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,.58)';
@@ -9085,24 +9091,31 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
       ? window.FE_HARVESTER_DUST_WHEEL_Y
       : unit.type === 'light_tank'
         ? window.FE_LIGHT_TANK_DUST_WHEEL_Y
-        : window.FE_BUILDER_DUST_WHEEL_Y;
-    const defaultWheelYOffset = unit.type === 'harvester' ? -34 : unit.type === 'light_tank' ? -28 : -8;
+        : unit.type === 'scout'
+          ? window.FE_SCOUT_DUST_WHEEL_Y
+          : window.FE_BUILDER_DUST_WHEEL_Y;
+    const defaultWheelYOffset = unit.type === 'harvester' ? -34 : unit.type === 'light_tank' ? -28 : unit.type === 'scout' ? -14 : -8;
     const wheelYOffset = Number.isFinite(wheelYOffsetFlag)
       ? wheelYOffsetFlag
       : defaultWheelYOffset;
 
     const isHarvesterDust = unit.type === 'harvester';
     const isLightTankDust = unit.type === 'light_tank';
+    const isScoutDust = unit.type === 'scout';
     const radiusMultFlag = isHarvesterDust
       ? window.FE_HARVESTER_DUST_RADIUS_MULT
       : isLightTankDust
         ? window.FE_LIGHT_TANK_DUST_RADIUS_MULT
-        : 1;
+        : isScoutDust
+          ? window.FE_SCOUT_DUST_RADIUS_MULT
+          : 1;
     const alphaMultFlag = isHarvesterDust
       ? window.FE_HARVESTER_DUST_ALPHA_MULT
       : isLightTankDust
         ? window.FE_LIGHT_TANK_DUST_ALPHA_MULT
-        : 1;
+        : isScoutDust
+          ? window.FE_SCOUT_DUST_ALPHA_MULT
+          : 1;
     const radiusMult = Number.isFinite(radiusMultFlag) ? radiusMultFlag : 1;
     const alphaMult = Number.isFinite(alphaMultFlag) ? alphaMultFlag : 1;
     const dustColor = isHarvesterDust && typeof window.FE_HARVESTER_DUST_COLOR === 'string'
@@ -9614,6 +9627,12 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
         <div class="panel-title">Лёгкий танк</div>
         <button class="action-btn" data-unit-action="stop">Стоп</button>
         <button class="action-btn disabled">Атака — следующий патч</button>
+        <button class="action-btn" data-unit-action="cancel">Отмена</button>
+      `);
+    } else if (u.type==='scout') {
+      setContextAt(u.x,u.y,`
+        <div class="panel-title">Разведчик</div>
+        <button class="action-btn" data-unit-action="stop">Стоп</button>
         <button class="action-btn" data-unit-action="cancel">Отмена</button>
       `);
     }
@@ -10271,6 +10290,7 @@ function setGroupManualMove(units, tx, ty) {
       light_tank: { x: 0, y: -32, rx: 0.98, ry: 0.92 },
       harvester: { x: 0, y: -30, rx: 1.00, ry: 0.94 },
       builder: { x: 0, y: -12, rx: 0.92, ry: 0.88 },
+      scout: { x: 0, y: -16, rx: 0.88, ry: 0.84 },
       // PATCH-VIS-04B-ROBUST-FACTION-RING-COLOR-BUILDER-FIX_END
     };
 
@@ -11258,6 +11278,7 @@ window.addEventListener('keydown', e=>{
       if (unit.type === 'builder') return window.FE_BUILDER_DIR_OFFSETS;
       if (unit.type === 'harvester') return window.FE_HARVESTER_DIR_OFFSETS;
       if (unit.type === 'light_tank') return window.FE_LIGHT_TANK_DIR_OFFSETS;
+      if (unit.type === 'scout') return window.FE_SCOUT_DIR_OFFSETS;
       return null;
     };
 
@@ -11265,6 +11286,7 @@ window.addEventListener('keydown', e=>{
       if (!unit) return null;
       if (unit.type === 'harvester') return window.FE_HARVESTER_FORCE_DIR;
       if (unit.type === 'light_tank') return window.FE_LIGHT_TANK_FORCE_DIR;
+      if (unit.type === 'scout') return window.FE_SCOUT_FORCE_DIR;
       return window.FE_BUILDER_FORCE_DIR;
     };
 
@@ -11272,6 +11294,7 @@ window.addEventListener('keydown', e=>{
       if (!unit) return;
       if (unit.type === 'harvester') window.FE_HARVESTER_FORCE_DIR = value;
       else if (unit.type === 'light_tank') window.FE_LIGHT_TANK_FORCE_DIR = value;
+      else if (unit.type === 'scout') window.FE_SCOUT_FORCE_DIR = value;
       else window.FE_BUILDER_FORCE_DIR = value;
     };
 
@@ -11589,6 +11612,9 @@ window.addEventListener('keydown', e=>{
           }
         }
         updateLightTankCombat(u,dt);
+      }
+      if (u.type==='scout') {
+        updateUnitMovement(u,dt);
       }
 
       if (u.type === 'builder' || u.type === 'harvester' || u.type === 'light_tank' || u.type === 'scout') {
