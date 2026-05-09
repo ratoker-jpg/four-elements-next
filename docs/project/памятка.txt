@@ -1,0 +1,1111 @@
+Ты работаешь с проектом Four Elements Remake — браузерный ремейк старой мобильной RTS/стратегии Four Elements в изометрии.
+
+ВАЖНО:
+Ты не знаешь контекст проекта, поэтому сначала прочитай это ТЗ полностью. Не начинай массово переписывать код. Нужен безопасный, пошаговый рефакторинг и сохранение текущей рабочей логики.
+
+============================================================
+0. ОБЩИЙ КОНТЕКСТ
+============================================================
+
+Проект — браузерная RTS в стиле мягкой изометрической sci-fi / industrial / toy-like стратегии.
+
+Текущий проект у пользователя лежит примерно тут:
+
+C:\Users\Den\Desktop\four elements\four_elements_core_base_v03
+
+Запуск:
+
+1. Открыть терминал/PowerShell/CMD в корне проекта, где лежит index.html.
+2. Выполнить:
+
+py -m http.server 8000
+
+3. Открыть в браузере:
+
+http://localhost:8000/index.html
+
+Если запускать сервер не из корня проекта, будет 404.
+
+Главный текущий файл:
+
+src/main.js
+
+Проблема: main.js стал огромным файлом-франкенштейном. В нём сейчас смешаны:
+- инициализация;
+- состояние игры;
+- загрузка ассетов;
+- генерация карты;
+- pathfinding;
+- движение юнитов;
+- builder;
+- harvester;
+- экономика;
+- территория;
+- fog of war;
+- save/load;
+- input;
+- рендер карты;
+- рендер зданий;
+- рендер юнитов;
+- debug;
+- snapshot export;
+- UI.
+
+Задача следующего этапа — безопасно разбить main.js на модули, не сломав текущую рабочую игру.
+
+============================================================
+1. ТЕКУЩАЯ ВАЖНАЯ ЛОГИКА BUILDER
+============================================================
+
+Последние крупные правки были по builder.
+
+Что уже сделали и нужно сохранить:
+
+1. Builder теперь едет по клеткам ровно.
+2. Builder больше не должен ехать боком.
+3. Найдена рабочая карта направлений rawDir -> spriteDir:
+
+window.FE_BUILDER_DIR_MAP = [0, 0, 0, 2, 4, 4, 6, 6];
+
+Смысл направлений:
+
+dir 0 — вниз-вправо
+dir 2 — вниз-влево
+dir 4 — вверх-влево
+dir 6 — вверх-вправо
+
+Проверенные соответствия:
+
+raw 2 -> dir 0 — вниз-вправо
+raw 3 -> dir 2 — вниз-влево
+raw 4 -> dir 4 — вверх-влево
+raw 7 -> dir 6 — вверх-вправо
+
+2. Подобраны финальные offset-ы посадки builder по направлениям:
+
+window.FE_BUILDER_DIR_OFFSETS = {
+  0: { x: -2, y: 4 }, // вниз-вправо
+  2: { x:  1, y: 4 }, // вниз-влево
+  4: { x: -1, y: 4 }, // вверх-влево
+  6: { x: -1, y: 5 }  // вверх-вправо
+};
+
+ВАЖНО:
+Не возвращать старое значение для dir 2:
+
+2: { x: 8, y: 0 }
+
+Оно было переписано на:
+
+2: { x: 1, y: 4 }
+
+3. Внешний unit_controller должен быть выключен:
+
+window.FE_UNIT_CONTROLLER_ENABLED = false;
+
+Причина: раньше внешний FE_UNIT_CONTROLLER мог вмешиваться в движение поверх main.js и давать рывки/дёргание.
+
+4. Move-кадры builder временно выключены:
+
+window.FE_BUILDER_USE_MOVE_FRAMES = false;
+
+Причина: move-кадры могли давать визуальный подворот/смену ракурса. Пока builder должен ехать на стабильных idle_dirX_0 кадрах.
+
+5. Внешний render debug выключен:
+
+window.FE_EXTERNAL_RENDER_DEBUG_ENABLED = false;
+
+6. Принудительный forced dir выключен:
+
+window.FE_BUILDER_FORCE_DIR = null;
+
+7. Важно сохранить нижний блок флагов в main.js:
+
+window.FE_EXTERNAL_RENDER_DEBUG_ENABLED = false;
+window.FE_SHOW_BUILDING_FOOTPRINTS = false;
+window.FE_SHOW_UNIT_FOOTPRINTS = false;
+window.FE_BUILDER_USE_MOVE_FRAMES = false;
+
+window.FE_BUILDER_DIR_MAP = [0, 0, 0, 2, 4, 4, 6, 6];
+window.FE_UNIT_CONTROLLER_ENABLED = false;
+window.FE_BUILDER_FORCE_DIR = null;
+
+window.FE_BUILDER_DIR_OFFSETS = {
+  0: { x: -2, y: 4 }, // вниз-вправо
+  2: { x:  1, y: 4 }, // вниз-влево
+  4: { x: -1, y: 4 }, // вверх-влево
+  6: { x: -1, y: 5 }  // вверх-вправо
+};
+
+============================================================
+2. КЛЮЧЕВАЯ ЛОГИКА ПОВОРОТОВ
+============================================================
+
+Последний важный фикс: когда игрок кликает новую точку во время движения builder, юнит не должен мгновенно ломать path посреди клетки.
+
+Правильное поведение:
+
+Если юнит уже едет между клетками:
+- новую команду нужно принять;
+- сохранить её в очередь;
+- не менять текущий path мгновенно;
+- дать юниту доехать до ближайшей целой клетки;
+- потом построить новый path уже из целой клетки;
+- только там повернуть.
+
+Это убрало ощущение, что игрок “мини-багами” разворачивает машинку посреди клетки.
+
+Нужно сохранить/проверить функции такого типа:
+
+unitIsBetweenGridCells(unit)
+queueManualMove(unit, tx, ty)
+applyQueuedManualMove(unit)
+setManualMove(unit, tx, ty)
+
+В updateUnitMovement(unit, dt) после доезда до next cell должна применяться queued команда:
+
+if (unit._queuedManualMove) {
+  applyQueuedManualMove(unit);
+}
+
+Также при переходе на новую клетку нужно сбрасывать direction cache:
+
+unit._dirTargetKey = null;
+unit._dirDx = 0;
+unit._dirDy = 0;
+
+Цель:
+- логика движения остаётся клеточной;
+- поворот происходит на клетке;
+- визуально нет резкого разворота посреди движения.
+
+============================================================
+3. ЧТО БЫЛО СЛОМАНО И ЧТО НЕЛЬЗЯ ПОВТОРИТЬ
+============================================================
+
+1. Был случай, когда в drawUnit потерялась закрывающая скобка.
+
+Плохой вариант:
+
+if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
+  window.FE_RENDER_DEBUG?.unit?.(u, profile);
+}
+
+function drawFogTile(x,y) {
+
+Правильный вариант:
+
+if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
+  window.FE_RENDER_DEBUG?.unit?.(u, profile);
+}
+
+}
+
+function drawFogTile(x,y) {
+
+То есть drawUnit должен закрываться до объявления drawFogTile.
+
+2. main.js очень хрупкий. Нельзя делать огромные массовые изменения без проверки.
+
+3. Не включать обратно:
+
+window.FE_UNIT_CONTROLLER_ENABLED = true;
+
+4. Не включать пока:
+
+window.FE_BUILDER_USE_MOVE_FRAMES = true;
+
+5. Не удалять рабочие offsets builder.
+
+6. Не менять систему направлений без нового теста.
+
+============================================================
+4. ТЕКУЩИЕ DEBUG-ИНСТРУМЕНТЫ
+============================================================
+
+В проекте есть debug:
+
+8 — включить/выключить debug юнитов.
+7 — forced dir builder.
+6 — сброс forced dir в auto.
+J/L/I/K — временная калибровка offset-ов builder.
+F8 — экспорт snapshot.
+F9/F10 — builder debug log export/clear, если активен.
+
+Большая часть debug уже должна быть выключена флагами:
+
+window.FE_DEBUG_LOG_ENABLED = false;
+window.FE_HARVESTER_LOG_ENABLED = false;
+window.FE_EXTERNAL_RENDER_DEBUG_ENABLED = false;
+
+DEBUG можно оставить как dev-инструмент, но его нужно вынести из main.js.
+
+============================================================
+5. ГЛАВНАЯ БЛИЖАЙШАЯ ЗАДАЧА
+============================================================
+
+Следующий этап — НЕ новые фичи.
+
+Следующий этап — безопасно разбить main.js на модули.
+
+Почему:
+- main.js стал слишком большим;
+- drawUnit огромный;
+- debug-код размазан по файлу;
+- builder/harvester/pathfinding/render/UI всё смешано;
+- одна пропущенная скобка ломает всю игру.
+
+Нужно сделать безопасный рефакторинг:
+- без смены архитектуры на npm/vite/webpack;
+- без ES modules на первом этапе, если проект сейчас работает через обычные script tags;
+- через window.FE_* модули;
+- маленькими шагами.
+
+============================================================
+6. ПРАВИЛА РЕФАКТОРИНГА
+============================================================
+
+Делать только маленькими шагами:
+
+1 модуль вынесли
+→ игра запускается
+→ проверили консоль
+→ проверили builder
+→ только потом следующий модуль.
+
+После каждого шага проверять:
+
+- игра открывается;
+- новая игра стартует;
+- builder выбирается;
+- builder едет ровно;
+- builder поворачивает без дёргания;
+- новый клик во время движения применяется на ближайшей клетке;
+- harvester не сломан;
+- консоль без красных ошибок;
+- save/load не падает.
+
+Нельзя одновременно:
+- переносить 10 блоков;
+- менять механику;
+- чистить debug;
+- менять input;
+- менять loading;
+- менять ассеты.
+
+Один шаг = один тип изменений.
+
+============================================================
+7. ПЕРВЫЙ БЕЗОПАСНЫЙ ПЛАН РАЗБИВКИ
+============================================================
+
+Перед началом:
+
+1. Сделать backup:
+
+src/main.backup.before_refactor.js
+
+2. Убедиться, что текущая игра запускается.
+3. Проверить builder:
+   - едет ровно;
+   - поворачивает нормально;
+   - offsets работают;
+   - очередь поворота работает.
+
+------------------------------------------------------------
+ЭТАП 1. Вынести debug
+------------------------------------------------------------
+
+Создать:
+
+src/modules/debug/
+  builder_debug.js
+  snapshot_debug.js
+  render_debug.js
+
+render_debug.js может уже существовать — не ломать.
+
+В builder_debug.js вынести:
+
+- safeCloneForLog
+- getDebugLog
+- saveDebugLog
+- debugLog
+- exportDebugLog
+- clearDebugLog
+- diagnoseCell
+- diagnoseAroundCell
+- diagnoseFootprint
+- diagnoseRectAdjacent
+- getBuilderDebugSnapshot
+- logBuilderState
+- installFullDebugLoggerOnce
+
+Сделать API через window:
+
+window.FE_BUILDER_DEBUG = {
+  init(deps) {},
+  debugLog(...) {},
+  getBuilderDebugSnapshot(unit) {},
+  logBuilderState(unit, reason) {},
+  diagnoseCell(...) {},
+  diagnoseFootprint(...) {},
+  diagnoseRectAdjacent(...) {}
+};
+
+Зависимости передавать через init:
+
+FE_BUILDER_DEBUG.init({
+  getGame: () => game,
+  getSelected: () => selected,
+  passable,
+  buildingAt,
+  mineAt,
+  unitAt,
+  isObstacleBlocked,
+  inBounds,
+  BUILDINGS,
+  BUILDING_SIZE,
+  showToast
+});
+
+Чтобы меньше ломать main.js, можно временно оставить алиасы:
+
+const debugLog = (...args) => window.FE_BUILDER_DEBUG.debugLog(...args);
+
+В snapshot_debug.js вынести:
+
+- feSnapshotSafe
+- feSnapshotDiagnoseCell
+- feSnapshotAroundUnit
+- feSnapshotBuildInfo
+- feMakeSnapshot
+- FE_EXPORT_SNAPSHOT
+- обработчик F8
+
+API:
+
+window.FE_SNAPSHOT_DEBUG = {
+  init(deps) {}
+};
+
+------------------------------------------------------------
+ЭТАП 2. Разбить render
+------------------------------------------------------------
+
+Создать:
+
+src/modules/render/
+  sprite.js
+  map.js
+  buildings.js
+  units.js
+  overlays.js
+
+sprite.js:
+- imageReady
+- getAlphaBounds
+- getSolidSprite
+- drawSprite
+- drawDiamond
+- drawImageCoverTile
+
+API:
+
+window.FE_RENDER_SPRITE = {
+  imageReady,
+  drawSprite,
+  drawDiamond,
+  drawImageCoverTile,
+  getAlphaBounds,
+  getSolidSprite
+};
+
+map.js:
+- drawSandTile
+- drawTerritoryTile
+- drawTile
+- drawFogTile
+
+buildings.js:
+- drawHp
+- drawBuildingFootprintDebug
+- drawBuilding
+
+units.js:
+Тут главное — разбить drawUnit.
+
+Сейчас drawUnit делает всё сразу:
+- profile;
+- animation;
+- direction;
+- frame;
+- offset;
+- sprite;
+- HP;
+- debug;
+- external debug.
+
+Нужно сделать:
+
+unitIsMovingForAnim(u)
+unitDir8(u)
+getBuilderRenderState(u, assets)
+getBuilderDirOffset(u, dir)
+drawUnitSprite(u, renderState)
+drawUnitHp(u, anchor)
+drawUnitDebug(u, anchor, renderState)
+drawUnit(u)
+
+drawUnit должен стать коротким, 30–50 строк.
+
+------------------------------------------------------------
+ЭТАП 3. Вынести движение юнитов
+------------------------------------------------------------
+
+Создать:
+
+src/modules/units/
+  movement.js
+  direction.js
+  builder.js
+  harvester.js
+
+movement.js:
+- addClickMarker
+- setManualMove
+- unitIsBetweenGridCells
+- queueManualMove
+- applyQueuedManualMove
+- recoverUnitPath
+- updateUnitMovement
+
+ВАЖНО:
+Не потерять очередь поворота. Это ключевой фикс.
+
+direction.js:
+- unitDir8
+- unitAngle
+- unitFlip
+- builder direction helpers
+
+Важно:
+unitDir8 должен фиксировать направление на текущий path segment, а не пересчитывать dir каждый кадр от микроскопических дробных координат.
+
+builder.js:
+- orderBuild
+- findBuildPlan
+- canPlaceBuilding
+- updateBuilder
+- cancelBuildOrder
+- getBuildCost
+- canAffordBuild
+- spendBuildCost
+- refundBuildCost
+
+harvester.js:
+- harvesterLog
+- uniqueCells
+- ringCellsAroundPoint
+- harvesterApproachCells
+- findReachableCell
+- findReachableMinePlan
+- findBaseReturnPlan
+- isNearMine
+- isNearRect
+- startHarvester
+- assignNextMine
+- updateHarvester
+
+------------------------------------------------------------
+ЭТАП 4. Вынести systems
+------------------------------------------------------------
+
+Создать:
+
+src/modules/systems/
+  pathfinding.js
+  economy.js
+  territory.js
+  fog.js
+  save_load.js
+  map_generation.js
+  input.js
+  ui.js
+
+pathfinding.js:
+- cleanupDepletedMinerals
+- isObstacleBlocked
+- mineAt
+- buildingSoftBlockAt
+- buildingAt
+- unitAt
+- isBlocked
+- passable
+- findPath
+- adjacentFreeCells
+- adjacentFreeCellsForRect
+
+economy.js:
+- getStorageLimits
+- resourceSpace
+- addResource
+- updatePower
+- factionElementKey
+- canRunSeparatorCycle
+- updateProduction
+- queueUnitProduction
+- productionSpeedForUnit
+- findSpawnCellNearBuilding
+- updateUnitProduction
+- updateHud
+- animateHud
+
+territory.js:
+- seedTerritory
+- claimTerritoryCell
+- hasOwnedNeighbor
+- nextTerritoryCellForBuilding
+- updateTerritory
+
+fog.js:
+- reveal
+- updateFog
+- isVisible
+- footprintVisible
+
+save_load.js:
+- saveGame
+- loadGame
+- renderSaveMenu
+- canContinue
+- formatTime
+
+map_generation.js:
+- makeArrays
+- getStart
+- rectsOverlap
+- reserveFree
+- addObstacle
+- canSpawnMine
+- spawnMine
+- tryAround
+- randomFree
+- generateMap
+
+input.js:
+- canvas click
+- mousedown
+- mouseup
+- mousemove
+- wheel
+- keydown
+- keyup
+- body click handlers
+
+ui.js:
+- hideMenus
+- setContextAt
+- unitStatus
+- updateSelectedInfo
+- openUnitMenu
+- openBuildMenu
+- openFactoryMenu
+- showScreen
+- hideScreens
+- togglePause
+- openPause
+- closePause
+- openModal
+- openSettings
+- updateContinueButton
+
+============================================================
+8. ЦЕЛЕВАЯ СТРУКТУРА
+============================================================
+
+src/
+  main.js
+  config/
+    buildings.js / buildings.json
+    units.js / units.json
+    factions.js / factions.json
+  modules/
+    debug/
+      builder_debug.js
+      snapshot_debug.js
+      render_debug.js
+    render/
+      sprite.js
+      map.js
+      units.js
+      buildings.js
+      overlays.js
+    units/
+      movement.js
+      direction.js
+      builder.js
+      harvester.js
+    systems/
+      pathfinding.js
+      economy.js
+      territory.js
+      fog.js
+      save_load.js
+      map_generation.js
+      input.js
+      ui.js
+
+На первом этапе подключать модули через index.html до main.js:
+
+<script src="src/modules/render/sprite.js"></script>
+<script src="src/modules/debug/builder_debug.js"></script>
+<script src="src/main.js"></script>
+
+Не переводить сразу всё на import/export, чтобы не сломать запуск через простой http.server.
+
+============================================================
+9. КАК ДОЛЖЕН ВЫГЛЯДЕТЬ MAIN.JS В ИДЕАЛЕ
+============================================================
+
+main.js должен стать управляющим файлом:
+
+(() => {
+  'use strict';
+
+  let game = null;
+  let selected = null;
+  let assets = {};
+  let keys = {};
+  let lastTime = performance.now();
+
+  function init() {
+    applyUiScale();
+    resize();
+    loadAssets('cyan');
+    initModules();
+    updateContinueButton();
+    requestAnimationFrame(loop);
+  }
+
+  function initModules() {
+    FE_BUILDER_DEBUG.init({...});
+    FE_SNAPSHOT_DEBUG.init({...});
+    FE_RENDER.init({...});
+    FE_MOVEMENT.init({...});
+    FE_BUILDER.init({...});
+    FE_HARVESTER.init({...});
+    FE_INPUT.init({...});
+  }
+
+  function update(dt) {
+    if (!game || game.screen !== 'game' || game.paused) return;
+
+    game.time += dt;
+
+    updateCamera(dt);
+    updateUnits(dt);
+    updateSystems(dt);
+    autosave(dt);
+  }
+
+  function render() {
+    FE_RENDER.renderGame();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    update(dt);
+    render();
+
+    requestAnimationFrame(loop);
+  }
+
+  init();
+})();
+
+============================================================
+10. ОБЩЕЕ ТЗ ПО ИГРЕ И БУДУЩИМ ФИЧАМ
+============================================================
+
+Игра должна стать простой, читаемой изометрической RTS.
+
+Основной игровой цикл:
+- игрок выбирает фракцию;
+- появляется база;
+- есть builder и harvester;
+- harvester добывает сырьё/минералы;
+- separator перерабатывает сырьё;
+- builder строит здания;
+- здания расширяют территорию;
+- территория раскрывает обзор;
+- позже появятся апгрейды, боевые юниты и враги.
+
+------------------------------------------------------------
+Экономика v0.4
+------------------------------------------------------------
+
+Текущая утверждённая экономика v0.4:
+
+- harvester добывает сырые минералы;
+- минералы не тратятся напрямую на здания/юнитов;
+- separator перерабатывает:
+
+20 сырых минералов -> 10 энергии + 1 элемент фракции
+
+- энергия — основная валюта строительства зданий;
+- элементы — валюта производства юнитов и будущих апгрейдов;
+- элементы пока только копятся и отображаются;
+- если энергии/элементов нет места по лимиту, separator стопорится;
+- если сырьё забито по лимиту, harvester не должен выгружаться.
+
+Базовые лимиты:
+- minerals: 200
+- energy: 300
+- each element: 20
+
+Хранилища:
+- minerals_storage +200 сырья
+- energy_storage +300 энергии
+- elements_storage +20 к каждому элементу
+
+------------------------------------------------------------
+Стоимость зданий v0.4
+------------------------------------------------------------
+
+Здания стоят энергию:
+
+separator: 80
+minerals_storage: 100
+energy_storage: 120
+elements_storage: 140
+power_plant: 120
+energy_reactor: 180
+units_factory: 220
+repair_center: 160
+defense_tower: 180
+
+Времена строительства:
+
+separator: 25s
+minerals_storage: 20s
+energy_storage: 22s
+elements_storage: 24s
+power_plant: 25s
+energy_reactor: 35s
+units_factory: 40s
+repair_center: 35s
+defense_tower: 30s
+
+Параметры зданий нужно держать в конфиге:
+src/config/buildings.json или buildings.js.
+
+------------------------------------------------------------
+Юниты v0.4
+------------------------------------------------------------
+
+Через units_factory в v0.4 доступны:
+- builder
+- harvester
+
+Боевые можно заложить в конфиг, но производство можно оставить disabled.
+
+Юниты стоят элементы своей фракции:
+- harvester — 1 элемент
+- builder — 1 элемент
+- light_tank — 2 элемента
+- heavy_tank — 4 элемента
+- bomber — 6 элементов
+
+Время производства:
+- builder — 20s
+- harvester — 25s
+- light_tank — 35s
+- heavy_tank — 60s
+- bomber — 55s
+
+Очередь units_factory максимум 2 юнита.
+
+Параметры юнитов должны быть в:
+src/config/units.json или units.js.
+
+------------------------------------------------------------
+Фракции
+------------------------------------------------------------
+
+Фракции:
+- green
+- cyan
+- yellow
+- purple
+- random
+
+Бонусы:
+- green: +10% скорость строительства зданий;
+- cyan: +10% скорость/время производства гражданских юнитов harvester и builder;
+- yellow: +10% скорость/время производства боевых юнитов;
+- purple: окрашенная территория раскрывает радиус 2 вместо 1;
+- random: выбирает случайную фракцию, наследует её бонус и даёт +50 энергии на старте.
+
+Параметры фракций держать в:
+src/config/factions.json или factions.js.
+
+------------------------------------------------------------
+Территория
+------------------------------------------------------------
+
+Территория должна расширяться медленно:
+- не заливать область сразу;
+- окрашивание по одной клетке;
+- 2x2 здание окрашивает клетки под собой примерно за 45–60 секунд;
+- дальше расширение волной;
+- радиус максимум 10 клеток от здания;
+- территория не запрещает строительство.
+
+Территория должна использовать PNG overlay:
+assets/tiles/territory_green.png
+assets/tiles/territory_cyan.png
+assets/tiles/territory_yellow.png
+assets/tiles/territory_purple.png
+
+Не использовать простую программную заливку как финальный визуал.
+
+------------------------------------------------------------
+Fog / обзор
+------------------------------------------------------------
+
+- здания раскрывают радиус 6;
+- harvester радиус 5;
+- остальные юниты радиус 4;
+- каждая окрашенная клетка раскрывает себя и соседние клетки радиусом 1;
+- purple территория раскрывает радиус 2.
+
+------------------------------------------------------------
+Карта
+------------------------------------------------------------
+
+Карта песчаная, мягкая, не шахматная.
+
+Вокруг стартовой базы:
+- много маленьких кристаллов;
+- немного средних.
+
+Ближе к центру:
+- больше средних и больших.
+
+В центре:
+- mineral_infinite.
+
+Ресурсные залежи:
+- mineral_small — 1 сбор;
+- mineral_medium — 3 сбора;
+- mineral_large — 5 сборов;
+- mineral_infinite — бесконечно.
+
+На карте должны быть:
+- mountains;
+- volcanoes;
+- rocks;
+- dry bushes;
+- sand bumps.
+
+Они должны влиять на pathfinding, но не блокировать старт.
+
+------------------------------------------------------------
+Pathfinding
+------------------------------------------------------------
+
+Юниты:
+- двигаются по клеткам;
+- не срезают диагонали;
+- учитывают здания, минералы, препятствия и юнитов;
+- не дёргаются;
+- не зависают на месте.
+
+Если путь невозможен:
+- зелёный индикатор для принятой команды;
+- красный индикатор для недоступного пути.
+
+Builder:
+- игрок выбирает тип здания, не точную клетку;
+- builder/система ищет ближайшее подходящее место;
+- ошибка "строитель не может доехать" считается багом;
+- строить можно на чужой территории;
+- здания не ставятся вплотную друг к другу, нужен зазор 1 клетка.
+
+------------------------------------------------------------
+UI
+------------------------------------------------------------
+
+UI должен быть крупнее и читабельнее.
+
+Нужен UI Scale:
+- 100%
+- 125%
+- 150%
+
+HUD:
+- сырые минералы;
+- энергия;
+- purple/green/cyan/yellow элементы;
+- лимиты желательно показывать.
+
+Esc меню:
+- Продолжить
+- Сохранить
+- Настройки
+- В главное меню
+
+Continue должен открывать список сохранений:
+- фракция;
+- дата/время;
+- размер карты.
+
+Главное меню:
+- hover;
+- pointer cursor;
+- стабильные кнопки.
+
+------------------------------------------------------------
+Ассеты
+------------------------------------------------------------
+
+Структура:
+
+assets/
+  tiles/
+  environment/
+  factions/
+    cyan/
+      buildings/
+      units/
+    green/
+      buildings/
+      units/
+    yellow/
+      buildings/
+      units/
+    purple/
+      buildings/
+      units/
+  ui/
+    icons/
+    buttons/
+    panels/
+    references/
+
+Важно:
+- не использовать main_base.png, использовать hq_base.png;
+- builder теперь может использовать builder_8dirs;
+- harvester_solid.png можно использовать как резерв вместо прозрачного harvester.png;
+- не делать массовую очистку ассетов по чёрному/белому;
+- fixed-архивы могли повредить environment;
+- environment проверять на тёмном фоне;
+- PNG должны быть с прозрачным фоном, без белых фонов, шахматки, чёрных артефактов.
+
+Промт для новых ассетов:
+"Clean isometric game asset sprite, soft retro sci-fi pixel-art strategy style, toy-like industrial design, transparent background, PNG with alpha, no background, no checkerboard, no white matte, no black halo, centered, fully visible."
+
+============================================================
+11. ПРИОРИТЕТЫ ПОСЛЕ РЕФАКТОРИНГА
+============================================================
+
+После безопасной разбивки main.js:
+
+1. Проверить harvester:
+   - скорость;
+   - grounding;
+   - не висит ли над землёй;
+   - корректно добывает;
+   - корректно возвращается к базе;
+   - не едет в вулкан/нецелевой объект.
+
+2. Проверить визуал builder без debug:
+   - едет ровно;
+   - поворачивает на клетке;
+   - не подскакивает из-за offsets;
+   - HP над моделью;
+   - debug выключен.
+
+3. Почистить временный debug:
+   - J/L/I/K можно оставить как dev, но лучше спрятать за флагом;
+   - 7/6 forced dir тоже спрятать за dev-флагом;
+   - 8 debug оставить только для разработки.
+
+4. Продолжить v0.4:
+   - экономика;
+   - territory spread;
+   - UI scale;
+   - save slots;
+   - README.md;
+   - TEST_CHECKLIST.md.
+
+============================================================
+12. КРИТЕРИЙ УСПЕХА ТЕКУЩЕГО ЭТАПА
+============================================================
+
+Рефакторинг считается успешным, если:
+
+- игра запускается через py -m http.server 8000;
+- нет красных ошибок в консоли;
+- main.js стал меньше и понятнее;
+- debug вынесен;
+- drawUnit разбит;
+- builder едет и поворачивает как до рефакторинга;
+- harvester не сломан;
+- save/load не сломан;
+- нижние builder flags сохранены;
+- queue turn logic сохранена;
+- FE_UNIT_CONTROLLER не включён обратно;
+- FE_BUILDER_USE_MOVE_FRAMES не включён обратно.
+
+Главная мысль:
+Сейчас задача не "улучшить всё сразу", а "разнести код так, чтобы дальше можно было безопасно развивать игру".
+
+============================================================
+13. ЛОКАЛЬНЫЕ ИНСТРУМЕНТЫ И ПРОВЕРКИ
+============================================================
+
+GPT-контекст:
+- `01_BUILD_GPT_CONTEXT.bat`
+- `_exports/gpt_context_latest.zip`
+
+Локальный distill:
+- `tools/distill_local.py`
+- пример:
+  `git diff 2>&1 | py tools\distill_local.py "Return changed files and risky changes."`
+- использовать только для длинных логов, diff и search output;
+- не использовать для точных списков PNG и directory listing.
+
+Playwright:
+- `npx.cmd playwright test`
+- `_reports/playwright`
+- использовать для визуальных задач: направления юнитов, grounding, пыль, UI, тени;
+- не считать обязательным для каждой маленькой числовой правки.
+
+Playwright codegen:
+- `07_PLAYWRIGHT_CODEGEN.bat`
+- `docs/project/playwright_codegen_routes.md`
+- использовать для записи маршрутов кликов;
+- полезно для повторяемой визуальной проверки: builder direction, grounding, UI, пыль, тени;
+- не использовать как обязательный шаг для каждой маленькой правки.
+
+Audit main:
+- `04_AUDIT_MAIN.bat`
+- `tools/audit_main.py`
+- `_reports/audit/main_audit.txt`
+
+Asset validation:
+- `05_VALIDATE_BUILDER_ASSETS.bat`
+- `06_VALIDATE_HARVESTER_ASSETS.bat`
+- `tools/assets/validate_unit_sprites.py`
+- `_reports/assets/`
+
+Правило:
+- длинные логи можно сжимать;
+- точные файловые данные нельзя сжимать;
+- визуальные проверки запускать только когда задача реально визуальная;
+- перед рефакторингом `main.js` запускать audit;
+- перед интеграцией новых PNG запускать asset validation.

@@ -1,0 +1,66 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+*.out
+
+# Local secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Temporary / generated
+_exports/
+_reports/
+test-results/
+*.tmp
+*.bak
+backup/
+
+# Archives
+*.zip
+*.7z
+*.rar
+
+# Old duplicated builds
+_archive/
+
+# Backup policy:
+# keep only PATCH_REPORT.txt files from backup folders,
+# do not commit copied source/assets from backups.
+backup/**
+!backup/
+!backup/**/
+!backup/**/PATCH_REPORT.txt
+backup/legacy_old/**
+
+# Inbox policy:
+# keep text/scripts/context, ignore generated/heavy assets.
+_inbox/generated_assets/
+_inbox/temp/
+_inbox/ui_asset_generation_package_20260503/
+_inbox/**/*.png
+_inbox/**/*.jpg
+_inbox/**/*.jpeg
+_inbox/**/*.webp
+_inbox/**/*.blend
+_inbox/**/*.blend1
+
+# Screenshot / cache / temp artifacts
+screenshots/
+**/screenshots/cache/
+**/cache/
+**/temp/

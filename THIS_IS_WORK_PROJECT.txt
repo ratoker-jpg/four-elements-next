@@ -1,0 +1,13 @@
+﻿THIS IS THE ACTIVE WORK PROJECT.
+Use this folder for GPT patches and local playable testing.
+
+Canonical src/main.js must contain:
+- FE_LT_04A_COMBAT_START
+- FE_LT_04B1_DRAG_SELECT_START
+- FE_LT_04B1F_SELECTION_RING_GROUP_MOVE_START
+- FE_LT_04B2_GROUP_ATTACK_START
+- setGroupManualMove
+- setGroupLightTankAttack
+
+Do not run Qwen/GitHub experiments here.
+

@@ -1,0 +1,44 @@
+# AGENTS.md - GLM Sandbox Rules
+
+This repository is a GLM sandbox copy of the browser RTS project. It is not the production project and must be treated as an isolated test repository.
+
+Sandbox path:
+
+```text
+C:\Users\Den\Desktop\GLM_test\glm_game_sandbox
+```
+
+Production path that must not be touched:
+
+```text
+C:\Users\Den\Desktop\four elements\four_elements_core_base
+```
+
+Core rules:
+
+1. Do not push directly to `main`.
+2. Work only in feature branches created from `sandbox/main`.
+3. Keep diffs minimal and reversible.
+4. Do not rewrite architecture unless explicitly requested.
+5. Do not modify gameplay code unless the task explicitly requires it.
+6. Do not modify assets unless explicitly requested.
+7. Do not sync anything to `FourElements_WORK_MIRROR`.
+8. Do not run Google Drive sync helpers from this sandbox.
+9. Do not touch the production folder.
+10. If the task is ambiguous, stop and ask before changing files.
+
+Working expectations:
+
+1. Prefer infrastructure, tooling, docs, and guardrail changes over broad refactors.
+2. Avoid touching `src/main.js` unless the task explicitly requires it.
+3. If `src/main.js` must be touched, explain why first and keep the edit as small as possible.
+4. Always create or update `PATCH_REPORT.txt` after changes.
+5. Always list changed files and checks that were run.
+6. Prefer reversible renames, guards, or isolated config updates over deletions.
+
+Git and review workflow:
+
+1. Use `sandbox/main` as the protected sandbox baseline branch.
+2. Create feature branches for all follow-up work.
+3. Review staged changes before commit.
+4. Never treat this sandbox as the source of truth for the production project.

@@ -1,0 +1,3 @@
+PATCH-10E7-DOCS-SCOUT-UNIT-ROADMAP-PRIORITY
+2026-05-09
+Scout unit promoted to active priority. GLM scout movement user-confirmed working. Next: ASSET-SCOUT-00, then PATCH-SCOUT-01 unit shell.

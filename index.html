@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Four Elements Remake — v0.4 Economy + Territory Fix</title>
+  <style>
+    :root {
+      --ui-scale:1;
+      --sand-1:#efd79a; --sand-2:#d9b66f; --sand-3:#b9823e; --sand-dark:#6d4825;
+      --panel-dark:#27190c; --panel-mid:#5a3a17; --panel-light:#c89a4b; --panel-gold:#f0c96a;
+      --green:#62d06b; --yellow:#f2d75c; --purple:#c87ae8; --cyan:#6fd1f5;
+      --red:#e05243; --white:#fff3d7; --black:#0e0a05;
+      --ui-panel-hud:url("assets/ui/panels/panel_hud_v2.png");
+      --ui-panel-build:url("assets/ui/panels/panel_build_menu_v2.png");
+      --ui-panel-info:url("assets/ui/panels/panel_unit_info_v2.png");
+      --ui-panel-main:url("assets/ui/panels/panel_main_menu_v2.png");
+      --ui-panel-pause:url("assets/ui/panels/panel_pause_menu_v2.png");
+      --ui-panel-popup:url("assets/ui/panels/panel_popup_v2.png");
+      --ui-button:url("assets/ui/buttons/button_menu_default_v2.png");
+      --ui-button-hover:url("assets/ui/buttons/button_menu_hover_v2.png");
+      --ui-button-pressed:url("assets/ui/buttons/button_menu_pressed_v2.png");
+      --ui-button-disabled:url("assets/ui/buttons/button_menu_disabled_v2.png");
+      --ui-action-button:url("assets/ui/buttons/button_action_default_v2.png");
+      --ui-action-button-hover:url("assets/ui/buttons/button_action_hover_v2.png");
+      --ui-action-button-pressed:url("assets/ui/buttons/button_action_pressed_v2.png");
+      --ui-action-button-disabled:url("assets/ui/buttons/button_action_disabled_v2.png");
+    }
+    * { box-sizing:border-box; }
+    html, body {
+      margin:0; height:100%; overflow:hidden;
+      background:#171008; color:var(--white);
+      font-family:"Trebuchet MS", Arial, sans-serif;
+      touch-action:none;
+      cursor:default;
+    }
+    button { font-family:inherit; }
+    #app { position:relative; width:100vw; height:100vh; overflow:hidden; background:#191108; }
+    canvas { position:absolute; inset:0; width:100%; height:100%; image-rendering:auto; background:#d3ad69; }
+
+    .screen {
+      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      background:radial-gradient(circle at 50% 35%, rgba(91,56,24,.18), rgba(19,12,5,.84));
+      z-index:30;
+    }
+    .screen.active { display:flex; }
+    .screen.pause { background:rgba(15,10,5,.45); backdrop-filter:blur(1px); }
+
+    .menu-card {
+      width:min(460px, 92vw);
+      border:0;
+      border-radius:14px;
+      background:var(--ui-panel-main) center/100% 100% no-repeat;
+      box-shadow:0 14px 44px rgba(0,0,0,.55);
+      padding:42px 42px 38px;
+      text-align:center;
+      transform:scale(var(--ui-scale));
+      transform-origin:center center;
+    }
+    .screen.pause .menu-card {
+      background:var(--ui-panel-pause) center/100% 100% no-repeat;
+    }
+    .popup-card {
+      background:var(--ui-panel-popup) center/100% 100% no-repeat;
+    }
+    .title {
+      font-size:34px; line-height:1.05; font-weight:900; color:#ffdc73;
+      text-shadow:0 3px 0 #603400, 0 0 12px rgba(255,190,55,.22);
+      letter-spacing:.5px; margin-bottom:8px;
+    }
+    .subtitle { font-size:14px; color:#f9dda6; margin-bottom:18px; opacity:.95; line-height:1.35; }
+    .menu-list { display:flex; flex-direction:column; gap:10px; }
+    .menu-btn {
+      border:0; border-radius:9px;
+      background:var(--ui-button) center/100% 100% no-repeat;
+      color:#f2b64b; font-size:21px; font-weight:900;
+      min-height:48px; padding:12px 18px; cursor:pointer;
+      text-shadow:0 2px 0 rgba(0,0,0,.42);
+      transition:.12s transform,.12s background,.12s color,.12s box-shadow;
+    }
+    #saveMenu .menu-card,
+    #modalScreen .menu-card {
+      width:min(430px, 92vw);
+      min-height:270px;
+      padding:36px 38px 34px;
+      background:var(--ui-panel-popup) center/100% 100% no-repeat;
+    }
+    #pauseMenu .menu-card {
+      width:min(430px, 92vw);
+      min-height:430px;
+      padding:40px 66px 46px;
+    }
+    #pauseMenu .menu-list { gap:14px; }
+    #pauseMenu .menu-btn {
+      min-height:44px;
+      padding:9px 14px;
+      background:transparent;
+      box-shadow:none;
+    }
+    #pauseMenu .menu-btn:hover, #pauseMenu .menu-btn.focused {
+      background:rgba(255,176,54,.12);
+      box-shadow:0 0 0 2px rgba(255,215,91,.18);
+    }
+    #pauseMenu .menu-btn:active { background:rgba(0,0,0,.16); }
+    .menu-btn:hover, .menu-btn.focused {
+      color:#fff6b8; background:var(--ui-button-hover) center/100% 100% no-repeat;
+      box-shadow:0 0 0 3px rgba(255,215,91,.25);
+      transform:translateY(-1px);
+    }
+    .menu-btn:active {
+      background:var(--ui-button-pressed) center/100% 100% no-repeat;
+      transform:translateY(1px);
+    }
+    .menu-btn.disabled {
+      opacity:.72; filter:none; cursor:not-allowed; pointer-events:none;
+      background:var(--ui-button-disabled) center/100% 100% no-repeat;
+      color:#9b8f7c;
+    }
+    .small-note { font-size:12px; color:#d9b578; margin-top:14px; line-height:1.35; }
+
+    #hud {
+      position:absolute; top:10px; left:10px; z-index:15; user-select:none;
+      transform:scale(var(--ui-scale)); transform-origin:top left;
+      border:0; border-radius:10px;
+      background:var(--ui-panel-hud) center/100% 100% no-repeat;
+      box-shadow:0 5px 16px rgba(0,0,0,.38);
+      padding:16px 22px 17px; min-width:418px;
+    }
+    .hud-line { display:flex; align-items:center; gap:10px; min-height:32px; flex-wrap:wrap; }
+    .res { display:flex; align-items:center; gap:5px; font-size:15px; font-weight:900; color:#ffca54; min-width:56px; position:relative; }
+    .res.wide { min-width:168px; }
+    .hud-label { color:#f5d08b; font-size:12px; font-weight:800; opacity:.9; margin-right:1px; }
+    .res .num { display:inline-block; transition:.18s; text-shadow:0 2px 0 #4c2600; }
+    .res.changed-up .num { color:#70ff8a; transform:scale(1.18); }
+    .res.changed-down .num { color:#ff6c5c; transform:scale(.93); }
+    .delta {
+      position:absolute; left:14px; top:-20px; font-size:13px; font-weight:900; pointer-events:none;
+      animation:floatDelta .65s ease forwards; text-shadow:0 1px 3px #000;
+    }
+    .delta.up { color:#76ff8e; }
+    .delta.down { color:#ff655d; }
+    @keyframes floatDelta { from{opacity:1; transform:translateY(5px)} to{opacity:0; transform:translateY(-11px)} }
+    .icon {
+      width:23px; height:23px; display:inline-block;
+      border-radius:0; border:0;
+      background-size:contain; background-repeat:no-repeat; background-position:center;
+      filter:drop-shadow(0 2px 1px rgba(0,0,0,.45));
+      box-shadow:none;
+      flex:0 0 auto;
+    }
+    .ico-min { background-image:url("assets/ui/icons/icon_mineral_v2.png"); }
+    .ico-pur { background-image:url("assets/ui/icons/icon_element_purple_v2.png"); }
+    .ico-gre { background-image:url("assets/ui/icons/icon_element_green_v2.png"); }
+    .ico-cya { background-image:url("assets/ui/icons/icon_element_cyan_v2.png"); }
+    .ico-yel { background-image:url("assets/ui/icons/icon_element_yellow_v2.png"); }
+    .ico-energy {
+      width:25px; height:25px; border-radius:0;
+      background-image:url("assets/ui/icons/icon_energy_v2.png");
+    }
+    .ico-bolt {
+      width:15px; height:18px; border:0; border-radius:0;
+      clip-path:polygon(50% 0,78% 0,57% 39%,90% 39%,34% 100%,46% 55%,16% 55%);
+      background:#ffd93f; box-shadow:none;
+    }
+
+    #topHelp {
+      position:absolute; right:12px; top:10px; z-index:15; font-size:13px; line-height:1.35;
+      color:#ffe3a2; background:rgba(45,27,10,.75); border:1px solid rgba(225,166,61,.8);
+      border-radius:10px; padding:8px 10px; user-select:none; max-width:340px;
+      transform:scale(var(--ui-scale)); transform-origin:top right;
+    }
+
+    #contextMenu, #buildMenu {
+      position:absolute; z-index:20; display:none; user-select:none;
+      transform:scale(var(--ui-scale)); transform-origin:top left;
+    }
+    .panel {
+      border:0; border-radius:12px;
+      background:var(--ui-panel-info) center/100% 100% no-repeat;
+      box-shadow:0 10px 30px rgba(0,0,0,.46);
+      padding:20px 22px 22px; min-width:270px;
+      font-size:15px;
+    }
+    .panel-title { font-size:19px; color:#ffdc73; font-weight:900; margin-bottom:10px; text-shadow:0 2px 0 #4c2600; }
+    .action-btn {
+      display:block; width:100%; text-align:left; margin:7px 0; padding:10px 12px;
+      min-height:42px;
+      border:0; border-radius:8px;
+      background:var(--ui-action-button) center/100% 100% no-repeat;
+      color:#f2b64b; font-weight:900; cursor:pointer; font-size:16px;
+    }
+    .action-btn:hover {
+      background:var(--ui-action-button-hover) center/100% 100% no-repeat;
+      color:#fff5ad;
+    }
+    .action-btn:active {
+      background:var(--ui-action-button-pressed) center/100% 100% no-repeat;
+    }
+    .action-btn.disabled {
+      opacity:.74; cursor:not-allowed; pointer-events:none;
+      background:var(--ui-action-button-disabled) center/100% 100% no-repeat;
+      color:#9b8f7c;
+    }
+    #buildMenu.panel {
+      background:var(--ui-panel-popup) center/100% 100% no-repeat;
+      width:300px;
+      min-width:300px;
+      max-height:calc(100vh - 28px);
+      overflow-y:auto;
+      padding:26px 28px 28px;
+    }
+    #buildMenu .panel-title { margin-bottom:12px; text-align:center; }
+    #buildMenu .action-btn {
+      min-height:42px;
+      margin:8px 0;
+      padding:8px 12px;
+      background:var(--ui-action-button) center/100% 100% no-repeat;
+      box-shadow:none;
+      text-align:center;
+    }
+    #buildMenu .action-btn:hover {
+      background:var(--ui-action-button-hover) center/100% 100% no-repeat;
+      box-shadow:0 0 0 2px rgba(255,215,91,.16);
+    }
+    #buildMenu .action-btn:active { background:var(--ui-action-button-pressed) center/100% 100% no-repeat; }
+    #buildMenu .action-btn.disabled { background:var(--ui-action-button-disabled) center/100% 100% no-repeat; }
+
+    #selectedInfo {
+      position:absolute; left:10px; bottom:10px; z-index:15;
+      min-width:270px; max-width:360px; display:none;
+      transform:scale(var(--ui-scale)); transform-origin:bottom left;
+    }
+    #selectedInfo .panel { padding:20px 22px 22px; }
+    .bar {
+      height:10px;
+      background:rgba(28,18,8,.52);
+      border-radius:10px;
+      overflow:hidden;
+      border:1px solid rgba(255,230,150,.28);
+      margin:5px 0 7px;
+    }
+    .bar > div { height:100%; background:linear-gradient(90deg,#5de06b,#b6ff65); width:50%; }
+    #toast {
+      position:absolute; left:50%; bottom:18px; transform:translateX(-50%) scale(var(--ui-scale));
+      transform-origin:bottom center;
+      color:#ffeeb7;
+      background:var(--ui-panel-popup) center/100% 100% no-repeat;
+      border:0;
+      border-radius:10px; padding:15px 24px; z-index:35; display:none; font-weight:900;
+    }
+    .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media(max-width:760px) {
+      #topHelp { display:none; }
+      .title { font-size:27px; }
+      .menu-btn { font-size:18px; }
+      #hud { min-width:300px; }
+    }
+
+
+    /* PATCH-UI-01-HUD-AND-PANELS-POLISH START */
+    :root {
+      --fe-ui-bg-0:rgba(18, 11, 5, .93);
+      --fe-ui-bg-1:rgba(44, 25, 9, .88);
+      --fe-ui-bg-2:rgba(76, 44, 16, .82);
+      --fe-ui-stroke:rgba(255, 207, 105, .54);
+      --fe-ui-stroke-soft:rgba(255, 220, 142, .22);
+      --fe-ui-text:#fff3d4;
+      --fe-ui-muted:#d8b77c;
+      --fe-ui-gold:#ffd66c;
+      --fe-ui-shadow:0 16px 42px rgba(0,0,0,.46), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+
+    #hud {
+      top:14px;
+      left:14px;
+      min-width:500px;
+      padding:14px 18px 15px;
+      border:1px solid var(--fe-ui-stroke);
+      border-radius:16px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255, 205, 92, .14), transparent 34%),
+        linear-gradient(180deg, rgba(64, 37, 12, .95), rgba(19, 11, 5, .93));
+      box-shadow:var(--fe-ui-shadow), 0 0 0 1px rgba(0,0,0,.50);
+      color:var(--fe-ui-text);
+      overflow:hidden;
+    }
+    #hud::after {
+      content:"";
+      position:absolute;
+      left:12px; right:12px; bottom:7px;
+      height:1px;
+      background:linear-gradient(90deg, transparent, rgba(255,211,108,.30), transparent);
+      pointer-events:none;
+    }
+    #hud .hud-line {
+      min-height:30px;
+      gap:9px 11px;
+      align-items:center;
+    }
+    #hud .hud-line + .hud-line { margin-top:3px; }
+    #hud .res {
+      min-width:74px;
+      min-height:27px;
+      padding:3px 8px 3px 5px;
+      border-radius:10px;
+      background:linear-gradient(180deg, rgba(255,220,128,.075), rgba(0,0,0,.12));
+      border:1px solid rgba(255,220,142,.13);
+      color:var(--fe-ui-gold);
+      font-size:15px;
+      letter-spacing:.1px;
+    }
+    #hud .res.wide { min-width:205px; }
+    #hud .hud-label {
+      color:#d8bb80;
+      font-size:12px;
+      font-weight:900;
+      opacity:.96;
+      text-transform:none;
+    }
+    #hud .res .num {
+      color:#ffe28f;
+      font-size:16px;
+      font-weight:950;
+      text-shadow:0 2px 0 rgba(0,0,0,.50), 0 0 8px rgba(255,199,67,.12);
+    }
+    #hud .icon {
+      width:24px;
+      height:24px;
+      margin-right:1px;
+      filter:drop-shadow(0 2px 1px rgba(0,0,0,.58));
+    }
+    #hud .ico-bolt { margin-left:4px; }
+
+    #topHelp {
+      top:14px;
+      right:14px;
+      max-width:310px;
+      padding:11px 13px;
+      font-size:12px;
+      line-height:1.38;
+      color:#f7d99a;
+      border:1px solid rgba(255,205,105,.35);
+      border-radius:14px;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(255,196,86,.10), transparent 44%),
+        linear-gradient(180deg, rgba(37, 23, 9, .78), rgba(13, 8, 4, .74));
+      box-shadow:0 10px 28px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+      opacity:.86;
+    }
+    #topHelp b {
+      color:#ffd978;
+      font-weight:950;
+    }
+
+    #selectedInfo {
+      left:14px;
+      bottom:14px;
+      min-width:315px;
+      max-width:390px;
+    }
+    .panel,
+    #selectedInfo .panel,
+    #contextMenu.panel,
+    #buildMenu.panel {
+      border:1px solid var(--fe-ui-stroke);
+      border-radius:17px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,202,83,.13), transparent 38%),
+        linear-gradient(180deg, rgba(67, 39, 14, .96), rgba(19, 11, 5, .94));
+      box-shadow:var(--fe-ui-shadow), 0 0 0 1px rgba(0,0,0,.50);
+      color:var(--fe-ui-text);
+    }
+    .panel-title {
+      color:#ffe07b;
+      font-size:20px;
+      line-height:1.1;
+      margin-bottom:10px;
+      letter-spacing:.2px;
+      text-shadow:0 2px 0 rgba(0,0,0,.52), 0 0 10px rgba(255,213,99,.18);
+    }
+    #selectedInfo .panel {
+      padding:18px 20px 19px;
+      min-width:315px;
+      font-size:15px;
+      line-height:1.35;
+    }
+    #selectedInfo .panel > div:not(.panel-title):not(.bar) {
+      color:#e4c48b;
+      font-weight:800;
+    }
+    #selectedInfo .bar {
+      height:12px;
+      margin:7px 0 9px;
+      border-radius:999px;
+      border:1px solid rgba(255,223,142,.34);
+      background:rgba(12,7,4,.56);
+      box-shadow:inset 0 2px 5px rgba(0,0,0,.42);
+    }
+    #selectedInfo .bar > div {
+      border-radius:999px;
+      background:linear-gradient(90deg, #42c95d, #b6f867 72%, #fff0a2);
+      box-shadow:0 0 10px rgba(113,238,105,.30);
+    }
+
+    #contextMenu.panel,
+    #buildMenu.panel {
+      padding:19px 21px 21px;
+      min-width:300px;
+      font-size:15px;
+    }
+    #buildMenu.panel {
+      width:330px;
+      min-width:330px;
+      max-height:calc(100vh - 32px);
+      padding:23px 25px 25px;
+    }
+    #buildMenu .panel-title { font-size:21px; }
+
+    .action-btn {
+      min-height:44px;
+      padding:10px 13px;
+      border:1px solid rgba(255,217,116,.22);
+      border-radius:11px;
+      background:
+        linear-gradient(180deg, rgba(117,72,23,.78), rgba(47,26,9,.84));
+      color:#ffd071;
+      font-size:15px;
+      line-height:1.22;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 5px 12px rgba(0,0,0,.18);
+    }
+    .action-btn:hover {
+      background:
+        linear-gradient(180deg, rgba(154,96,31,.88), rgba(61,35,12,.90));
+      color:#fff0ad;
+      border-color:rgba(255,226,131,.40);
+      box-shadow:0 0 0 2px rgba(255,210,91,.13), inset 0 1px 0 rgba(255,255,255,.13);
+    }
+    .action-btn:active {
+      transform:translateY(1px);
+      background:linear-gradient(180deg, rgba(45,25,9,.95), rgba(102,61,18,.82));
+    }
+    .action-btn.disabled {
+      opacity:.58;
+      background:linear-gradient(180deg, rgba(64,53,40,.48), rgba(25,20,15,.58));
+      color:#a99b80;
+      border-color:rgba(255,255,255,.08);
+    }
+
+    #toast {
+      bottom:22px;
+      padding:13px 24px;
+      border:1px solid rgba(255,210,105,.44);
+      border-radius:13px;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255,198,76,.12), transparent 48%),
+        linear-gradient(180deg, rgba(60,35,12,.96), rgba(16,9,4,.94));
+      box-shadow:0 14px 40px rgba(0,0,0,.50), inset 0 1px 0 rgba(255,255,255,.08);
+      color:#ffe6a4;
+      text-shadow:0 2px 0 rgba(0,0,0,.50);
+      letter-spacing:.1px;
+    }
+
+    .menu-card {
+      border:1px solid rgba(255,207,105,.32);
+      border-radius:18px;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255,202,83,.14), transparent 42%),
+        linear-gradient(180deg, rgba(64,37,12,.96), rgba(17,10,5,.96));
+      box-shadow:0 22px 70px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .menu-btn {
+      border:1px solid rgba(255,217,116,.22);
+      border-radius:12px;
+      background:linear-gradient(180deg, rgba(126,78,25,.86), rgba(48,27,9,.92));
+      color:#ffd071;
+    }
+    .menu-btn:hover,
+    .menu-btn.focused {
+      background:linear-gradient(180deg, rgba(162,101,33,.94), rgba(66,38,13,.94));
+      border-color:rgba(255,226,131,.46);
+      box-shadow:0 0 0 3px rgba(255,215,91,.18), 0 8px 18px rgba(0,0,0,.20);
+    }
+    .menu-btn.disabled {
+      background:linear-gradient(180deg, rgba(64,53,40,.48), rgba(25,20,15,.58));
+    }
+
+    @media(max-width:760px) {
+      #hud { min-width:330px; padding:12px 14px; }
+      #hud .res.wide { min-width:148px; }
+      #selectedInfo { max-width:330px; }
+    }
+    /* PATCH-UI-01-HUD-AND-PANELS-POLISH END */
+
+
+
+    /* PATCH-UI-02-HUD-READABILITY-AND-HELP-BLOCK START */
+    body #hud {
+      min-width:unset;
+      width:min(590px, calc(100vw - 32px));
+      padding:18px 22px 20px;
+      border-radius:18px;
+      border-color:rgba(255, 214, 118, .64);
+      background:
+        radial-gradient(circle at 9% 0%, rgba(255, 217, 112, .18), transparent 34%),
+        linear-gradient(180deg, rgba(73, 43, 15, .965), rgba(17, 10, 5, .955));
+      box-shadow:
+        0 18px 48px rgba(0,0,0,.50),
+        0 0 0 1px rgba(0,0,0,.58),
+        inset 0 1px 0 rgba(255,255,255,.10);
+    }
+    body #hud .hud-line {
+      min-height:36px;
+      gap:11px 13px;
+      align-items:center;
+    }
+    body #hud .hud-line + .hud-line {
+      margin-top:7px;
+      padding-top:7px;
+      border-top:1px solid rgba(255, 222, 143, .12);
+    }
+    body #hud .res {
+      min-width:98px;
+      min-height:32px;
+      padding:5px 10px 5px 7px;
+      border-radius:12px;
+      background:
+        linear-gradient(180deg, rgba(255,229,139,.095), rgba(0,0,0,.16));
+      border-color:rgba(255, 225, 146, .18);
+      font-size:16px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+    }
+    body #hud .res.wide {
+      min-width:248px;
+    }
+    body #hud .hud-label {
+      font-size:13px;
+      letter-spacing:.15px;
+      color:#e2c486;
+    }
+    body #hud .res .num {
+      font-size:18px;
+      color:#ffe897;
+      letter-spacing:.15px;
+    }
+    body #hud .icon {
+      width:28px;
+      height:28px;
+      margin-right:3px;
+    }
+    body #hud .ico-bolt {
+      margin-left:5px;
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,.60)) drop-shadow(0 0 7px rgba(255,220,75,.18));
+    }
+
+    body #topHelp {
+      max-width:360px;
+      padding:14px 16px 15px;
+      font-size:13px;
+      line-height:1.55;
+      border-radius:16px;
+      color:#f8dfaa;
+      opacity:.90;
+      border-color:rgba(255, 211, 116, .42);
+      background:
+        radial-gradient(circle at 100% 0%, rgba(255,208,101,.13), transparent 42%),
+        linear-gradient(180deg, rgba(39, 24, 9, .84), rgba(12, 7, 3, .78));
+      box-shadow:0 14px 34px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    body #topHelp b {
+      color:#ffe28b;
+      font-weight:950;
+    }
+
+    body #selectedInfo {
+      left:16px;
+      bottom:16px;
+      min-width:340px;
+      max-width:420px;
+    }
+    body #selectedInfo .panel {
+      min-width:340px;
+      padding:20px 22px 21px;
+      font-size:16px;
+      line-height:1.42;
+      border-radius:18px;
+      border-color:rgba(255, 213, 116, .56);
+    }
+    body #selectedInfo .panel-title {
+      font-size:22px;
+      margin-bottom:12px;
+      color:#ffe38a;
+    }
+    body #selectedInfo .panel > div:not(.panel-title):not(.bar) {
+      color:#ebcc91;
+      font-weight:850;
+    }
+    body #selectedInfo .bar {
+      height:14px;
+      margin:9px 0 11px;
+      border-color:rgba(255, 224, 146, .40);
+    }
+
+    body #toast {
+      bottom:20px;
+      padding:10px 20px 11px;
+      border-radius:12px;
+      color:#f7d995;
+      opacity:.88;
+      border-color:rgba(255,210,105,.34);
+      background:
+        linear-gradient(180deg, rgba(52,30,10,.90), rgba(14,8,4,.88));
+      box-shadow:0 10px 28px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+
+    @media(max-width:760px) {
+      body #hud { width:calc(100vw - 28px); padding:14px 16px 16px; }
+      body #hud .res { min-width:84px; }
+      body #hud .res.wide { min-width:176px; }
+      body #topHelp { max-width:300px; font-size:12px; }
+      body #selectedInfo { min-width:310px; max-width:360px; }
+      body #selectedInfo .panel { min-width:310px; }
+    }
+    /* PATCH-UI-02-HUD-READABILITY-AND-HELP-BLOCK END */
+
+      /* PATCH-UI-03-STATIC-MAIN-MENU-BACKGROUND START */
+    #mainMenu,
+    #mapSizeMenu,
+    #factionMenu,
+    #saveMenu {
+      background:
+        radial-gradient(circle at 50% 45%, rgba(20, 12, 5, .10) 0%, rgba(13, 8, 4, .46) 58%, rgba(6, 4, 2, .76) 100%),
+        linear-gradient(90deg, rgba(10, 6, 3, .34), rgba(255, 188, 82, .035) 38%, rgba(10, 6, 3, .28)),
+        url("assets/ui/backgrounds/main_menu_desert_colony_static.jpg") center center / cover no-repeat;
+      overflow:hidden;
+    }
+
+    #mainMenu::before,
+    #mapSizeMenu::before,
+    #factionMenu::before,
+    #saveMenu::before {
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:0;
+      pointer-events:none;
+      background:
+        radial-gradient(circle at 50% 45%, transparent 0%, rgba(0,0,0,.10) 48%, rgba(0,0,0,.38) 100%),
+        linear-gradient(180deg, rgba(255,215,125,.10), rgba(17,10,5,.22));
+    }
+
+    #mainMenu .menu-card,
+    #mapSizeMenu .menu-card,
+    #factionMenu .menu-card,
+    #saveMenu .menu-card {
+      position:relative;
+      z-index:1;
+      backdrop-filter:blur(1px);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255,202,83,.16), transparent 42%),
+        linear-gradient(180deg, rgba(64,37,12,.955), rgba(17,10,5,.965));
+      box-shadow:
+        0 26px 84px rgba(0,0,0,.62),
+        0 0 0 1px rgba(255,214,118,.22),
+        inset 0 1px 0 rgba(255,255,255,.09);
+    }
+
+    #mainMenu .small-note,
+    #mapSizeMenu .subtitle,
+    #factionMenu .subtitle,
+    #saveMenu .subtitle {
+      text-shadow:0 2px 3px rgba(0,0,0,.55);
+    }
+    /* PATCH-UI-03-STATIC-MAIN-MENU-BACKGROUND END */
+
+  </style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud" style="display:none">
+    <div class="hud-line">
+      <div class="res wide" data-res="minerals" title="Сырьё / лимит сырья"><span class="icon ico-min"></span><span class="hud-label">Сырьё</span><span class="num">0/200</span></div>
+      <div class="res wide" data-res="energy" title="Энергия / лимит энергии"><span class="icon ico-energy"></span><span class="hud-label">Энергия</span><span class="num">160/300</span></div>
+    </div>
+    <div class="hud-line">
+      <div class="res" data-res="purple" title="Фиолетовый элемент / лимит"><span class="icon ico-pur"></span><span class="num">0/20</span></div>
+      <div class="res" data-res="greenEl" title="Зелёный элемент / лимит"><span class="icon ico-gre"></span><span class="num">0/20</span></div>
+      <div class="res" data-res="cyanEl" title="Синий элемент / лимит"><span class="icon ico-cya"></span><span class="num">0/20</span></div>
+      <div class="res" data-res="yellowEl" title="Жёлтый элемент / лимит"><span class="icon ico-yel"></span><span class="num">0/20</span></div>
+    </div>
+    <div class="hud-line">
+      <div class="res wide" data-res="powerPct" title="Мощность сети: будет подключена отдельной механикой в патче 4"><span class="icon ico-bolt"></span><span class="hud-label">Мощность</span><span class="num">0/0 MW</span></div>
+    </div>
+  </div>
+
+  <div id="topHelp" style="display:none">
+    <b>Камера:</b> WASD / колёсико зажать<br>
+    <b>Zoom:</b> колесо мыши<br>
+    <b>Esc:</b> меню<br>
+    <b>ПКМ:</b> отмена команды строителя<br>
+    <b>Ctrl+ПКМ:</b> отменить недострой<br>
+    <b>0:</b> показать/скрыть туман
+  </div>
+
+  <div id="selectedInfo"><div class="panel"></div></div>
+  <div id="contextMenu" class="panel"></div>
+  <div id="buildMenu" class="panel"></div>
+  <div id="toast"></div>
+
+  <section id="mainMenu" class="screen active">
+    <div class="menu-card">
+      <div class="title">Four Elements</div>
+      <div class="subtitle">Core Economy + Territory Fix v0.4</div>
+      <div class="menu-list">
+        <button class="menu-btn focused" data-action="new">Новая игра</button>
+        <button class="menu-btn" data-action="continue">Продолжить</button>
+        <button class="menu-btn" data-action="settings">Настройки</button>
+        <button class="menu-btn" data-action="about">Об игре</button>
+        <button class="menu-btn" data-action="exit">Выход</button>
+      </div>
+      <div class="small-note">v0.4: сырьё, энергия, элементы, медленная территория, лимиты, HUD и сохранения.</div>
+    </div>
+  </section>
+
+  <section id="mapSizeMenu" class="screen">
+    <div class="menu-card">
+      <div class="title">Размер карты</div>
+      <div class="subtitle">Выбери масштаб партии</div>
+      <div class="menu-list">
+        <button class="menu-btn" data-map-size="standard">Стандартная — быстрее партия</button>
+        <button class="menu-btn" data-map-size="large">Большая — примерно в 2 раза больше</button>
+        <button class="menu-btn" data-back="main">Назад</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="factionMenu" class="screen">
+    <div class="menu-card">
+      <div class="title">Выбор фракции</div>
+      <div class="subtitle">Цвет определяет бонус и цвет территории</div>
+      <div class="menu-list">
+        <button class="menu-btn" data-faction="cyan">Голубые — +10% к производству гражданских юнитов</button>
+        <button class="menu-btn" data-faction="green">Зелёные — +10% к скорости строительства</button>
+        <button class="menu-btn" data-faction="yellow">Жёлтые — +10% к производству боевых юнитов</button>
+        <button class="menu-btn" data-faction="purple">Фиолетовые — обзор территории радиус 2</button>
+        <button class="menu-btn" data-faction="random">Случайная — +50 энергии и бонус цвета</button>
+        <button class="menu-btn" data-back="map">Назад</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="saveMenu" class="screen">
+    <div class="menu-card">
+      <div class="title">Продолжить</div>
+      <div id="saveSlotBox" class="menu-list"></div>
+      <button class="menu-btn" data-back="main" style="margin-top:10px">Назад</button>
+    </div>
+  </section>
+
+  <section id="pauseMenu" class="screen pause">
+    <div class="menu-card pause-card">
+      <div class="title">Пауза</div>
+      <div class="menu-list">
+        <button class="menu-btn" data-pause="resume">Продолжить</button>
+        <button class="menu-btn" data-pause="save">Сохранить игру</button>
+        <button class="menu-btn" data-pause="load">Загрузить игру</button>
+        <button class="menu-btn" data-action="settings">Настройки</button>
+        <button class="menu-btn" data-pause="main">Главное меню</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="modalScreen" class="screen">
+    <div class="menu-card popup-card">
+      <div id="modalTitle" class="title" style="font-size:26px">Окно</div>
+      <div id="modalBody" class="subtitle" style="font-size:15px; line-height:1.45"></div>
+      <button class="menu-btn" data-modal-close="1">ОК</button>
+    </div>
+  </section>
+</div>
+
+<script src="src/config/buildings.js?v=good_profiles_1777647169"></script>
+<script src="src/config/units.js?v=good_profiles_1777647169"></script>
+<script src="src/config/factions.js?v=good_profiles_1777647169"></script>
+<script src="src/config/environment.js?v=mineral_capacity_large_fields_20260503_1"></script>
+<script src="src/config/sprite_profiles.js?v=lt03b_20260505_011603"></script>
+<script src="src/config/runtime_flags.js?v=lt03b_20260505_011603"></script>
+<script src="src/core/storage_guard.js?v=prepare_modules_1777655707"></script>
+<script src="src/core/asset_loader.js?v=harvester_8dirs_20260503_1"></script>
+<script src="src/core/save_manager.js?v=modular_split_stage2_20260503_1"></script>
+<script src="src/core/unit_controller.js?v=prepare_modules_1777655707"></script>
+<script src="src/ui/screen_manager.js?v=modular_split_stage2_20260503_1"></script>
+<script src="src/modules/render/visual_anchor.js?v=prepare_modules_1777655707"></script>
+<script src="src/modules/render/sprite_alpha.js?v=modular_split_20260503_1"></script>
+<script src="src/modules/debug/debug_tools.js?v=prepare_modules_1777655707"></script>
+<script src="src/modules/render/visual_calibrator.js?v=visual_calibrator_1777657210"></script>
+<script src="src/main.js?v=bot10e1c2_20260509_155447"></script>
+
+<script>
+/* PATCH-10E1C2-CACHEBUST-AND-CONSOLE-TELEMETRY-HELPER_START */
+window.FE_BOT_TELEMETRY = function FE_BOT_TELEMETRY() {
+  const core = window.FE_CORE || {};
+  const runtimeGame = core.game || null;
+  const result = {
+    runtimeGameExists: !!runtimeGame,
+    note: "Use window.FE_CORE.game, not global game. Global game can be <canvas id='game'>.",
+    screen: runtimeGame && runtimeGame.screen,
+    skirmishMode: runtimeGame && runtimeGame.skirmishMode,
+    botPhase: runtimeGame && runtimeGame._enemyBotState && runtimeGame._enemyBotState.phase,
+    enemyStrengthEstimateMvp: runtimeGame && runtimeGame.enemyStrengthEstimateMvp,
+    enemyAutopilotMvp: runtimeGame && runtimeGame.enemyAutopilotMvp,
+    enemyScoutingMvp: runtimeGame && runtimeGame.enemyScoutingMvp,
+  };
+  console.table({
+    runtimeGameExists: result.runtimeGameExists,
+    screen: result.screen,
+    skirmishMode: result.skirmishMode,
+    botPhase: result.botPhase,
+    strengthStatus: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.status,
+    strengthReason: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.reason,
+    myStrength: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.myStrength,
+    playerEstimate: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.playerEstimate,
+    requiredStrength: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.requiredStrength,
+    attackAllowed: result.enemyStrengthEstimateMvp && result.enemyStrengthEstimateMvp.attackAllowed,
+    autopilotStatus: result.enemyAutopilotMvp && result.enemyAutopilotMvp.status,
+    scoutingStatus: result.enemyScoutingMvp && result.enemyScoutingMvp.status,
+  });
+  return result;
+};
+console.info("[Four Elements] FE_BOT_TELEMETRY() ready. Use window.FE_CORE.game, not global game.");
+/* PATCH-10E1C2-CACHEBUST-AND-CONSOLE-TELEMETRY-HELPER_END */
+</script>
+</body>
+</html>

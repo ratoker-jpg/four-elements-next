@@ -1,0 +1,95 @@
+Task: SANDBOX-00 - prepare GLM sandbox
+Timestamp: 2026-05-09 20:17:44 +03:00
+
+Sandbox path:
+C:\Users\Den\Desktop\GLM_test\glm_game_sandbox
+
+Production path status:
+- Confirmed: production folder was not touched.
+- Confirmed: no writes were made outside the sandbox folder.
+
+Project root inspection:
+- Present: AGENTS.md
+- Present: README.md
+- Present: index.html
+- Present: src/
+- Present: assets/
+- Present: docs/
+- Present: package.json
+- Present: BAT helpers in repo root
+
+Files changed:
+- AGENTS.md
+- README.md
+- README_GLM_SANDBOX.md
+- .gitignore
+- 05_RUN_VISUAL_SCENARIOS.bat
+- tools/visual_scenarios.mjs
+- PATCH_REPORT.txt
+
+Files disabled or renamed:
+- 04_SYNC_WORK_MIRROR_TO_GOOGLE_DRIVE.bat -> 04_SYNC_WORK_MIRROR_TO_GOOGLE_DRIVE.DISABLED_IN_GLM_SANDBOX.bat
+- tools/sync_work_mirror.py -> tools/sync_work_mirror.DISABLED_IN_GLM_SANDBOX.py
+- tools/sync_visual_screenshots.py -> tools/sync_visual_screenshots.DISABLED_IN_GLM_SANDBOX.py
+
+Folders removed from sandbox:
+- node_modules/
+- backup/
+- _reports/
+- test-results/
+- _exports/
+- _archive/
+
+Folders ignored or kept out of git:
+- node_modules/
+- backup/
+- _reports/
+- test-results/
+- _exports/
+- _archive/
+- .env
+- *.log
+- *.tmp
+- *.bak
+- screenshot/cache/temp artifacts via .gitignore
+- _gpt_state/ intentionally left in working copy and not planned for staging
+- _inbox/ intentionally left in working copy and not planned for staging
+
+Dangerous reference audit:
+- Executable mirror sync BAT was disabled by rename.
+- Direct Python mirror sync helpers were disabled by rename.
+- Visual screenshot flow was changed to stay local only.
+- Remaining references still exist in docs, _gpt_state, _inbox, package-lock.json, and disabled files.
+- Remaining references are informational or historical in this patch, not active sync entrypoints.
+
+Git status summary:
+- Git repository initialized in sandbox.
+- Active branch set to sandbox/main.
+- Before staging, repo contains untracked project files as expected for a fresh init.
+- Plan for staging: exclude _gpt_state/ and _inbox/ from the initial clean sandbox commit.
+
+GitHub status:
+- GitHub CLI status check result: gh not found on this machine in current PATH.
+- No token workaround was attempted.
+- No remote was created automatically.
+
+Checks run:
+- node --check src/main.js -> PASS
+- node --check tools/visual_scenarios.mjs -> PASS
+- package.json inspected -> only devDependencies present, no npm scripts to run
+- root audit re-run after cleanup -> active mirror writers disabled; remaining refs are mostly historical/docs/context
+
+Risks:
+- Some non-executable docs still mention production paths and mirror workflow.
+- package-lock.json still contains legacy package name four_elements_core_base.
+- _gpt_state/ and _inbox/ still contain historical context and production-path references if a future user chooses to stage them.
+- Root BAT helpers 01/02 still mention production-era comments, though the dangerous sync launcher itself is disabled.
+
+Exact next steps for user / GPT / GLM:
+1. Review the initial sandbox commit on branch sandbox/main.
+2. Add a private GitHub remote manually after gh is installed/authenticated, or use:
+   git remote add origin <PRIVATE_REPO_URL>
+   git push -u origin sandbox/main
+3. Keep all future work on feature branches created from sandbox/main.
+4. Do not re-enable Google Drive sync inside this sandbox.
+5. If desired, do a follow-up cleanup patch to ignore or remove _gpt_state/ and _inbox/ before sharing the repo more broadly.
