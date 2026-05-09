@@ -219,3 +219,55 @@ Lane: Review
 - pathfinding изменён: нет
 - Google Drive sync тронут: нет
 - production paths тронуты: нет
+
+---
+
+Задача: PATCH-SCOUT-01B — исправить способ dev-теста scout через консоль
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01b-dev-spawn (от glm/patch-scout-01-unit-shell)
+
+Проблема:
+В отчёте PATCH-SCOUT-01 была указана команда для теста scout из консоли:
+  createUnit('scout', 10, 10)
+Но createUnit — внутренняя функция IIFE в main.js, не экспортирована в window.
+Команда падала с: Uncaught ReferenceError: createUnit is not defined
+
+Цель:
+Добавить безопасный dev-only способ создать scout (и любой другой юнит) из браузерной консоли.
+
+Изменённые файлы:
+- src/main.js — добавлена функция window.FE_DEV_SPAWN_UNIT рядом с FE_EXPORT_SNAPSHOT
+
+Как работает FE_DEV_SPAWN_UNIT(type, x, y):
+- Проверяет, что игра запущена (game.screen === 'game')
+- Проверяет, что тип юнита существует в UNIT_DEFS
+- Если x/y не указаны — спавнит рядом с hq_base игрока
+- Проверяет границы карты
+- Создаёт юнит через внутренний createUnit и добавляет в game.units
+- Пишет понятный console.warn с именем, id и координатами
+- Возвращает созданный unit или null при ошибке
+
+Новая команда теста:
+  FE_DEV_SPAWN_UNIT('scout', 10, 10)
+  FE_DEV_SPAWN_UNIT('scout')           — рядом с HQ
+  FE_DEV_SPAWN_UNIT('light_tank', 5, 5) — работает для любого типа
+
+Что НЕ сделано специально:
+- createUnit НЕ экспортирован напрямую — доступ только через FE_DEV_SPAWN_UNIT
+- scout НЕ добавлен в производство/factory
+- combat НЕ изменён
+- pathfinding НЕ изменён
+- economy НЕ изменена
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- Статическая проверка: window.FE_DEV_SPAWN_UNIT добавлен в main.js (строка 11864)
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
