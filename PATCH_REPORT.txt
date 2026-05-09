@@ -684,3 +684,58 @@ Lane: Review
 - Ассеты не затронуты
 - Google Drive sync не включён
 - Production paths не затронуты
+
+---
+
+Задача: GLM-STRATEGY-01 — полный стратегический аудит проекта
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+Широкий стратегический аудит проекта Four Elements Remake с анализом
+всех ключевых направлений и предложениями по развитию.
+Это НЕ патч — код, ассеты и gameplay НЕ менялись.
+
+Что сделано:
+1. Прочитаны все проектные файлы: README, AGENTS, configs, docs/project/*, src/main.js, src/core/*, src/config/*, tests/*
+2. Проанализирован src/main.js (12 128 строк): функции, системы, техдолг, архитектура
+3. Проанализированы все 14 docs/project файлов
+4. Проанализированы core модули (asset_loader, save_manager, unit_controller, storage_guard)
+5. Проанализированы все 5 Playwright тестов
+6. Написан comprehensive отчёт: docs/project/GLM_STRATEGY_REVIEW_20260510.md
+
+Отчёт содержит 17 разделов:
+1. Executive Summary
+2. Current Project State (что реализовано / MVP / временное / техдолг)
+3. Map Generation Ideas (8 идей с оценками)
+4. Unit Animation and Visual Feedback Ideas (7 подкатегорий)
+5. Economy Ideas (quick wins / medium-term / late-game)
+6. Factions and Asymmetry (4 фракции + random)
+7. Combat System Ideas (MVP / medium / defense tower / bomber)
+8. Enemy Bot / AI Ideas (scripted / rule-based / advanced / fog policy)
+9. Gameplay Features Missing from Roadmap (13 идей)
+10. UI / UX Ideas (8 подкатегорий)
+11. Architecture and main.js Refactor (4 фазы extraction, 10 безопасных PR)
+12. Engine / Platform Future (8 вариантов с оценками)
+13. Online / Multiplayer Possibilities (7 вариантов)
+14. Testing / QA / Tooling (8 идей + PR/regression checklist)
+15. Recommended Roadmap (1-2 недели / 1 месяц / later)
+16. Top 10 Recommendations (с приоритетами и рисками)
+17. What NOT to Do Yet (10 пунктов)
+
+Изменённые файлы:
+- docs/project/GLM_STRATEGY_REVIEW_20260510.md (new)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Проверки:
+- node --check src/main.js -> PASS (smoke only, без изменений)
+- git diff --name-only: только docs/project/GLM_STRATEGY_REVIEW_20260510.md + PATCH_REPORT.txt
+
+Безопасность:
+- src/* не изменён
+- assets/* не изменён
+- index.html не изменён
+- gameplay не изменён
+- Google Drive sync не тронут
+- Production paths не затронуты
