@@ -11858,6 +11858,43 @@ if (game._saveTimer >= 45) {
     console.warn('[Four Elements] Snapshot exported', snapshot);
   };
 
+  // FE_DEV_SPAWN_UNIT: dev-only helper to spawn any known unit type from browser console.
+  // Usage: FE_DEV_SPAWN_UNIT('scout', 10, 10)
+  //        FE_DEV_SPAWN_UNIT('light_tank')  — spawns near player HQ
+  window.FE_DEV_SPAWN_UNIT = function FE_DEV_SPAWN_UNIT(type, x, y) {
+    if (!game || game.screen !== 'game') {
+      console.warn('[FE_DEV_SPAWN_UNIT] Игра не запущена. Начните игру сначала.');
+      return null;
+    }
+    if (!type || typeof type !== 'string') {
+      console.warn('[FE_DEV_SPAWN_UNIT] Укажите тип юнита: FE_DEV_SPAWN_UNIT("scout", x, y)');
+      return null;
+    }
+    const def = UNIT_DEFS[type];
+    if (!def) {
+      console.warn('[FE_DEV_SPAWN_UNIT] Неизвестный тип юнита: "' + type + '". Доступные: ' + Object.keys(UNIT_DEFS).join(', '));
+      return null;
+    }
+    // If x/y not provided, spawn near player HQ
+    if (typeof x !== 'number' || typeof y !== 'number') {
+      const hq = (game.buildings || []).find(b => b.type === 'hq_base' && b.complete);
+      if (hq) {
+        x = hq.x + 2;
+        y = hq.y + 2;
+      } else {
+        x = game.mapW / 2;
+        y = game.mapH / 2;
+      }
+    }
+    // Bounds check
+    x = Math.max(0, Math.min(Math.round(x), game.mapW - 1));
+    y = Math.max(0, Math.min(Math.round(y), game.mapH - 1));
+    const unit = createUnit(type, x, y);
+    game.units.push(unit);
+    console.warn('[FE_DEV_SPAWN_UNIT] Создан юнит:', def.name, '#' + unit.id, 'на клетке', x + ',' + y);
+    return unit;
+  };
+
   window.addEventListener('keydown', function (e) {
     if (e.key === 'F8') {
       e.preventDefault();
