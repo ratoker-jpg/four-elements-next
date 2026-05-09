@@ -358,3 +358,67 @@ Lane: Review
 - pathfinding изменён: нет
 - production/factory изменён: нет
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-01D — исправить orientation / dir mapping scout
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01d-dir-mapping (от sandbox/main)
+
+Проблема:
+Scout едет боком — визуально смотрит не в сторону фактического движения.
+При движении south-west показывает sprite, который смотрит north-east, и т.д.
+
+Причина:
+FE_SCOUT_DIR_MAP был скопирован с harvester/light_tank: [2,0,0,6,6,4,4,2].
+Но scout sprites используют другую ориентацию: sprite dirN визуально смотрит
+в направлении (N+1)%8, т.е. весь набор повёрнут на +1 step CW относительно
+стандартной 8-dir конвенции (dir0=east, dir2=south, dir4=west, dir6=north).
+
+Старый DIR_MAP давал:
+- rawDir=3 (SW) → sprite=6 (смотрит NE) — юнит едет боком/назад
+- rawDir=7 (NE) → sprite=2 (смотрит S)  — юнит едет боком
+
+Что исправлено:
+
+1. FE_SCOUT_DIR_MAP (runtime_flags.js):
+   - Старый: [2, 0, 0, 6, 6, 4, 4, 2] (копия harvester)
+   - Новый:  [7, 0, 1, 2, 3, 4, 5, 6]
+   - Формула: DIR_MAP[rawDir] = (rawDir + 7) % 8
+   - Компенсирует поворот спрайтов на +1 CW
+
+2. unitDir8 forceDir (main.js):
+   - Добавлен scout и light_tank в цепочку forceDir внутри unitDir8()
+   - Раньше forceDir применялся только к harvester и builder
+   - Теперь FE_SCOUT_FORCE_DIR и FE_LIGHT_TANK_FORCE_DIR работают корректно
+     при dev-калибровке через горячие клавиши
+
+Проверка новой DIR_MAP:
+- rawDir=0 (E)  → sprite=7 → faces (7+1)%8=0=E  ✓
+- rawDir=1 (SE) → sprite=0 → faces (0+1)%8=1=SE ✓
+- rawDir=2 (S)  → sprite=1 → faces (1+1)%8=2=S  ✓
+- rawDir=3 (SW) → sprite=2 → faces (2+1)%8=3=SW ✓
+- rawDir=4 (W)  → sprite=3 → faces (3+1)%8=4=W  ✓
+- rawDir=5 (NW) → sprite=4 → faces (4+1)%8=5=NW ✓
+- rawDir=6 (N)  → sprite=5 → faces (5+1)%8=6=N  ✓
+- rawDir=7 (NE) → sprite=6 → faces (6+1)%8=7=NE ✓
+
+Изменённые файлы:
+- src/config/runtime_flags.js — FE_SCOUT_DIR_MAP обновлён
+- src/main.js — forceDir в unitDir8: добавлены scout и light_tank
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/config/runtime_flags.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- size / hpOffset / selection ring: не тронуты
+- angle->dir логика: не изменена (rawDir расчёт тот же)
+- Google Drive sync тронут: нет
