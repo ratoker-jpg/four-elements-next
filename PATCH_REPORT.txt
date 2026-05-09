@@ -476,3 +476,55 @@ Lane: Review
 - movement logic не затронута
 - angle→rawDir логика не изменена
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-01F — точная центровка scout по фото
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01f-centering (от sandbox/main)
+
+Проблема:
+После 01E scout всё ещё расположен слишком высоко относительно ромба клетки.
+Смещение y=1..2 px было недостаточным — требуется ~20 px вниз.
+
+Фактический замер по референс-скрину (dev-overlay):
+- dir 2 целевой offset: {"x":-1,"y":22}
+- dir 2 текущий (01E):   {"x":0, "y":2}
+- Коррекция: x 0→-1, y 2→22 (≈+20 px вниз, -1 px влево)
+
+Что исправлено:
+
+1. FE_SCOUT_DIR_OFFSETS (runtime_flags.js):
+   Старые offsets (01E):
+     0: {x:0, y:2}   1: {x:0, y:1}
+     2: {x:0, y:2}   3: {x:0, y:1}
+     4: {x:0, y:2}   5: {x:0, y:1}
+     6: {x:0, y:2}   7: {x:0, y:1}
+   
+   Новые offsets (01F):
+     0: {x:-1, y:22}  1: {x:-1, y:21}
+     2: {x:-1, y:22}  3: {x:-1, y:21}
+     4: {x:-1, y:22}  5: {x:-1, y:21}
+     6: {x:-1, y:22}  7: {x:-1, y:21}
+   
+   dir 2 выставлен точно по фото: {"x":-1,"y":22}
+   Остальные направления — та же базовая коррекция (+20 px Y, -1 px X)
+
+2. FE_SCOUT_DIR_MAP — НЕ менялся (рабочий [3,2,1,0,7,6,5,4] из 01E)
+
+Изменённые файлы:
+- src/config/runtime_flags.js — FE_SCOUT_DIR_OFFSETS
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/config/runtime_flags.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- FE_SCOUT_DIR_MAP не менялся
+- size не менялся ([84,84])
+- movement logic не затронута
+- angle→rawDir логика не изменена
+- economy / combat / factory не затронуты
+- Google Drive sync тронут: нет

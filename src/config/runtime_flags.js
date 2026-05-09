@@ -127,15 +127,16 @@ window.FE_LIGHT_TANK_DIR_OFFSETS = {
   6: { x: 0, y: 0 },
   7: { x: 0, y: 0 }
 };
-// Scout visual landing offsets: tuned to center scout on the isometric diamond.
-// Small Y offsets per sprite direction to align the sprite with the cell center.
+// Scout visual landing offsets: calibrated from dev-overlay screenshot.
+// dir 2 pinned to {"x":-1,"y":22} per photo measurement; remaining dirs
+// follow the same +20 px vertical correction over the 01E baseline.
 window.FE_SCOUT_DIR_OFFSETS = {
-  0: { x: 0, y: 2 },
-  1: { x: 0, y: 1 },
-  2: { x: 0, y: 2 },
-  3: { x: 0, y: 1 },
-  4: { x: 0, y: 2 },
-  5: { x: 0, y: 1 },
-  6: { x: 0, y: 2 },
-  7: { x: 0, y: 1 }
+  0: { x: -1, y: 22 },
+  1: { x: -1, y: 21 },
+  2: { x: -1, y: 22 },
+  3: { x: -1, y: 21 },
+  4: { x: -1, y: 22 },
+  5: { x: -1, y: 21 },
+  6: { x: -1, y: 22 },
+  7: { x: -1, y: 21 }
 };
