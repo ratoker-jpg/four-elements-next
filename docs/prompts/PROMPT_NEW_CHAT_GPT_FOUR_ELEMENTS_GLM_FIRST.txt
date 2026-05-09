@@ -296,41 +296,30 @@ GLM можно использовать как основного исполни
 10. АКТУАЛЬНЫЙ СТАТУС SCOUT
 ============================================================
 
-SCOUT-01 закрыт.
+Не держать статус scout по памяти.
 
-Scout уже:
-- добавлен как unit shell;
-- есть в src/config/units.js;
-- работает FE_DEV_SPAWN_UNIT('scout');
-- стоит по центру клетки;
-- едет в правильном направлении;
-- размер нормальный;
-- selection ring под юнитом;
-- меню при клике на scout не появляется;
-- scout ведёт себя как light_tank по выбору;
-- canAttack=false;
-- visual/movement/menu/ring больше не трогать.
+Источник истины по scout:
+https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/refs/heads/sandbox/main/docs/project/scout_unit_roadmap_20260509.md
 
-Рабочие параметры:
-- FE_SCOUT_DIR_MAP = [3,2,1,0,7,6,5,4]
-- FE_SCOUT_DIR_OFFSETS:
-  - even dirs: {x:-1,y:22}
-  - odd dirs: {x:-1,y:21}
-- scout size = [84,84]
-- scout selection ring поднят под юнита
-- scout menu убрано через поведение по аналогии с light_tank
+Перед любой задачей по scout GPT обязан:
+1. Прочитать актуальный scout roadmap по ссылке выше.
+2. Сверить PATCH_REPORT.txt:
+   https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/refs/heads/sandbox/main/PATCH_REPORT.txt
+3. При необходимости сверить актуальные файлы:
+   - main.js:
+     https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/sandbox/main/src/main.js
+   - units.js:
+     https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/sandbox/main/src/config/units.js
+   - runtime_flags.js:
+     https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/sandbox/main/src/config/runtime_flags.js
+   - sprite_profiles.js:
+     https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/sandbox/main/src/config/sprite_profiles.js
 
-Следующий шаг:
-PATCH-SCOUT-02 — добавить scout в units_factory production UI/queue.
-
-Важно:
-Не предлагать заново:
-- dir map;
-- centering;
-- offsets;
-- size;
-- selection ring;
-- menu behavior.
+Правило:
+- Не предлагать задачи по scout из памяти.
+- Не считать старые PR актуальными без сверки roadmap.
+- Если roadmap говорит, что этап закрыт, не предлагать его заново.
+- Следующий scout-патч брать только из актуального roadmap.
 
 ============================================================
 11. КАК GPT ДОЛЖЕН ЧИТАТЬ АКТУАЛЬНЫЙ КОД
@@ -362,11 +351,12 @@ https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/sandbox/main/src/
 12. ТЕКУЩИЙ БЛИЖАЙШИЙ ПЛАН
 ============================================================
 
-Ближайший шаг:
-PATCH-SCOUT-02 — добавить scout в units_factory production UI/queue.
+Ближайший scout-шаг:
+Смотреть актуальный next step в scout roadmap:
+https://raw.githubusercontent.com/ratoker-jpg/glm-game-sandbox/refs/heads/sandbox/main/docs/project/scout_unit_roadmap_20260509.md
 
 Важно:
-- Не смешивать PATCH-SCOUT-02 с архитектурным рефакторингом main.js.
+- Не смешивать scout-патчи с архитектурным рефакторингом main.js.
 - Если main.js уже больше 10 000 строк, это отдельная задача.
 - Для рефакторинга сначала делать read-only аудит и план разбиения, не сразу большой перепил.
 
