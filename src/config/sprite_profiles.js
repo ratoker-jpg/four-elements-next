@@ -18,7 +18,8 @@ units: {
   harvester:  { footprint:[1,1], size:[92,92], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:0.88, screenOffsetX:0, screenOffsetY:0, alphaCutoff:110, hpOffset:44 },
   light_tank: { footprint:[1,1], size:[104,104], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:0.88, screenOffsetX:-2, screenOffsetY:23, alphaCutoff:110, hpOffset:22 },
   heavy_tank: { footprint:[1,1], size:[56,56], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:1.00, screenOffsetX:0, screenOffsetY:0, alphaCutoff:110, hpOffset:-52 },
-  bomber:     { footprint:[1,1], size:[56,56], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:1.00, screenOffsetX:0, screenOffsetY:0, alphaCutoff:110, hpOffset:-52 }
+  bomber:     { footprint:[1,1], size:[56,56], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:1.00, screenOffsetX:0, screenOffsetY:0, alphaCutoff:110, hpOffset:-52 },
+  scout:      { footprint:[1,1], size:[92,92], groundFactor:0.76, groundOffset:0, anchorX:0.50, anchorY:0.88, screenOffsetX:0, screenOffsetY:0, alphaCutoff:110, hpOffset:44 }
 },
 
   minerals: {

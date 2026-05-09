@@ -163,3 +163,111 @@ Lane: Fast
 
 Примечание:
 - PR не создавался, так как это Fast lane задача (docs/prompts only).
+
+---
+
+Задача: PATCH-SCOUT-01 — подключить scout unit shell
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01-unit-shell (от sandbox/main)
+
+Цель:
+- Подключить scout как минимальный unit shell: код игры знает тип scout, грузит и отрисовывает его 8-direction idle sprites.
+- НЕ полноценная механика разведчика — только shell.
+
+Изменённые файлы:
+- src/config/units.js — добавлен scout в FE_UNITS: name, hp, speed, view, canAttack:false
+- src/config/sprite_profiles.js — добавлен scout в FE_SPRITE_PROFILES.units: footprint, size, anchor, alphaCutoff
+- src/core/asset_loader.js — добавлен scout в units (fallback image) и unitAnimations (8-dir idle через loadUnitAnimation)
+- src/main.js — добавлен scout в 4 списка: spawnBuilderDust, updateBuilderDust, getCalibratedUnit (dev hotkeys), updateBuilderDust вызов в game loop
+
+Параметры scout:
+- name: 'Разведчик'
+- hp: 70
+- speed: 0.72 (выше light_tank 0.55 и harvester 0.46, но без балансировки)
+- view: 7
+- cargo: 0
+- canAttack: false
+- costElement: 1, productionTime: 18
+
+Путь к ассетам:
+- assets/factions/<faction>/units/scout_8dirs/scout_idle_dir<d>_0.png
+- 8 направлений, idle-only, move frames = idle (как harvester и light_tank)
+
+Что НЕ сделано специально:
+- Scout НЕ добавлен в производство (factory UI / units_factory queue) — это требует отдельного патча с UI/экономической логикой.
+- Scout НЕ добавлен в factoryCanAffordAnyUnit — не производится.
+- Scout НЕ добавлен в combat / attack систему — canAttack:false.
+- AI / bot scouting НЕ добавлен.
+- Pathfinding НЕ изменён — scout использует стандартный unit_controller.
+- Save/load НЕ изменён — createUnit автоматически создаёт scout с корректными полями.
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/config/units.js -> PASS
+- node --check src/config/sprite_profiles.js -> PASS
+- node --check src/core/asset_loader.js -> PASS
+- node --check src/core/unit_controller.js -> PASS
+- Статическая проверка scout ассетов: 32 файла (4 фракции × 8 направлений) — все на месте
+
+Подтверждение безопасности:
+- Ассеты не изменены: да (ассеты были добавлены ранее в ASSET-SCOUT-01)
+- src/main.js изменён: да (4 минимальных правки — добавление scout в списки dust/dev)
+- gameplay изменён: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+---
+
+Задача: PATCH-SCOUT-01B — исправить способ dev-теста scout через консоль
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01b-dev-spawn (от glm/patch-scout-01-unit-shell)
+
+Проблема:
+В отчёте PATCH-SCOUT-01 была указана команда для теста scout из консоли:
+  createUnit('scout', 10, 10)
+Но createUnit — внутренняя функция IIFE в main.js, не экспортирована в window.
+Команда падала с: Uncaught ReferenceError: createUnit is not defined
+
+Цель:
+Добавить безопасный dev-only способ создать scout (и любой другой юнит) из браузерной консоли.
+
+Изменённые файлы:
+- src/main.js — добавлена функция window.FE_DEV_SPAWN_UNIT рядом с FE_EXPORT_SNAPSHOT
+
+Как работает FE_DEV_SPAWN_UNIT(type, x, y):
+- Проверяет, что игра запущена (game.screen === 'game')
+- Проверяет, что тип юнита существует в UNIT_DEFS
+- Если x/y не указаны — спавнит рядом с hq_base игрока
+- Проверяет границы карты
+- Создаёт юнит через внутренний createUnit и добавляет в game.units
+- Пишет понятный console.warn с именем, id и координатами
+- Возвращает созданный unit или null при ошибке
+
+Новая команда теста:
+  FE_DEV_SPAWN_UNIT('scout', 10, 10)
+  FE_DEV_SPAWN_UNIT('scout')           — рядом с HQ
+  FE_DEV_SPAWN_UNIT('light_tank', 5, 5) — работает для любого типа
+
+Что НЕ сделано специально:
+- createUnit НЕ экспортирован напрямую — доступ только через FE_DEV_SPAWN_UNIT
+- scout НЕ добавлен в производство/factory
+- combat НЕ изменён
+- pathfinding НЕ изменён
+- economy НЕ изменена
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- Статическая проверка: window.FE_DEV_SPAWN_UNIT добавлен в main.js (строка 11864)
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
