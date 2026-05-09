@@ -639,3 +639,48 @@ Scout должен производиться через units_factory UI/queue,
 - pathfinding изменён: нет
 - economy core изменён: нет (использована существующая схема)
 - Google Drive sync тронут: нет
+
+---
+
+Задача: GLM-UI-01 — обновить текст демо-сборки в главном меню
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ui-01-main-menu-demo-text-v2 (от sandbox/main)
+
+Цель:
+Заменить устаревший технический текст в главном меню на пользовательский
+демо-сборочный текст. Главное меню показывает «Core Economy + Territory Fix v0.4»
+и описание v0.4 — это разработческие строки, не предназначенные для публичной
+демо-сборки на GitHub Pages.
+
+Что сделано:
+
+1. Subtitle (index.html, class="subtitle"):
+   - Старый: Core Economy + Territory Fix v0.4
+   - Новый:  Публичная демо-сборка · GitHub Pages
+
+2. Small note (index.html, class="small-note"):
+   - Старый: v0.4: сырьё, энергия, элементы, медленная территория, лимиты, HUD и сохранения.
+   - Новый:  Демо-сборка: экономика, территория, юниты и сохранения в разработке.
+
+Изменённые файлы:
+- index.html — 2 строки заменены (subtitle + small-note)
+- PATCH_REPORT.txt — добавлена эта запись
+
+Не менялись:
+- src/main.js — не тронут
+- src/config/* — не тронуты
+- src/core/* — не тронуты
+- assets — не изменены
+- gameplay / economy / combat — не затронуты
+- Оставшиеся упоминания v0.4 в JS-комментариях и <title> — не тронуты
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- Визуальная проверка diff: только 2 строки в index.html + PATCH_REPORT.txt
+
+Безопасность:
+- Игровой код не изменён
+- Ассеты не затронуты
+- Google Drive sync не включён
+- Production paths не затронуты
