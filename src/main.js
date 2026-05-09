@@ -2332,7 +2332,7 @@
   function factoryCanAffordAnyUnit() {
     const elKey = factionElementKey();
     const elCount = game.resources[elKey] || 0;
-    return ['builder', 'harvester', 'light_tank'].some(type => {
+    return ['builder', 'harvester', 'light_tank', 'scout'].some(type => {
       const def = UNIT_DEFS[type];
       return def && elCount >= (def.costElement || 0);
     });
@@ -2439,7 +2439,7 @@
 
   function productionSpeedForUnit(type) {
     const faction = FACTIONS[game.faction];
-    if (type === 'harvester' || type === 'builder') return faction.civilianProductionSpeed || 1;
+    if (type === 'harvester' || type === 'builder' || type === 'scout') return faction.civilianProductionSpeed || 1;
     return faction.combatProductionSpeed || 1;
   }
 
@@ -9699,7 +9699,7 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
     buildMenu.innerHTML=`
       <div class="panel-title">Фабрика юнитов</div>
       <div style="font-size:13px;color:#ffdca0;margin-bottom:8px">Очередь: ${q.length}/2<br>Элемент фракции: ${elCount}</div>
-      ${['builder','harvester','light_tank'].map(type=>{
+      ${['builder','harvester','light_tank','scout'].map(type=>{
         const u=UNIT_DEFS[type];
         const disabled = (q.length>=2 || elCount < u.costElement) ? ' disabled' : '';
         const time = u.productionTime;
