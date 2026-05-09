@@ -528,3 +528,52 @@ Lane: Review
 - angle→rawDir логика не изменена
 - economy / combat / factory не затронуты
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-01G — поправить selection ring и убрать меню scout
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01g-ring-menu (от sandbox/main)
+
+Проблема:
+1. Selection ring у scout расположен слишком низко — заметно ниже юнита.
+2. При клике на scout открывается меню "Разведчик / Стоп / Отмена",
+   тогда как scout должен вести себя как light_tank: выделяется, показывает
+   ring и HP, получает команды движения, но НЕ открывает отдельное меню.
+
+Что исправлено:
+
+1. Selection ring (main.js, ringTuneByType):
+   - Старый: scout: { x: 0, y: -16, rx: 0.88, ry: 0.84 }
+   - Новый:  scout: { x: 0, y: -38, rx: 0.88, ry: 0.84 }
+   - Ring поднят на 22 px вверх (y: -16 → -38), теперь под корпусом/колёсами
+
+2. Scout menu убран (main.js, openUnitMenu):
+   - Раньше: scout имел свой else-if блок с setContextAt "Разведчик / Стоп / Отмена"
+   - Теперь: scout добавлен в early-return рядом с light_tank
+   - Код: if (u.type==='light_tank' || u.type==='scout') { updateSelectedInfo(); return; }
+   - Блок else-if для scout удалён
+   - Поведение выбора scout теперь аналогично light_tank
+
+Не менялись:
+- FE_SCOUT_DIR_MAP — не тронут
+- FE_SCOUT_DIR_OFFSETS — не тронуты
+- scout size [84,84] — не тронут
+- movement logic — не затронута
+- angle→rawDir — не изменена
+
+Изменённые файлы:
+- src/main.js — ringTuneByType.scout.y, openUnitMenu scout early-return
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
