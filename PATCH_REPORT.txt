@@ -422,3 +422,57 @@ FE_SCOUT_DIR_MAP был скопирован с harvester/light_tank: [2,0,0,6,6
 - size / hpOffset / selection ring: не тронуты
 - angle->dir логика: не изменена (rawDir расчёт тот же)
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-01E — final visual tuning scout
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01e-visual-tuning (от sandbox/main)
+
+Проблема:
+1. FE_SCOUT_DIR_MAP [7,0,1,2,3,4,5,6] из 01D не соответствует фактической ручной
+   dev-калибровке — scout всё ещё смотрит мимо направления движения.
+2. Scout смещён относительно центра клетки / изометрического ромба.
+3. Scout слишком мелкий при size=[80,80] — выглядит меньше, чем ожидается
+   для видимого разведчика.
+
+Что исправлено:
+
+1. FE_SCOUT_DIR_MAP (runtime_flags.js):
+   - Старый: [7, 0, 1, 2, 3, 4, 5, 6] (VLM-оценка из 01D)
+   - Новый:  [3, 2, 1, 0, 7, 6, 5, 4] (подтверждён ручной dev-калибровкой)
+   - Карта отражает реальную ориентацию scout sprite frames:
+     rawDir 0(E)→sprite3, 1(SE)→2, 2(S)→1, 3(SW)→0,
+     4(W)→7, 5(NW)→6, 6(N)→5, 7(NE)→4
+
+2. Scout size (sprite_profiles.js):
+   - Старый: size: [80, 80]
+   - Новый:  size: [84, 84]
+   - Увеличение на 4px — scout чуть крупнее, но остаётся меньше builder (92)
+     и значительно меньше light_tank (104)
+
+3. Scout centering (runtime_flags.js):
+   - FE_SCOUT_DIR_OFFSETS обновлены с нулевых значений
+   - Чётные направления (0,2,4,6): y=2 — кардинальные оси чуть ниже
+   - Нечётные направления (1,3,5,7): y=1 — диагональные оси
+   - Смещения выравнивают визуальную посадку scout по центру ромба
+
+Изменённые файлы:
+- src/config/runtime_flags.js — FE_SCOUT_DIR_MAP, FE_SCOUT_DIR_OFFSETS
+- src/config/sprite_profiles.js — size для scout
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/config/runtime_flags.js -> PASS
+- node --check src/config/sprite_profiles.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- movement logic не затронута
+- angle→rawDir логика не изменена
+- Google Drive sync тронут: нет

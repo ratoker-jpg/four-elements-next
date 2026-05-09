@@ -93,10 +93,9 @@ window.FE_HARVESTER_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 // Light tank uses the same first-pass direction mapping as the 350x350 harvester exports.
 // Adjust only after visual Playwright/screenshot validation if a direction is wrong.
 window.FE_LIGHT_TANK_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
-// Scout 8-direction mapping: sprite dirN faces direction (N+1)%8 (rotated +1 CW vs standard).
-// DIR_MAP[rawDir] = (rawDir + 7) % 8 to compensate.
-// Adjust only after visual Playwright/screenshot validation if a direction is wrong.
-window.FE_SCOUT_DIR_MAP = [7, 0, 1, 2, 3, 4, 5, 6];
+// Scout 8-direction mapping: confirmed by manual dev-calibration.
+// rawDir 0→3, 1→2, 2→1, 3→0, 4→7, 5→6, 6→5, 7→4.
+window.FE_SCOUT_DIR_MAP = [3, 2, 1, 0, 7, 6, 5, 4];
 window.FE_UNIT_CONTROLLER_ENABLED = false;
 window.FE_BUILDER_FORCE_DIR = null;
 window.FE_HARVESTER_FORCE_DIR = null;
@@ -128,14 +127,15 @@ window.FE_LIGHT_TANK_DIR_OFFSETS = {
   6: { x: 0, y: 0 },
   7: { x: 0, y: 0 }
 };
-// Scout visual landing offsets: start neutral, tune after visual testing.
+// Scout visual landing offsets: tuned to center scout on the isometric diamond.
+// Small Y offsets per sprite direction to align the sprite with the cell center.
 window.FE_SCOUT_DIR_OFFSETS = {
-  0: { x: 0, y: 0 },
-  1: { x: 0, y: 0 },
-  2: { x: 0, y: 0 },
-  3: { x: 0, y: 0 },
-  4: { x: 0, y: 0 },
-  5: { x: 0, y: 0 },
-  6: { x: 0, y: 0 },
-  7: { x: 0, y: 0 }
+  0: { x: 0, y: 2 },
+  1: { x: 0, y: 1 },
+  2: { x: 0, y: 2 },
+  3: { x: 0, y: 1 },
+  4: { x: 0, y: 2 },
+  5: { x: 0, y: 1 },
+  6: { x: 0, y: 2 },
+  7: { x: 0, y: 1 }
 };
