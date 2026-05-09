@@ -9605,7 +9605,7 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
     selected=u;
     buildMenu.style.display='none';
     contextMenu.style.display='none';
-    if (u.type==='light_tank') {
+    if (u.type==='light_tank' || u.type==='scout') {
       updateSelectedInfo();
       return;
     }
@@ -9631,12 +9631,6 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
         <div class="panel-title">Лёгкий танк</div>
         <button class="action-btn" data-unit-action="stop">Стоп</button>
         <button class="action-btn disabled">Атака — следующий патч</button>
-        <button class="action-btn" data-unit-action="cancel">Отмена</button>
-      `);
-    } else if (u.type==='scout') {
-      setContextAt(u.x,u.y,`
-        <div class="panel-title">Разведчик</div>
-        <button class="action-btn" data-unit-action="stop">Стоп</button>
         <button class="action-btn" data-unit-action="cancel">Отмена</button>
       `);
     }
@@ -10294,7 +10288,7 @@ function setGroupManualMove(units, tx, ty) {
       light_tank: { x: 0, y: -32, rx: 0.98, ry: 0.92 },
       harvester: { x: 0, y: -30, rx: 1.00, ry: 0.94 },
       builder: { x: 0, y: -12, rx: 0.92, ry: 0.88 },
-      scout: { x: 0, y: -16, rx: 0.88, ry: 0.84 },
+      scout: { x: 0, y: -38, rx: 0.88, ry: 0.84 },
       // PATCH-VIS-04B-ROBUST-FACTION-RING-COLOR-BUILDER-FIX_END
     };
 
