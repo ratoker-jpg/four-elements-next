@@ -33,7 +33,8 @@
       units: {
         harvester: img(`assets/factions/${faction}/units/harvester.png?v=v04_harvester8_1`),
         builder: img(`assets/factions/${faction}/units/builder.png?v=v04_hq_clean_1`),
-        light_tank: img(`assets/factions/${faction}/units/light_tank.png?v=v04_light_tank8_1`)
+        light_tank: img(`assets/factions/${faction}/units/light_tank.png?v=v04_light_tank8_1`),
+        scout: img(`assets/factions/${faction}/units/scout_8dirs/scout_idle_dir0_0.png?v=v04_scout_1`)
       },
       unitFallbacks: {
         harvester: img(`assets/factions/${faction}/units/harvester_solid.png?v=v04_harvester8_1`)
@@ -51,6 +52,10 @@
         light_tank: loadUnitAnimation(`assets/factions/${faction}/units/light_tank_8dirs`, 'light_tank', {
           useMoveFrames: false,
           cacheVersion: 'v04_light_tank8_1'
+        }),
+        scout: loadUnitAnimation(`assets/factions/${faction}/units/scout_8dirs`, 'scout', {
+          useMoveFrames: false,
+          cacheVersion: 'v04_scout_1'
         })
       },
       buildings: {

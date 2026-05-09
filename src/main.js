@@ -9058,7 +9058,7 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
   }
 
   function spawnBuilderDust(unit, mode='trail', dx=0, dy=0) {
-    if (!game || !builderDustEnabled() || !unit || !['builder', 'harvester', 'light_tank'].includes(unit.type)) return;
+    if (!game || !builderDustEnabled() || !unit || !['builder', 'harvester', 'light_tank', 'scout'].includes(unit.type)) return;
     if (!game.dustParticles) game.dustParticles = [];
 
     const burst = mode === 'burst';
@@ -9151,7 +9151,7 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
   }
 
   function updateBuilderDust(unit, dt, beforeX, beforeY) {
-    if (!builderDustEnabled() || !unit || !['builder', 'harvester', 'light_tank'].includes(unit.type)) return;
+    if (!builderDustEnabled() || !unit || !['builder', 'harvester', 'light_tank', 'scout'].includes(unit.type)) return;
 
     const moved = unitMovedDistance(unit, beforeX, beforeY);
     const isMovingNow = moved > 0.0005 && (
@@ -11244,7 +11244,7 @@ window.addEventListener('keydown', e=>{
   keys[e.key.toLowerCase()]=true;
   if (window.FE_DEV_HOTKEYS_ENABLED === true) {
     const getCalibratedUnit = () => {
-      if (selected?.kind === 'unit' && (selected.type === 'builder' || selected.type === 'harvester' || selected.type === 'light_tank')) {
+      if (selected?.kind === 'unit' && (selected.type === 'builder' || selected.type === 'harvester' || selected.type === 'light_tank' || selected.type === 'scout')) {
         return selected;
       }
       return game?.units?.find(u => u.type === 'builder') ||
@@ -11591,7 +11591,7 @@ window.addEventListener('keydown', e=>{
         updateLightTankCombat(u,dt);
       }
 
-      if (u.type === 'builder' || u.type === 'harvester' || u.type === 'light_tank') {
+      if (u.type === 'builder' || u.type === 'harvester' || u.type === 'light_tank' || u.type === 'scout') {
         updateBuilderDust(u, dt, beforeX, beforeY);
       }
     }
