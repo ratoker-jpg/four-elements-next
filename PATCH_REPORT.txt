@@ -93,3 +93,33 @@ Exact next steps for user / GPT / GLM:
 3. Keep all future work on feature branches created from sandbox/main.
 4. Do not re-enable Google Drive sync inside this sandbox.
 5. If desired, do a follow-up cleanup patch to ignore or remove _gpt_state/ and _inbox/ before sharing the repo more broadly.
+
+---
+
+Task: GHPAGES-02 - Add GitHub Pages hardening and live demo link
+Timestamp: 2026-05-10 18:07:00 +03:00
+Branch: glm/ghpages-02-live-demo-nojekyll (from sandbox/main)
+
+Purpose:
+- Add .nojekyll to prevent GitHub Pages from ignoring folders starting with underscore or dot.
+- Add a live demo link to README.md so visitors can launch the game directly.
+- Record the change in PATCH_REPORT.txt.
+
+Changed files:
+- .nojekyll (new, empty)
+- README.md (added live demo link block, kept sandbox warning and all existing rules)
+- PATCH_REPORT.txt (appended this entry)
+
+Gameplay code and assets confirmation:
+- Confirmed: no gameplay code was modified.
+- Confirmed: no asset files were touched.
+- Confirmed: src/main.js was not modified.
+- Confirmed: Google Drive sync remains disabled.
+
+Checks run:
+- node --check src/main.js -> PASS
+- Visual diff review: only .nojekyll, README.md, PATCH_REPORT.txt changed.
+
+Production path status:
+- Confirmed: production folder was not touched.
+- Confirmed: no writes were made outside the sandbox folder.
