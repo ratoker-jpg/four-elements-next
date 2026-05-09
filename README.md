@@ -1,5 +1,7 @@
 # Four Elements Remake - GLM Sandbox Copy
 
+> **🎮 Live Demo (GitHub Pages):** https://ratoker-jpg.github.io/glm-game-sandbox/
+
 This folder is an isolated sandbox repository for GLM work.
 
 Sandbox path:
