@@ -26,6 +26,7 @@ Core rules:
 8. Do not run Google Drive sync helpers from this sandbox.
 9. Do not touch the production folder.
 10. If the task is ambiguous, stop and ask before changing files.
+11. **After every patch**, update the relevant roadmap file (`docs/project/scout_unit_roadmap_20260509.md` or `docs/project/four_elements_patch_roadmap_actual.md`): mark completed patches with ✅ and PR number, confirm what's next in the sequence. This keeps the roadmap the single source of truth for progress and planning.
 
 Working expectations:
 
@@ -35,6 +36,7 @@ Working expectations:
 4. Always create or update `PATCH_REPORT.txt` after changes.
 5. Always list changed files and checks that were run.
 6. Prefer reversible renames, guards, or isolated config updates over deletions.
+7. Always update the relevant roadmap after a patch — mark what's done (✅ + PR link) and what's planned next. Roadmap is the single source of truth for progress.
 
 Git and review workflow:
 

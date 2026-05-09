@@ -90,6 +90,9 @@ Do not rewrite architecture unless explicitly requested.
 11. If the task is ambiguous, stop and ask.
 12. Always create/update PATCH_REPORT.txt unless the task explicitly asks for audit-only report file.
 13. Always list changed files and checks.
+14. Always update the relevant roadmap file after every patch. Mark completed patches with ✅ and PR number, and confirm what's planned next. Roadmap is the single source of truth for progress. Relevant roadmap files:
+    - docs/project/scout_unit_roadmap_20260509.md (scout-specific)
+    - docs/project/four_elements_patch_roadmap_actual.md (general project)
 
 Forbidden production/mirror targets:
 - C:\Users\Den\Desktop\four elements\four_elements_core_base
