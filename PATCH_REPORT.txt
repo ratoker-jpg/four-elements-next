@@ -577,3 +577,65 @@ Lane: Review
 - pathfinding изменён: нет
 - production/factory изменён: нет
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-02 — добавить scout в производство units_factory
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-02-factory-production (от sandbox/main)
+
+Цель:
+Scout должен производиться через units_factory UI/queue, а не только через FE_DEV_SPAWN_UNIT.
+
+Что сделано:
+
+1. Factory production menu (main.js, openFactoryMenu, строка ~9702):
+   - Старый: ['builder','harvester','light_tank']
+   - Новый:  ['builder','harvester','light_tank','scout']
+   - В UI фабрики появилась кнопка «Разведчик» с ценой и временем производства
+
+2. Factory affordability check (main.js, factoryCanAffordAnyUnit, строка ~2335):
+   - Старый: ['builder', 'harvester', 'light_tank']
+   - Новый:  ['builder', 'harvester', 'light_tank', 'scout']
+   - Factory indicator корректно показывает доступность scout при наличии 1 элемента
+
+3. Production speed (main.js, productionSpeedForUnit, строка ~2442):
+   - Scout добавлен в civilianProductionSpeed (как builder и harvester)
+   - Старый: if (type === 'harvester' || type === 'builder')
+   - Новый:  if (type === 'harvester' || type === 'builder' || type === 'scout')
+   - Scout — лёгкий невоенный юнит, производящийся по гражданской скорости
+
+Стоимость scout (уже задана в units.js):
+- costElement: 1 (1 элемент фракции)
+- productionTime: 18 сек
+- Спавн: через существующую логику findSpawnCellNearBuilding → createUnit
+
+Не менялись:
+- FE_SCOUT_DIR_MAP — не тронут
+- FE_SCOUT_DIR_OFFSETS — не тронуты
+- scout size [84,84] — не тронут
+- scout sprite profile — не тронут
+- selection ring — не тронут
+- movement logic — не затронута
+- angle→rawDir — не изменена
+- pathfinding — не затронут
+- combat — не добавлен (canAttack:false)
+- AI — не добавлен
+- assets — не изменены
+- economy core — не изменён (использована существующая логика)
+
+Изменённые файлы:
+- src/main.js — factoryCanAffordAnyUnit, openFactoryMenu, productionSpeedForUnit
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- combat добавлен: нет
+- AI добавлен: нет
+- pathfinding изменён: нет
+- economy core изменён: нет (использована существующая схема)
+- Google Drive sync тронут: нет
