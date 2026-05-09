@@ -8787,7 +8787,11 @@ function unitDir8(u, dirMap) {
 
   const forceDir = u.type === 'harvester'
     ? window.FE_HARVESTER_FORCE_DIR
-    : (u.type === 'builder' ? window.FE_BUILDER_FORCE_DIR : null);
+    : u.type === 'light_tank'
+      ? window.FE_LIGHT_TANK_FORCE_DIR
+      : u.type === 'scout'
+        ? window.FE_SCOUT_FORCE_DIR
+        : (u.type === 'builder' ? window.FE_BUILDER_FORCE_DIR : null);
 
   if (forceDir !== null && forceDir !== undefined) {
     const forced = Number(forceDir);

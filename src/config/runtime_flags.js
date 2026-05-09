@@ -93,9 +93,10 @@ window.FE_HARVESTER_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 // Light tank uses the same first-pass direction mapping as the 350x350 harvester exports.
 // Adjust only after visual Playwright/screenshot validation if a direction is wrong.
 window.FE_LIGHT_TANK_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
-// Scout uses the same 8-direction mapping as harvester and light_tank.
+// Scout 8-direction mapping: sprite dirN faces direction (N+1)%8 (rotated +1 CW vs standard).
+// DIR_MAP[rawDir] = (rawDir + 7) % 8 to compensate.
 // Adjust only after visual Playwright/screenshot validation if a direction is wrong.
-window.FE_SCOUT_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
+window.FE_SCOUT_DIR_MAP = [7, 0, 1, 2, 3, 4, 5, 6];
 window.FE_UNIT_CONTROLLER_ENABLED = false;
 window.FE_BUILDER_FORCE_DIR = null;
 window.FE_HARVESTER_FORCE_DIR = null;
