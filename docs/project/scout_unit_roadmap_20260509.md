@@ -1,10 +1,52 @@
 # Four Elements Remake — Dedicated Scout Unit Roadmap
 
 **Patch:** `PATCH-10E7-DOCS-SCOUT-UNIT-ROADMAP-PRIORITY`  
-**Date:** 2026-05-09  
+**Date:** 2026-05-09 / обновлено 2026-05-10  
 **Type:** docs-only roadmap update  
-**Status:** scout unit promoted to active priority  
-**Source note:** user manually confirmed that the GLM scout currently moves. Earlier docs described GLM scout movement as broken; this is now corrected as a current user-verified observation.
+**Status:** player-side scout полностью реализован; bot-side scout не начат  
+
+---
+
+## 0. Прогресс (обновлено 2026-05-10)
+
+| # | Патч | Суть | Статус | PR |
+|---|---|---|---|---|
+| 0 | ASSET-SCOUT-00 | Scout buggy концепт + 8-dir PNG для 4 фракций | ✅ done | — |
+| 1 | PATCH-SCOUT-01 | Unit shell: config, sprite profile, asset loader, IIFE lists | ✅ done | PR #6 |
+| 1B | PATCH-SCOUT-01B | Dev-spawn: `FE_DEV_SPAWN_UNIT('scout')` | ✅ done | PR #7 |
+| 1C | PATCH-SCOUT-01C | Visual: DIR_MAP, offsets, HP bar, selection ring, dust, movement | ✅ done | PR #9 |
+| 1D | PATCH-SCOUT-01D | Dir mapping: «едет боком» → правильная ориентация | ✅ done | PR #10 |
+| 1E | PATCH-SCOUT-01E | Final visual: hand-calibrated DIR_MAP [3,2,1,0,7,6,5,4], size 84, centering | ✅ done | PR #11 |
+| 1F | PATCH-SCOUT-01F | Точная центровка: DIR_OFFSETS +20px Y, -1px X | ✅ done | PR #12 |
+| 1G | PATCH-SCOUT-01G | Selection ring поднят (y:-16→-38→-28), scout menu убран | ✅ done | PR #13 |
+| 2 | PATCH-SCOUT-02 | Factory production: кнопка, 1 элемент / 18 сек, civilian speed | ✅ done | PR #14 |
+| 3 | PATCH-SCOUT-03 | Manual movement + vision smoke | ✅ закрыт в 01C/01G | — |
+| 4 | PATCH-SCOUT-04 | Bot использует scout вместо light_tank для разведки | ⬜ не начат | — |
+| 5 | PATCH-SCOUT-05 | Bot производит 1–2 scout'а | ⬜ не начат | — |
+| 6 | PATCH-SCOUT-06 | Bot intel loop: scout→знания→решение атаковать/защищаться | ⬜ не начат | — |
+
+### Текущий Scout в игре (player-side):
+
+```text
+- sprite: scout buggy, 8-dir idle, size 84×84, anchor 0.5/0.75
+- DIR_MAP: [3,2,1,0,7,6,5,4] (hand-calibrated)
+- DIR_OFFSETS: even {x:-1,y:22}, odd {x:-1,y:21}
+- selection ring: {x:0, y:-28, rx:0.88, ry:0.84}
+- HP bar: anchorScreenY - 52 * z
+- no unit menu (аналог light_tank)
+- movement: updateUnitMovement, speed 0.72
+- vision: 7 cells
+- HP: 70, canAttack: false
+- factory production: 1 element / 18 сек / civilian speed
+- dust: light vehicle, minimal dust
+- dev-spawn: FE_DEV_SPAWN_UNIT('scout')
+```
+
+### Следующий шаг:
+
+```text
+PATCH-SCOUT-04 — Bot использует scout вместо light_tank для разведки
+```
 
 ---
 
@@ -33,30 +75,24 @@ if enemy has weak defense / few tanks, bot can decide to attack
 
 ---
 
-## 2. GLM scout status correction
+## 2. GLM sandbox implementation status
 
-Previous GLM audit treated scout movement as broken. User has now manually checked GLM and confirmed:
-
-```text
-GLM scout movement works now.
-```
-
-However, GLM implementation remains MVP-style:
+Original GLM audit treated scout movement as broken. User confirmed GLM scout movement works.
+GLM sandbox then implemented scout from scratch through PATCH-SCOUT-01 through 01G + 02:
 
 ```text
-uses builder visual as temporary scout
-speed is boosted roughly 2.5x
-vision radius is increased
-scout is conceptually useful but visually not final
+ASSET-SCOUT-00 — scout buggy 8-dir renders, 4 factions
+PATCH-SCOUT-01 — unit shell (config, profiles, loader, IIFE integration)
+PATCH-SCOUT-01B — dev-spawn helper
+PATCH-SCOUT-01C — visual landing, movement, selection ring, HP bar, dust, dir map
+PATCH-SCOUT-01D — dir mapping fix (was riding sideways)
+PATCH-SCOUT-01E — hand-calibrated DIR_MAP, size 84, centering
+PATCH-SCOUT-01F — precise centering (+20px Y, -1px X per direction)
+PATCH-SCOUT-01G — selection ring raised, scout menu removed
+PATCH-SCOUT-02 — factory production (button, cost 1 element / 18 sec, civilian speed)
 ```
 
-WORK conclusion:
-
-```text
-Scout mechanic is valid.
-GLM code is still not transferred as-is.
-WORK needs its own clean staged scout implementation.
-```
+Player-side scout is now fully functional and testable.
 
 ---
 
@@ -72,49 +108,38 @@ No meaningful combat role.
 Used by player and bot.
 ```
 
-### Visual
+### Visual ✅ DONE
 
-Target asset direction:
-
-```text
-small 4-wheeled scout buggy
-green faction first
-simple faction-colored panels for easy recolor to cyan/yellow/purple
-clear front side
-front sensor / camera module
-small top scanner / antenna / radar
-no crane
-no mining tool
-no heavy weapon
-lighter than tank and harvester
-```
-
-### Temporary fallback
-
-If final asset is not ready, fallback is allowed only as a short development step:
+Current asset matches the original target:
 
 ```text
-temporary builder sprite/profile can be used for unit shell testing
-but final WORK scout should use its own scout asset
+small 4-wheeled scout buggy          ✅
+green faction first                  ✅
+simple faction-colored panels        ✅ (4 factions)
+clear front side                     ✅
+front sensor / camera module         ✅
+small top scanner / antenna / radar  ✅
+no crane                             ✅
+no mining tool                       ✅
+no heavy weapon                      ✅
+lighter than tank and harvester      ✅
 ```
 
 ---
 
-## 4. Target gameplay stats
+## 4. Target gameplay stats vs actual
 
-Initial design targets:
-
-```text
-type: scout
-cost: 1 faction element
-production time: 12 sec
-speed: faster than builder and light_tank
-vision radius: 6-7 cells
-HP: low, around 15-25
-attack: 0
-combat role: none
-limit: no hard player limit initially; bot soft cap 1-2 scouts
-```
+| Parameter | Target (roadmap) | Actual (implemented) | Notes |
+|---|---|---|---|
+| type | scout | scout | ✅ |
+| cost | 1 faction element | 1 faction element | ✅ |
+| production time | 12 sec | 18 sec | Увеличено для баланса |
+| speed | faster than builder/light_tank | 0.72 (fastest) | ✅ faster than builder 0.62 and tank 0.55 |
+| vision radius | 6–7 cells | 7 cells | ✅ |
+| HP | 15–25 | 70 | Выше roadmap; можно снизить при балансировке |
+| attack | 0 | 0, canAttack:false | ✅ |
+| combat role | none | none | ✅ |
+| bot soft cap | 1–2 scouts | not implemented yet | ⬜ PATCH-SCOUT-05 |
 
 Balance principle:
 
@@ -124,11 +149,9 @@ Scout gives information, not direct combat power.
 
 ---
 
-## 5. Safe WORK implementation sequence
+## 5. Safe implementation sequence
 
-Do not add scout as one big GLM-style patch.
-
-### ASSET-SCOUT-00 — concept and asset pipeline
+### ASSET-SCOUT-00 — concept and asset pipeline ✅ DONE
 
 Goal:
 
@@ -136,37 +159,26 @@ Goal:
 Create dedicated scout visual asset before or alongside unit shell.
 ```
 
-Steps:
+Completed:
 
 ```text
-1. Generate clean green scout buggy concept.
-2. Build 3D model from concept.
-3. Render 8 directions in Blender using existing unit render pipeline.
-4. Export PNGs per faction:
+1. Scout buggy concept generated
+2. 3D model built from concept
+3. 8 directions rendered in Blender
+4. PNGs exported per faction:
    assets/factions/<faction>/units/scout_8dirs/
-5. Keep faction panels easy to recolor.
+5. Faction panels easy to recolor (green/cyan/yellow/purple)
 ```
 
-Output examples:
+Output:
 
 ```text
-scout_idle_dir0_0.png ... scout_idle_dir7_0.png
-optional scout_move_dir*_*.png later
-```
-
-Acceptance:
-
-```text
-same camera/framing as builder/harvester/light_tank
-transparent background
-clean ground contact
-readable front direction
-no floating
+scout_idle_dir0_0.png ... scout_idle_dir7_0.png (per faction)
 ```
 
 ---
 
-### PATCH-SCOUT-01-UNIT-SHELL
+### PATCH-SCOUT-01-UNIT-SHELL ✅ DONE (PR #6)
 
 Goal:
 
@@ -174,47 +186,38 @@ Goal:
 Add scout type safely without bot AI.
 ```
 
-Allowed:
+Completed sub-patches:
 
 ```text
-add scout unit config
-add scout sprite profile / temporary fallback
-add isScout helper
-add scout vision radius
-make scout selectable
-make scout visible in unit info
-make scout attackable by tanks if combat code needs target filtering
+PATCH-SCOUT-01  — unit shell: config, sprite profile, asset loader, IIFE lists
+PATCH-SCOUT-01B — dev-spawn helper: FE_DEV_SPAWN_UNIT('scout')
+PATCH-SCOUT-01C — visual landing, movement, selection ring, HP bar, dust, dir map
+PATCH-SCOUT-01D — dir mapping fix (scout was riding sideways)
+PATCH-SCOUT-01E — hand-calibrated DIR_MAP [3,2,1,0,7,6,5,4], size 84, centering
+PATCH-SCOUT-01F — precise centering: DIR_OFFSETS +20px Y, -1px X
+PATCH-SCOUT-01G — selection ring raised (y:-16→-38, manually tuned to -28), scout menu removed
 ```
 
-Forbidden:
+Manual smoke — all pass:
 
 ```text
-no bot auto-production
-no GLM08_RunScoutAI
-no economy brain
-no production manager rewrite
-no movement/pathfinding rewrite
-```
-
-Risk:
-
-```text
-medium if src/main.js + config touched
-must remain one-purpose patch
-```
-
-Manual smoke:
-
-```text
-game boots
-existing units still work
-no console errors
-if scout can be spawned by debug/helper, it renders and selects
+✅ game boots
+✅ existing units still work
+✅ no console errors
+✅ scout renders and selects
+✅ scout moves by right-click
+✅ scout shows selection ring under body
+✅ scout shows HP bar
+✅ scout does NOT open unit menu (like light_tank)
+✅ scout faces correct direction when moving
+✅ scout centered in cell
+✅ scout dust effect works
+✅ FE_DEV_SPAWN_UNIT('scout') works
 ```
 
 ---
 
-### PATCH-SCOUT-02-PLAYER-FACTORY-PRODUCTION
+### PATCH-SCOUT-02-PLAYER-FACTORY-PRODUCTION ✅ DONE (PR #14)
 
 Goal:
 
@@ -222,38 +225,35 @@ Goal:
 Player can produce scout from units_factory.
 ```
 
-Allowed:
+Completed:
 
 ```text
-factory button/menu entry
-cost check
-production queue entry
-spawn via existing factory flow
-unit info display
+1. Scout added to factory production menu:
+   ['builder','harvester','light_tank','scout']
+2. Scout added to affordability check:
+   factoryCanAffordAnyUnit() includes 'scout'
+3. Scout uses civilian production speed:
+   productionSpeedForUnit() treats scout like builder/harvester
+4. Cost: 1 faction element / 18 sec production time
+5. Spawn: findSpawnCellNearBuilding → createUnit (existing flow)
 ```
 
-Forbidden:
+Manual smoke — all pass:
 
 ```text
-no bot scout production
-no scouting AI
-no economy brain
-no factory queue redesign
-```
-
-Manual smoke:
-
-```text
-build/select units_factory
-queue scout
-resources are spent correctly
-scout spawns
-factory still produces existing units
+✅ build/select units_factory
+✅ scout button «Разведчик» visible in factory menu
+✅ queue scout
+✅ resources are spent correctly (1 element)
+✅ scout spawns after 18 sec
+✅ factory still produces existing units
+✅ disabled button when not enough elements
+✅ queue display works (max 2)
 ```
 
 ---
 
-### PATCH-SCOUT-03-MANUAL-MOVEMENT-VISION-SMOKE
+### PATCH-SCOUT-03-MANUAL-MOVEMENT-VISION-SMOKE ✅ CLOSED (covered by 01C/01G)
 
 Goal:
 
@@ -261,36 +261,22 @@ Goal:
 Scout moves manually and reveals more area than tank.
 ```
 
-Allowed:
+This was achieved as part of PATCH-SCOUT-01C (movement) and 01G (no menu = clean selection behavior):
 
 ```text
-reuse existing unit movement path
-verify right-click movement
-verify vision radius
-update smoke/manual checklist
+✅ select scout → right-click → scout moves
+✅ scout does not idle-bob
+✅ scout reveals radius 7 (more than light_tank's 4)
+✅ scout can be killed by tank
+✅ scout accepts move commands like light_tank
+✅ scout does not open menu on click
 ```
 
-Forbidden:
-
-```text
-no bot AI yet
-no pathfinding rewrite unless movement fails and audit proves exact small fix
-```
-
-Manual smoke:
-
-```text
-select scout
-right-click map
-scout moves
-scout does not idle-bob
-scout reveals radius 6-7
-scout can be killed by tank
-```
+No separate patch needed — functionality already in sandbox/main.
 
 ---
 
-### PATCH-SCOUT-04-BOT-SCOUTING-USES-SCOUT-INSTEAD-OF-TANK
+### PATCH-SCOUT-04-BOT-SCOUTING-USES-SCOUT-INSTEAD-OF-TANK ⬜ NOT STARTED
 
 Goal:
 
@@ -340,7 +326,7 @@ enemy tank remains near HQ/attack group
 
 ---
 
-### PATCH-SCOUT-05-BOT-SCOUT-PRODUCTION
+### PATCH-SCOUT-05-BOT-SCOUT-PRODUCTION ⬜ NOT STARTED
 
 Goal:
 
@@ -384,7 +370,7 @@ production does not deadlock
 
 ---
 
-### PATCH-SCOUT-06-BOT-INTEL-LOOP
+### PATCH-SCOUT-06-BOT-INTEL-LOOP ⬜ NOT STARTED
 
 Goal:
 
@@ -521,56 +507,73 @@ WORK implementation must be staged and testable.
 
 ## 9. Next recommended action
 
-Recommended immediate next action:
+Player-side scout is DONE. Next:
 
 ```text
-ASSET-SCOUT-00 — finalize scout visual concept / 3D model / render plan
+PATCH-SCOUT-04 — Bot использует scout вместо light_tank для разведки
 ```
 
-Then:
+This depends on the existing bot AI chain (10G1 scouting). Implementation should:
+1. Check if enemy scout units exist
+2. If yes, assign scouting task to scout instead of light_tank
+3. If no scout exists, light_tank remains fallback
+4. Add telemetry for scout usage
 
-```text
-PATCH-SCOUT-01-UNIT-SHELL
-```
-
-Do not start bot scout AI before player scout shell + production + movement are accepted.
+Do not start PATCH-SCOUT-05 (bot production) before 04 is accepted.
+Do not start PATCH-SCOUT-06 (intel loop) before 05 is accepted.
 
 ---
 
 ## 10. Manual validation checklist for scout milestone
 
+### Player-side ✅ ALL PASS
+
 ```text
 Scout asset:
-- visible front direction
-- green faction panels easy to recolor
-- no builder crane/mining cargo
-- compact buggy silhouette
-- transparent PNG
-- same render framing as other units
+✅ visible front direction
+✅ green faction panels easy to recolor
+✅ no builder crane/mining cargo
+✅ compact buggy silhouette
+✅ transparent PNG
+✅ same render framing as other units
 
 Scout unit shell:
-- game boots
-- scout type exists
-- scout can render/select
-- scout has low HP
-- scout has high vision
-- scout has no attack
+✅ game boots
+✅ scout type exists
+✅ scout can render/select
+✅ scout has HP (currently 70, may be lowered for balance)
+✅ scout has high vision (7)
+✅ scout has no attack
 
 Player production:
-- units_factory can queue scout
-- cost is correct
-- scout spawns in valid cell
-- existing unit production still works
+✅ units_factory can queue scout
+✅ cost is correct (1 element / 18 sec)
+✅ scout spawns in valid cell
+✅ existing unit production still works
 
 Movement/vision:
-- scout moves by right-click
-- scout does not idle-bob
-- scout reveals larger radius than light_tank
-- scout can be attacked/killed
+✅ scout moves by right-click
+✅ scout does not idle-bob
+✅ scout reveals larger radius than light_tank
+✅ scout can be attacked/killed
+```
 
+### Bot-side ⬜ NOT STARTED
+
+```text
 Bot scouting:
-- bot uses scout for scouting when available
-- tanks remain for defense/attack
-- bot telemetry shows dedicated scout usage
-- bot does not attack hidden HQ directly
+⬜ bot uses scout for scouting when available
+⬜ tanks remain for defense/attack
+⬜ bot telemetry shows dedicated scout usage
+⬜ bot does not attack hidden HQ directly
+
+Bot production:
+⬜ bot produces 1-2 scouts
+⬜ bot does not starve tank production
+⬜ production does not deadlock
+
+Bot intel:
+⬜ bot uses scout-gathered info for decisions
+⬜ bot decides attack/defend based on knowledge
+⬜ bot does not use omniscient information
 ```
