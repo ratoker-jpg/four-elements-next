@@ -123,3 +123,43 @@ Checks run:
 Production path status:
 - Confirmed: production folder was not touched.
 - Confirmed: no writes were made outside the sandbox folder.
+
+---
+
+Задача: WORKFLOW-02 — Упростить процесс: Fast lane без PR для низкорисковых задач
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+- Ввести два режима работы: Fast lane (direct push) и Review lane (PR обязателен).
+- Fast lane: для docs, prompts, PATCH_REPORT, .nojekyll, текстовых правок без логики — commit + push напрямую в sandbox/main, без PR.
+- Review lane: для src/main.js, src/core, src/config, assets, gameplay, экономика, combat, pathfinding, save/load, многофайловых изменений, рискованных задач — feature branch + PR.
+
+Изменённые файлы:
+- README_GLM_SANDBOX.md (GitHub workflow: добавлены Fast lane и Review lane с правилами; обновлён forbidden list)
+- AGENTS.md (правило 1 обновлено: Fast lane — direct push; правило 2: Review lane — PR; секция Git and review workflow обновлена)
+- docs/prompts/PROMPT_NEW_CHAT_GPT_FOUR_ELEMENTS_GLM_FIRST.txt (GLM роль: Fast lane / Review lane; секция 3: выбор lane; секция 4: разделение задач по lane; секция 6: обновлённые hard rules; секция 7: merge checklist только Review lane)
+- docs/prompts/PROMPT_NEW_CHAT_GLM_FOUR_ELEMENTS_SANDBOX.txt (секция 1: Two lanes; секция 2: обновлённые hard rules; секция 3: Fast lane / Review lane branch rules; секция 5: PATCH_REPORT с lane; секция 8: final response с lane и commit hash)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Что зафиксировано:
+1. Fast lane — direct push в sandbox/main для низкорисковых задач (docs, prompts, текст).
+2. Review lane — feature branch + PR для рискованных задач (код, ассеты, gameplay).
+3. PR не обязателен для Fast lane.
+4. Если не уверены — default Review lane.
+5. PATCH_REPORT и final report теперь содержат lane и commit hash.
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- Визуальная проверка diff: изменены только документация и промпты, код и ассеты не затронуты.
+
+Подтверждение безопасности:
+- Игровой код не изменён.
+- Ассеты не затронуты.
+- src/main.js не тронут.
+- Google Drive sync не включён.
+- Production paths не затронуты.
+
+Примечание:
+- PR не создавался, так как это Fast lane задача (docs/prompts only).

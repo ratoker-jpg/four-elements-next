@@ -31,10 +31,42 @@ Your default behavior:
 - read AGENTS.md first;
 - read README_GLM_SANDBOX.md;
 - work from sandbox/main;
-- create a feature branch;
 - make minimal changes;
-- create a pull request;
 - report changed files and checks.
+
+Two lanes:
+
+**Fast lane** — direct push to `sandbox/main` (no PR):
+- docs, README, AGENTS, PATCH_REPORT
+- docs/prompts
+- .nojekyll
+- GitHub Pages docs/text
+- simple text edits in index.html without logic changes
+
+Fast lane rules:
+- commit and push directly to `sandbox/main`;
+- no feature branch;
+- no PR;
+- give a final report with commit hash, changed files, checks;
+- do not touch src/main.js, assets, gameplay.
+
+**Review lane** — feature branch + PR required:
+- src/main.js
+- src/core, src/config
+- assets
+- gameplay, economy, combat, pathfinding
+- save/load
+- multi-file code changes
+- anything risky
+
+Review lane rules:
+- create a feature branch from `sandbox/main`;
+- create a pull request;
+- GPT/user review before merge.
+
+If the task says "Fast lane" or only touches docs/prompts/text: use Fast lane.
+If the task says "Review lane" or touches code/assets/gameplay: use Review lane.
+If unsure: default to Review lane.
 
 Do not act like an autonomous product owner.
 Do not expand scope.
@@ -45,21 +77,19 @@ Do not rewrite architecture unless explicitly requested.
 2. HARD RULES
 ============================================================
 
-1. Do not push directly to main.
-2. Work only from sandbox/main.
-3. Create a feature branch for every task.
-4. Create a pull request when done.
-5. Keep diffs minimal and reversible.
-6. Do not modify gameplay code unless explicitly requested.
-7. Do not modify assets unless explicitly requested.
-8. Do not touch src/main.js unless explicitly allowed.
-9. Do not re-enable Google Drive sync.
-10. Do not sync anything to FourElements_WORK_MIRROR.
-11. Do not touch production paths.
-12. Do not delete files unless explicitly requested.
-13. If the task is ambiguous, stop and ask.
-14. Always create/update PATCH_REPORT.txt unless the task explicitly asks for audit-only report file.
-15. Always list changed files and checks.
+1. For Fast lane tasks: commit and push directly to `sandbox/main`. No PR.
+2. For Review lane tasks: create a feature branch and a PR. Do not push directly to `sandbox/main`.
+3. Keep diffs minimal and reversible.
+4. Do not modify gameplay code unless explicitly requested.
+5. Do not modify assets unless explicitly requested.
+6. Do not touch src/main.js unless explicitly allowed.
+7. Do not re-enable Google Drive sync.
+8. Do not sync anything to FourElements_WORK_MIRROR.
+9. Do not touch production paths.
+10. Do not delete files unless explicitly requested.
+11. If the task is ambiguous, stop and ask.
+12. Always create/update PATCH_REPORT.txt unless the task explicitly asks for audit-only report file.
+13. Always list changed files and checks.
 
 Forbidden production/mirror targets:
 - C:\Users\Den\Desktop\four elements\four_elements_core_base
@@ -72,6 +102,13 @@ Forbidden production/mirror targets:
 3. BRANCH AND PR RULES
 ============================================================
 
+Fast lane (direct push, no PR):
+- Commit and push directly to `sandbox/main`.
+- No feature branch needed.
+- Report commit hash, changed files, and checks.
+
+Review lane (feature branch + PR):
+
 Branch naming:
 glm/<task-id-lowercase-short-name>
 
@@ -80,7 +117,7 @@ Examples:
 - glm/ui-01-sandbox-badge
 - glm/test-01-smoke-check
 
-Every completed task should end with a PR.
+Every Review lane task should end with a PR.
 
 PR title:
 <TASK-ID> — <short human-readable title>
@@ -121,8 +158,14 @@ For normal change tasks, update PATCH_REPORT.txt with:
 Task:
 <TASK-ID> — <name>
 
+Lane:
+Fast / Review
+
 Branch:
-<branch name>
+<branch name> (Review lane) or sandbox/main (Fast lane)
+
+Commit hash (Fast lane) or PR link (Review lane):
+...
 
 Changed files:
 - ...
@@ -204,10 +247,13 @@ At the end of every task, respond with:
 Task:
 ...
 
-Branch:
-...
+Lane:
+Fast / Review
 
-PR:
+Branch:
+<sandbox/main for Fast lane, or feature branch name for Review lane>
+
+Commit hash (Fast lane) / PR link (Review lane):
 ...
 
 Changed files:

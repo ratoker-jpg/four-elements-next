@@ -16,8 +16,8 @@ C:\Users\Den\Desktop\four elements\four_elements_core_base
 
 Core rules:
 
-1. Do not push directly to `main`.
-2. Work only in feature branches created from `sandbox/main`.
+1. For **Fast lane** tasks (docs, prompts, PATCH_REPORT, .nojekyll, text-only HTML): commit and push directly to `sandbox/main`. No PR required.
+2. For **Review lane** tasks (src/main.js, src/core, src/config, assets, gameplay, economy, combat, pathfinding, save/load, multi-file code, anything risky): create a feature branch and a PR. Do not push directly to `sandbox/main`.
 3. Keep diffs minimal and reversible.
 4. Do not rewrite architecture unless explicitly requested.
 5. Do not modify gameplay code unless the task explicitly requires it.
@@ -39,6 +39,7 @@ Working expectations:
 Git and review workflow:
 
 1. Use `sandbox/main` as the protected sandbox baseline branch.
-2. Create feature branches for all follow-up work.
-3. Review staged changes before commit.
-4. Never treat this sandbox as the source of truth for the production project.
+2. **Fast lane**: for docs, prompts, PATCH_REPORT, .nojekyll, text-only HTML — commit and push directly to `sandbox/main`. No PR.
+3. **Review lane**: for src/main.js, src/core, src/config, assets, gameplay, economy, combat, pathfinding, save/load, multi-file code, anything risky — create a feature branch and a PR.
+4. Review staged changes before commit.
+5. Never treat this sandbox as the source of truth for the production project.

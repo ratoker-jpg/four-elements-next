@@ -62,8 +62,8 @@ GPT:
 GLM:
 - основной исполнитель для малых и средних задач;
 - работает через GitHub;
-- создаёт feature branch от sandbox/main;
-- создаёт PR;
+- Fast lane: direct push в sandbox/main (docs, prompts, PATCH_REPORT, .nojekyll, текст без логики) — без PR;
+- Review lane: feature branch + PR (src/main.js, src/core, src/config, assets, gameplay, экономика, combat, pathfinding, save/load, многофайловые изменения, что-либо рискованное);
 - делает минимальный diff;
 - пишет PATCH_REPORT.txt;
 - запускает node --check src/main.js, если возможно.
@@ -87,12 +87,16 @@ Codex:
 1. Пользователь формулирует задачу.
 2. GPT оценивает риск:
    - low / medium / high.
-3. GPT выбирает исполнителя:
+3. GPT выбирает исполнителя и lane:
    - GLM по умолчанию;
+   - GLM Fast lane: если задача — docs/prompts/текст, без PR, direct push в sandbox/main;
+   - GLM Review lane: если задача затрагивает src/main.js, src/core, src/config, assets, gameplay — feature branch + PR;
    - Codex только для сложного/опасного;
    - GPT patch.py только для точечного локального патча, если это быстрее и безопаснее.
 4. GPT пишет промпт исполнителю.
-5. Исполнитель делает feature branch + PR.
+5. Исполнитель делает:
+   - Fast lane: commit + push напрямую в sandbox/main;
+   - Review lane: feature branch + PR.
 6. Пользователь скидывает GPT итог:
    - PR link;
    - changed files;
@@ -111,11 +115,12 @@ Codex:
 4. КАКИЕ ЗАДАЧИ ОТДАВАТЬ GLM
 ============================================================
 
-GLM по умолчанию:
+GLM по умолчанию (Fast lane — direct push, без PR):
 - документация;
 - README;
 - AGENTS;
 - PATCH_REPORT;
+- docs/prompts;
 - GitHub Pages;
 - .nojekyll;
 - небольшие UI-правки;
@@ -123,21 +128,22 @@ GLM по умолчанию:
 - audit-only задачи;
 - smoke/check задачи;
 - простые конфиги;
-- мелкие баги с понятным местом;
-- маленькие PR без архитектуры.
+- простые текстовые правки в index.html без логики.
 
-GLM можно, но с жёстким ревью:
+GLM (Review lane — feature branch + PR):
 - малые изменения в src/main.js;
-- небольшие UI/HUD фиксы;
+- небольшие UI/HUD фиксы, затрагивающие JS-логику;
 - добавление простых проверок;
-- локальные фичи с малым diff.
+- локальные фичи с малым diff;
+- мелкие баги с понятным местом.
 
 Условия:
 - expected changed files заранее указаны;
 - src/main.js только если явно разрешено;
 - assets только если явно разрешено;
 - node --check обязателен;
-- PR обязателен.
+- PR обязателен только для Review lane задач;
+- Fast lane задачи: direct push в sandbox/main, без PR.
 
 ============================================================
 5. КАКИЕ ЗАДАЧИ ОСТАВЛЯТЬ CODEX
@@ -183,19 +189,22 @@ Task:
 <task-id> — <short name>
 
 Hard rules:
-1. Do not push directly to main.
-2. Work only from sandbox/main.
-3. Create a feature branch:
-   glm/<task-id-short-name>
-4. Create a pull request when done.
-5. Do not modify gameplay code unless explicitly requested.
-6. Do not modify assets unless explicitly requested.
-7. Do not rewrite architecture.
-8. Do not touch production paths.
-9. Do not re-enable Google Drive sync.
-10. Keep the diff minimal.
-11. Follow AGENTS.md and README_GLM_SANDBOX.md.
-12. Update PATCH_REPORT.txt unless this is pure audit-report-only and another report file is explicitly required.
+1. For Fast lane tasks (docs, prompts, PATCH_REPORT, .nojekyll, text-only HTML): commit and push directly to sandbox/main. No PR.
+2. For Review lane tasks (src/main.js, src/core, src/config, assets, gameplay, economy, combat, pathfinding, save/load, multi-file code, anything risky): create a feature branch and a PR.
+3. Work only from sandbox/main.
+4. Do not modify gameplay code unless explicitly requested.
+5. Do not modify assets unless explicitly requested.
+6. Do not rewrite architecture.
+7. Do not touch production paths.
+8. Do not re-enable Google Drive sync.
+9. Keep the diff minimal.
+10. Follow AGENTS.md and README_GLM_SANDBOX.md.
+11. Update PATCH_REPORT.txt unless this is pure audit-report-only and another report file is explicitly required.
+
+Lane selection:
+- If the task says "Fast lane" or only touches docs/prompts/text: direct push to sandbox/main.
+- If the task says "Review lane" or touches code/assets/gameplay: feature branch + PR.
+- If unsure: default to Review lane.
 
 Expected changed files:
 - <file 1>
@@ -207,16 +216,20 @@ Checks:
 - Do not run destructive commands.
 
 Final response:
-- branch name;
-- PR link;
+- lane (Fast / Review);
+- branch name (Review lane) or "sandbox/main" (Fast lane);
+- commit hash (Fast lane) or PR link (Review lane);
 - changed files;
 - checks run;
 - summary;
 - risks / next steps.
 
 ============================================================
-7. MERGE CHECKLIST ДЛЯ GPT
+7. MERGE CHECKLIST ДЛЯ GPT (только Review lane)
 ============================================================
+
+Merge checklist применяется только к Review lane PR.
+Fast lane задачи не имеют PR — GLM пушит напрямую в sandbox/main.
 
 Перед merge PR проверить:
 

@@ -43,10 +43,40 @@ If more checks are needed later, prefer safe static or syntax checks first.
 GitHub workflow:
 
 1. Base branch is `sandbox/main`.
-2. Create a feature branch for each task.
-3. Make minimal diffs.
-4. Review changed files and checks in `PATCH_REPORT.txt`.
-5. Never push directly to `main`.
+2. Make minimal diffs.
+3. Review changed files and checks in `PATCH_REPORT.txt`.
+
+Two lanes:
+
+**Fast lane** — direct push to `sandbox/main` (no PR required):
+- docs, README, AGENTS, PATCH_REPORT
+- docs/prompts
+- .nojekyll
+- GitHub Pages docs/text
+- simple text edits in index.html without logic changes
+
+Fast lane rules:
+- work from `sandbox/main`;
+- commit directly to `sandbox/main`;
+- push directly to `sandbox/main`;
+- no PR;
+- give a final report with commit hash, changed files, checks;
+- do not touch src/main.js, assets, gameplay.
+
+**Review lane** — feature branch + PR required:
+- src/main.js
+- src/core
+- src/config
+- assets
+- gameplay, economy, combat, pathfinding
+- save/load
+- multi-file code changes
+- anything risky
+
+Review lane rules:
+- feature branch from `sandbox/main`;
+- PR;
+- GPT/user review before merge.
 
 What GLM is allowed to do:
 
@@ -64,4 +94,4 @@ What GLM is forbidden to do:
 - rewrite architecture without an explicit request;
 - modify assets without an explicit request;
 - make broad gameplay changes when the task is infra-only;
-- push directly to `main`.
+- push directly to `sandbox/main` for Review lane tasks (use PR instead).
