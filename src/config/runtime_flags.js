@@ -29,6 +29,12 @@ window.FE_LIGHT_TANK_DUST_RADIUS_MULT = 0.72;
 window.FE_LIGHT_TANK_DUST_ALPHA_MULT = 0.68;
 window.FE_LIGHT_TANK_DUST_TRAIL_COUNT = 2;
 window.FE_LIGHT_TANK_DUST_BURST_COUNT = 5;
+// Scout dust: light vehicle, minimal dust.
+window.FE_SCOUT_DUST_WHEEL_Y = -14;
+window.FE_SCOUT_DUST_RADIUS_MULT = 0.55;
+window.FE_SCOUT_DUST_ALPHA_MULT = 0.50;
+window.FE_SCOUT_DUST_TRAIL_COUNT = 2;
+window.FE_SCOUT_DUST_BURST_COUNT = 4;
 window.FE_BUILDER_DUST_TRAIL_INTERVAL = 0.16;
 window.FE_BUILDER_DUST_TRAIL_COUNT = 3;
 window.FE_BUILDER_DUST_BURST_COUNT = 9;
@@ -37,7 +43,7 @@ window.FE_BUILDER_DUST_MAX_PARTICLES = 80;
 // Universal RTS command marker: small ground marker on accepted/blocked move commands.
 // Keep the old FE_BUILDER_* flags as compatibility fallback for builder-specific tests.
 window.FE_UNIT_CLICK_MARKER_ENABLED = true;
-window.FE_UNIT_CLICK_MARKER_TYPES = ['builder', 'harvester', 'light_tank', 'heavy_tank', 'bomber'];
+window.FE_UNIT_CLICK_MARKER_TYPES = ['builder', 'harvester', 'light_tank', 'heavy_tank', 'bomber', 'scout'];
 window.FE_UNIT_CLICK_MARKER_LIFE = 0.62;
 window.FE_UNIT_CLICK_MARKER_SIZE = 0.23;
 // v0.4 build menu cleanup: only show buildings with a clear role in the current playable loop.
@@ -87,10 +93,14 @@ window.FE_HARVESTER_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 // Light tank uses the same first-pass direction mapping as the 350x350 harvester exports.
 // Adjust only after visual Playwright/screenshot validation if a direction is wrong.
 window.FE_LIGHT_TANK_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
+// Scout uses the same 8-direction mapping as harvester and light_tank.
+// Adjust only after visual Playwright/screenshot validation if a direction is wrong.
+window.FE_SCOUT_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 window.FE_UNIT_CONTROLLER_ENABLED = false;
 window.FE_BUILDER_FORCE_DIR = null;
 window.FE_HARVESTER_FORCE_DIR = null;
 window.FE_LIGHT_TANK_FORCE_DIR = null;
+window.FE_SCOUT_FORCE_DIR = null;
 
 // Builder landing correction by sprite direction, in screen pixels before zoom.
 window.FE_BUILDER_DIR_OFFSETS = {
@@ -108,6 +118,17 @@ window.FE_HARVESTER_DIR_OFFSETS = {
 // Light tank centering calibration from visual debug overlay.
 // x/y are screen-pixel offsets before camera zoom.
 window.FE_LIGHT_TANK_DIR_OFFSETS = {
+  0: { x: 0, y: 0 },
+  1: { x: 0, y: 0 },
+  2: { x: 0, y: 0 },
+  3: { x: 0, y: 0 },
+  4: { x: 0, y: 0 },
+  5: { x: 0, y: 0 },
+  6: { x: 0, y: 0 },
+  7: { x: 0, y: 0 }
+};
+// Scout visual landing offsets: start neutral, tune after visual testing.
+window.FE_SCOUT_DIR_OFFSETS = {
   0: { x: 0, y: 0 },
   1: { x: 0, y: 0 },
   2: { x: 0, y: 0 },

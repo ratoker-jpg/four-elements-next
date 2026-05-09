@@ -271,3 +271,90 @@ Lane: Review
 - pathfinding изменён: нет
 - production/factory изменён: нет
 - Google Drive sync тронут: нет
+
+---
+
+Задача: PATCH-SCOUT-01C — исправить визуальную посадку scout и управление движением
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/patch-scout-01c-visual-control (от sandbox/main)
+
+Проблема:
+1. Scout визуально слишком крупный (size:[92,92]), плохо посажен на клетке.
+2. HP bar перекрывает корпус, selection ring слишком низко.
+3. Scout не едет по команде движения — не получает updateUnitMovement в game loop.
+4. Scout не имеет собственного dir map / dir offsets — использует builder как фоллбэк.
+5. Scout отсутствует в dust-параметрах, click marker types, selection ring tune.
+
+Что исправлено:
+
+1. Visual profile (sprite_profiles.js):
+   - size: [92,92] → [80,80] — scout меньше танка, но крупнее мелких юнитов
+   - hpOffset: 44 → 34 — HP bar выше корпуса
+
+2. HP bar позиция (main.js):
+   - Добавлен scout в цепочку hpY расчёта: anchorScreenY - 52 * z
+   - HP bar теперь над корпусом, не перекрывает его
+
+3. Selection ring (main.js):
+   - Добавлен scout в ringTuneByType: { x:0, y:-16, rx:0.88, ry:0.84 }
+   - Ring под юнитом, компактнее чем у builder
+
+4. Direction map + offsets (runtime_flags.js + main.js):
+   - Добавлен FE_SCOUT_DIR_MAP = [2,0,0,6,6,4,4,2]
+   - Добавлен FE_SCOUT_DIR_OFFSETS (8 направлений, начальные нули)
+   - Добавлен FE_SCOUT_FORCE_DIR = null
+   - main.js: scout включён в цепочку dirMap и dirOffsets
+
+5. Movement (main.js):
+   - Добавлена ветка в game loop: if (u.type==='scout') updateUnitMovement(u,dt);
+   - Scout теперь двигается по команде через стандартный movement pipeline
+
+6. Dust (runtime_flags.js + main.js):
+   - FE_SCOUT_DUST_WHEEL_Y, RADIUS_MULT, ALPHA_MULT, TRAIL_COUNT, BURST_COUNT
+   - Scout включён в цепочку wheelYOffsetFlag, defaultWheelYOffset, radiusMult, alphaMult
+
+7. Click marker (runtime_flags.js):
+   - Scout добавлен в FE_UNIT_CLICK_MARKER_TYPES
+
+8. Unit menu (main.js):
+   - Добавлен scout в openUnitMenu с кнопками "Стоп" и "Отмена"
+
+9. Dev hotkeys (main.js):
+   - Scout включён в getDirOffsetsForUnit, getForceDirForUnit, setForceDirForUnit
+
+Изменённые файлы:
+- src/config/sprite_profiles.js — size, hpOffset для scout
+- src/config/runtime_flags.js — FE_SCOUT_DIR_MAP, DIR_OFFSETS, FORCE_DIR, dust params, click marker
+- src/main.js — dirMap, dirOffsets, hpY, selection ring, movement loop, dust params, unit menu, dev hotkeys
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/config/sprite_profiles.js -> PASS
+- node --check src/config/runtime_flags.js -> PASS
+- node --check src/config/units.js -> PASS
+- node --check src/core/asset_loader.js -> PASS
+
+Как тестировать:
+1. Запустить игру
+2. Открыть консоль: FE_DEV_SPAWN_UNIT('scout')
+3. Кликнуть на scout — выделяется, видны ring и HP bar
+4. Кликнуть на свободную клетку — scout едет
+5. Контекстное меню: "Разведчик" / "Стоп" / "Отмена"
+
+Что НЕ сделано специально:
+- Scout НЕ добавлен в производство (factory UI)
+- Combat НЕ изменён — scout с canAttack:false
+- AI / bot scouting НЕ добавлен
+- Pathfinding НЕ изменён — scout использует стандартный BFS
+- Save/load НЕ изменён
+- Ассеты НЕ изменены
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
