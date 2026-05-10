@@ -1228,3 +1228,39 @@ Risks / manual smoke checklist:
 6. window.FE_CORE.TILE_W === 76 (FE_CORE bridge не сломан)
 7. Save/load работает
 8. Нет console errors
+
+---
+
+Задача: REF-MAIN-GLM-07 — docs checkpoint после main.js micro-refactor sprint
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+Зафиксировать итог успешного main.js micro-refactor sprint и новые правила
+дальнейшей разработки. Docs-only checkpoint — код не менялся.
+
+Созданные файлы:
+- docs/project/REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md (новый)
+
+Содержание checkpoint:
+1. Краткий итог sprint (зачем, почему GLM-first, почему не Codex)
+2. Таблица 5 принятых патчей (REF-MAIN-GLM-02..06)
+3. Итог по main.js: 12 128 → 11 358 (-770 строк, -6.4%)
+4. Созданные модули (4 файла: 3 dev + 1 core)
+5. Паттерн extraction (8 шагов)
+6. Зоны, которые НЕ трогались
+7. Дальнейшие refactor-кандидаты
+8. Проверки и верификация
+9. Исходные документы
+
+Что НЕ тронуто:
+- src/* — не изменён
+- index.html — не изменён
+- assets — не изменены
+- configs — не изменены
+- gameplay / balance / economy — не изменены
+
+Выполненные проверки:
+- node --check src/main.js -> PASS (smoke only, без изменений)
+- Визуальная проверка: только новый .md документ + PATCH_REPORT.txt
