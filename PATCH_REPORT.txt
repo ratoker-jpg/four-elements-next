@@ -1024,3 +1024,108 @@ Risks / manual smoke checklist:
 6. Panel показывает enemy resources, buildings, harvesters, bot phase
 7. Panel auto-refreshes every 250ms
 8. Нет console errors от модуля
+
+---
+
+Задача: REF-MAIN-GLM-05 — extract snapshot/export system from src/main.js
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ref-main-05-snapshot-export-extract (от sandbox/main)
+
+Цель:
+Вынести snapshot/export debug-систему (feMakeSnapshot, feSnapshotSafe, feSnapshotDiagnoseCell,
+feSnapshotAroundUnit, feSnapshotBuildInfo, FE_EXPORT_SNAPSHOT, F8 handler) из src/main.js
+в отдельный dev/debug модуль src/dev/snapshot_export.js.
+Это micro-refactor extraction — не gameplay patch, не save/load refactor.
+
+Что вынесено:
+
+5 функций + export + F8 handler:
+1. feSnapshotSafe → feSnapshotSafe (pure recursive safe-clone, no IIFE deps)
+2. feSnapshotDiagnoseCell → feSnapshotDiagnoseCell (uses _deps: inBounds, isObstacleBlocked, mineAt, buildingAt, unitAt, passable)
+3. feSnapshotAroundUnit → feSnapshotAroundUnit (calls feSnapshotDiagnoseCell)
+4. feSnapshotBuildInfo → feSnapshotBuildInfo (uses _deps: BUILDING_SIZE, canPlaceBuilding, adjacentFreeCellsForRect, findPath)
+5. feMakeSnapshot → feMakeSnapshot (uses window.FE_CORE.game + _deps: getStorageLimits, getSelected)
+6. window.FE_EXPORT_SNAPSHOT → exportSnapshot (JSON blob + browser download)
+7. F8 keydown handler → registered in init()
+8. console.warn message → issued in init()
+
+Архитектура нового модуля:
+- Browser global IIFE: window.FE_SNAPSHOT_EXPORT = (function() { ... })();
+- init(deps) — хранит IIFE-scope function references
+- game доступен через window.FE_CORE.game при вызове (не при загрузке)
+- selected передаётся через deps.getSelected() — ()=> selected
+- window.FE_EXPORT_SNAPSHOT переназначается в init() для обратной совместимости
+- Все данные game — только READ-ONLY
+- Модуль НЕ мутирует состояние игры
+
+Изменения в main.js:
+1. Удалены 5 inline функций fe* (feSnapshotSafe, feSnapshotDiagnoseCell, feSnapshotAroundUnit, feSnapshotBuildInfo, feMakeSnapshot)
+2. Удалён window.FE_EXPORT_SNAPSHOT definition
+3. Удалён F8 keydown handler
+4. Удалён console.warn message
+5. Заменено на: window.FE_SNAPSHOT_EXPORT.init({...deps...})
+6. FE_DEV_SPAWN_UNIT остаётся в main.js — это отдельный dev tool
+
+Изменения в index.html:
+- Добавлен <script src="src/dev/snapshot_export.js?v=ref_main_glm_05"></script>
+  перед src/main.js (после enemy_economy_debug_panel.js)
+
+main.js до: 11 567 строк
+main.js после: 11 382 строк
+Разница: -185 строк (-1.6%)
+
+snapshot_export.js: 254 строки (новый файл)
+
+Что НЕ тронуто (по правилам задачи):
+- save/load behavior — нет
+- localStorage keys — нет
+- форма сохранений — нет
+- game state structure — нет
+- runtime gameplay — нет
+- economy — нет
+- enemy bot behavior — нет
+- combat — нет
+- render loop — нет
+- input/selection — нет
+- movement/pathfinding — нет
+- map generation — нет
+- scout — нет
+- assets — нет
+- configs — нет
+- FE_DEV_SPAWN_UNIT — остаётся в main.js
+- getBuilderDebugSnapshot — остаётся в main.js (отдельная система debugLog)
+- safeCloneForLog — остаётся в main.js (production code)
+- Candidate 5 — не выполнялся
+
+Изменённые файлы:
+- src/dev/snapshot_export.js (new, 254 строки)
+- src/main.js (185 строк удалено, ~17 строк добавлено — init)
+- index.html (+1 script tag)
+- PATCH_REPORT.txt (добавлена эта запись)
+- docs/project/REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md (Candidate 4 отмечен DONE)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/dev/snapshot_export.js -> PASS
+- rg: feMakeSnapshot / feSnapshotSafe / feSnapshotDiagnoseCell — 0 определений в src/main.js
+- rg: FE_EXPORT_SNAPSHOT — переназначен через init(), доступен как window.FE_EXPORT_SNAPSHOT
+- index.html: новый script tag перед src/main.js
+- модуль не мутирует game (только read)
+
+Безопасность:
+- save/load не изменён — модуль только читает и экспортирует
+- game state не мутируется
+- FE_EXPORT_SNAPSHOT API сохранён
+- FE_DEV_SPAWN_UNIT остаётся в main.js
+- rollback: вернуть функции в main.js, удалить script tag
+
+Risks / manual smoke checklist:
+1. Игра загружается
+2. Выбор фракции проходит дальше
+3. F8 — скачивается JSON snapshot файл
+4. FE_EXPORT_SNAPSHOT() в консоли — работает
+5. typeof window.FE_EXPORT_SNAPSHOT === 'function' в консоли
+6. FE_DEV_SPAWN_UNIT('scout') — работает (не затронут)
+7. Без F8 — gameplay идентичен
+8. Нет console errors
