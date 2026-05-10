@@ -1969,3 +1969,75 @@ Risks:
   найти путь — танк остаётся idle, но reorder попробует снова на следующем tick
 - Средний: если player HQ уничтожен, reorder найдёт null target и пропустит — корректно,
   но OverChasing/AttackStateInvalid должны перевести в regroup
+
+---
+
+Задача: BOT-ATTACK-04 — hq_push order persistence / prevent regroup overwrite
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-04-wave-group-order-fix (от sandbox/main)
+
+Проблема:
+После BOT-ATTACK-03 танки enemy bot получают hq_push ордер и начинают движение к player HQ, но через несколько секунд часть или вся группа разворачивается и возвращается к purple-базе. На видео виден цикл: выезд → движение → разворот → возврат/кучкование у базы.
+
+Корневая причина:
+BOT-ATTACK-03 починил выдачу приказа, но три других слоя перезаписывали hq_push attack order:
+1. FE_PATCH_08BOverChasing — если любой танк дальше maxChaseDistanceTiles (18) от home → StartRegroup('over_chase'). Player HQ гарантированно дальше 18 тайлов, поэтому regroup срабатывает на первом же тике после выезда.
+2. FE_10H1_updateEnemyRetreatAndDefenseMvp — при нахождении угрозы у базы или срабатывании shouldRetreat → перезаписывает все ордера на defend/regroup, отправляет танки домой.
+3. FE_PATCH_08BThreatNearHome → FE_PATCH_08BDefend — при любом threat рядом с enemy base все танки получают defend-ордер, phase='defend', и updateEnemyBot делает return.
+
+Цикл на видео: PrepareAttack → hq_push → танки едут → танк уехал >18 тайлов → OverChasing → StartRegroup → _attack02HqPush=false → танки домой → regroupUntil истёк → PrepareAttack → hq_push → (повтор)
+
+Что исправлено:
+
+1. Добавлены 2 helper-функции (после FE_PATCH_08BStartRegroup):
+   - FE_PATCH_08BIsHqPushValid(state) — проверяет, активен ли hq_push и существует ли player HQ (hp > 0)
+   - FE_PATCH_08BAttack04Telemetry(phase, source, blocked, reason, targetId, count) — записывает game._attack04LastOverrideCheck
+
+2. FE_10H1 guard (строка ~4719):
+   - Во время hq_push FE_10H1 заблокирован, если ни одно критическое условие не выполнено
+   - Разрешённые условия отступления: target_destroyed, last_tank (1 танк), heavy_losses (>50% wave потеряно), critically_outnumbered (2:1)
+   - Телеметрия: game._attack04LastOverrideCheck с полями phase, hqPushActive, attemptedOverrideSource, blockedOverride, reason, targetId, assignedCount
+
+3. ThreatNearHome guard (строка ~4751):
+   - Во время hq_push: только свободные (non-attack) танки отправляются на defend
+   - После FE_PATCH_08BDefend восстанавливается state.phase = 'attack'
+   - Не делается return — attack phase продолжает работу для wave-танков
+   - Телеметрия: pressureOverride = 'partial_defend' или 'blocked'
+
+4. OverChasing/AttackStateInvalid guard (строка ~4775):
+   - FE_PATCH_08BIsHqPushValid проверяется перед OverChasing и AttackStateInvalid
+   - Если hq_push активен и player HQ валиден → OverChasing и AttackStateInvalid пропускаются (не триггерят regroup)
+   - Если hq_push не активен или HQ уничтожен → обычная логика работает
+   - Телеметрия: overChaseBlocked, attackInvalidBlocked
+
+Допустимые условия отступления во время hq_push:
+1. Остался 1 танк (last_tank)
+2. Потеряно >50% wave (heavy_losses)
+3. Игрок имеет явный 2:1 перевес (critically_outnumbered)
+4. Player HQ уничтожен / target invalid (target_destroyed)
+
+Новая логика: ~75 строк (включая комментарии и телеметрию)
+
+Изменённые файлы:
+- src/main.js — 2 helper-функции + 4 guard-блока в updateEnemyBot
+- PATCH_REPORT.txt — добавлена эта запись
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто (hard rules):
+- combat damage/range/cooldown — нет
+- pathfinding algorithm — нет
+- scout — нет
+- economy/storage — нет
+- updateEnemyBot не переписан целиком — добавлены только guard-блоки
+- новый AI не создан
+- Google Drive sync — нет
+- production paths — нет
+
+Ожидаемое поведение после патча:
+- hq_push wave выходит группой
+- танки не разворачиваются обратно через пару секунд
+- танки продолжают движение к player HQ
+- отступают только при: 1 танк, >50% потерь, 2:1 перевес, HQ уничтожен

@@ -3133,6 +3133,22 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     state._attack02HqPushArmyScore = 0;
   }
 
+  // ATTACK-04: Helper to check if hq_push is active and player HQ target is still valid.
+  function FE_PATCH_08BIsHqPushValid(state) {
+    if (!state || !state._attack02HqPush) return false;
+    var phq = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+    return phq && (phq.hp || 0) > 0;
+  }
+
+  // ATTACK-04: Helper to write override-check telemetry.
+  function FE_PATCH_08BAttack04Telemetry(phase, source, blocked, reason, targetId, count) {
+    if (typeof game === 'undefined' || !game) return;
+    game._attack04LastOverrideCheck = {
+      phase: phase || '', hqPushActive: true, attemptedOverrideSource: source,
+      blockedOverride: blocked, reason: reason, targetId: targetId || null, assignedCount: count || 0
+    };
+  }
+
   function FE_PATCH_08BShouldKeepUnitNearHome(unit, state, radius=FE_10I1_knobs().defendRadiusTiles) {
     if (!unit || !state) return false;
     return unitDistanceCells(unit, { x: state.homeX, y: state.homeY }) > radius;
@@ -4702,7 +4718,27 @@ function updateEnemyBot(dt) {
 
     // PATCH-10H1-RETREAT-AND-DEFENSE-UPGRADE_HOOK
     try {
-      if (FE_10H1_updateEnemyRetreatAndDefenseMvp(state, enemyTanks, now)) return;
+      // ATTACK-04: During hq_push, block FE_10H1 override unless critical retreat warranted.
+      // Allowed retreat: last tank, >50% losses, 2:1 outnumber, target destroyed.
+      var _a04HqBlock = !!(state._attack02HqPush);
+      if (_a04HqBlock) {
+        var _a04HqValid = FE_PATCH_08BIsHqPushValid(state);
+        var _a04ArmyN = enemyTanks.filter(function(u){ return u && (u.hp||0)>0; }).length;
+        var _a04OrigN = Number(state._attack02HqPushArmyScore) || 0;
+        var _a04Reason = 'hq_push_protected';
+        if (!_a04HqValid) { _a04HqBlock = false; _a04Reason = 'target_destroyed'; }
+        else if (_a04ArmyN <= 1) { _a04HqBlock = false; _a04Reason = 'last_tank'; }
+        else if (_a04OrigN > 0 && _a04ArmyN < Math.max(2, Math.floor(_a04OrigN * 0.5))) { _a04HqBlock = false; _a04Reason = 'heavy_losses'; }
+        else {
+          var _a04PT = (typeof FE_10H1_getPlayerThreatEstimate === 'function') ? FE_10H1_getPlayerThreatEstimate() : 0;
+          if (_a04PT > 0 && _a04ArmyN * 2 <= _a04PT) { _a04HqBlock = false; _a04Reason = 'critically_outnumbered'; }
+        }
+        var _a04TgtId = null;
+        var _a04PHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+        if (_a04PHQ) _a04TgtId = _a04PHQ.id || null;
+        FE_PATCH_08BAttack04Telemetry(state.phase, 'FE_10H1', _a04HqBlock, _a04Reason, _a04TgtId, _a04ArmyN);
+      }
+      if (!_a04HqBlock && FE_10H1_updateEnemyRetreatAndDefenseMvp(state, enemyTanks, now)) return;
     } catch (err) {
       const g10h1 = FE_10H1_getGameObject && FE_10H1_getGameObject();
       if (g10h1) {
@@ -4714,15 +4750,46 @@ function updateEnemyBot(dt) {
 
     const pressureTarget = FE_PATCH_08BThreatNearHome(state);
     if (pressureTarget) {
-      FE_PATCH_08BDefend(enemyTanks, pressureTarget, state);
-      return;
+      // ATTACK-04: During hq_push, don't recall the whole wave for base defense.
+      // Only assign free (non-attack) tanks, and keep attack phase intact.
+      if (state._attack02HqPush) {
+        var _a04Free = enemyTanks.filter(function(u) {
+          return u && !(u.attackTargetId || u.attackApproachTargetId || u._attackCommanded ||
+            String(u.state || u.command || '').toLowerCase().includes('attack'));
+        });
+        if (_a04Free.length > 0) {
+          FE_PATCH_08BDefend(_a04Free, pressureTarget, state);
+          state.phase = 'attack'; // restore attack phase after defend overwrote it
+        }
+        if (game) {
+          game._attack04LastOverrideCheck = game._attack04LastOverrideCheck || {};
+          game._attack04LastOverrideCheck.pressureOverride = _a04Free.length > 0 ? 'partial_defend' : 'blocked';
+        }
+        // Don't return — attack phase continues for wave tanks
+      } else {
+        FE_PATCH_08BDefend(enemyTanks, pressureTarget, state);
+        return;
+      }
     }
 
+    // ATTACK-04: During hq_push, OverChasing/AttackStateInvalid should not trigger regroup.
+    // Player HQ is intentionally far from base; target may be "invalid" by vision rules but HQ exists.
+    var _a04HqValid2 = FE_PATCH_08BIsHqPushValid(state);
     if (state.phase === 'attack' && FE_PATCH_08BOverChasing(enemyTanks, state)) {
-      FE_PATCH_08BStartRegroup(state, 'over_chase');
+      if (_a04HqValid2) {
+        // hq_push: intentionally far from base — skip over_chase regroup
+        if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.overChaseBlocked = true;
+      } else {
+        FE_PATCH_08BStartRegroup(state, 'over_chase');
+      }
     }
     if (state.phase === 'attack' && FE_PATCH_08BAttackStateInvalid(enemyTanks, state)) {
-      FE_PATCH_08BStartRegroup(state, 'target_invalid');
+      if (_a04HqValid2) {
+        // hq_push: target "invalid" by vision rules but HQ exists — skip regroup
+        if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.attackInvalidBlocked = true;
+      } else {
+        FE_PATCH_08BStartRegroup(state, 'target_invalid');
+      }
     }
 
     if (state.phase === 'regroup') {
