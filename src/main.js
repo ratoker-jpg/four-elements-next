@@ -2824,6 +2824,8 @@
 
   function FE_PATCH_08BReturnUnitHome(unit, state) {
     if (!unit || !state) return false;
+    // ATTACK-10: wave-locked units must never be returned home.
+    if (FE_ATTACK10IsWaveLocked(unit)) return false;
     const dest = FE_PATCH_08BHomeDestinationCell(unit, state);
     if (!dest) return false;
 
@@ -3131,6 +3133,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // ATTACK-02: clear hq_push flag on regroup so next attack cycle decides fresh.
     state._attack02HqPush = false;
     state._attack02HqPushArmyScore = 0;
+    // ATTACK-10: release active wave on regroup — wave is over, units go home.
+    if (state._attack10ActiveWave) {
+      FE_ATTACK10ReleaseWave(state, 'regroup_' + (reason || 'unknown'));
+    }
   }
 
   // ATTACK-04: Helper to check if hq_push is active and player HQ target is still valid.
@@ -3210,6 +3216,190 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     };
   }
 
+  // ATTACK-10: Wave-lock MVP — lock active attack wave composition.
+  // Once a wave is launched, its unit IDs are fixed until the wave ends.
+  // Newly produced tanks must not reset or regroup the already attacking wave.
+  var _attack10WaveCounter = 0;
+
+  function FE_ATTACK10CreateWave(state, targetId, unitIds, orderType) {
+    if (!state || !unitIds || !unitIds.length) return;
+    _attack10WaveCounter++;
+    var waveId = 'wave_' + _attack10WaveCounter;
+    state._attack10ActiveWave = {
+      id: waveId,
+      targetId: targetId || null,
+      unitIds: unitIds.slice(),
+      startedAt: typeof game !== 'undefined' && game ? (game.time || 0) : 0,
+      orderType: orderType || 'attack'
+    };
+    // Mark each unit.
+    for (var i = 0; i < unitIds.length; i++) {
+      var uid = unitIds[i];
+      var units = (typeof game !== 'undefined' && game && game.units) ? game.units : [];
+      for (var j = 0; j < units.length; j++) {
+        var u = units[j];
+        if (u && (u.id === uid || u.uid === uid)) {
+          u._attack10WaveId = waveId;
+          u._attack10WaveLocked = true;
+          break;
+        }
+      }
+    }
+    // Telemetry.
+    if (typeof game !== 'undefined' && game) {
+      game._attack10LastWaveLock = {
+        action: 'create',
+        waveId: waveId,
+        targetId: targetId || null,
+        unitIds: unitIds.slice(),
+        reason: orderType === 'hq_push' ? 'hq_push_dispatch' : 'attack_dispatch',
+        at: game.time || 0
+      };
+    }
+  }
+
+  function FE_ATTACK10ReleaseWave(state, reason) {
+    if (!state || !state._attack10ActiveWave) return;
+    var wave = state._attack10ActiveWave;
+    // Unmark units.
+    var unitIds = wave.unitIds || [];
+    var units = (typeof game !== 'undefined' && game && game.units) ? game.units : [];
+    for (var i = 0; i < unitIds.length; i++) {
+      for (var j = 0; j < units.length; j++) {
+        var u = units[j];
+        if (u && (u.id === unitIds[i] || u.uid === unitIds[i])) {
+          if (u._attack10WaveId === wave.id) {
+            u._attack10WaveId = null;
+            u._attack10WaveLocked = false;
+          }
+          break;
+        }
+      }
+    }
+    // Telemetry.
+    if (typeof game !== 'undefined' && game) {
+      game._attack10LastWaveLock = {
+        action: 'release',
+        waveId: wave.id,
+        targetId: wave.targetId || null,
+        unitIds: unitIds.slice(),
+        reason: reason || 'unknown',
+        at: game.time || 0
+      };
+    }
+    state._attack10ActiveWave = null;
+  }
+
+  function FE_ATTACK10IsWaveLocked(unit) {
+    return !!(unit && unit._attack10WaveLocked && unit._attack10WaveId);
+  }
+
+  function FE_ATTACK10IsWaveTargetAlive(state) {
+    if (!state || !state._attack10ActiveWave) return false;
+    var tid = state._attack10ActiveWave.targetId;
+    if (!tid) return false;
+    var units = (typeof game !== 'undefined' && game && game.units) ? game.units : [];
+    var buildings = (typeof game !== 'undefined' && game && game.buildings) ? game.buildings : [];
+    for (var i = 0; i < buildings.length; i++) {
+      var b = buildings[i];
+      if (b && (b.id === tid) && (b.hp || 0) > 0) return true;
+    }
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (u && (u.id === tid) && (u.hp || 0) > 0) return true;
+    }
+    return false;
+  }
+
+  function FE_ATTACK10AliveWaveUnitCount(state) {
+    if (!state || !state._attack10ActiveWave) return 0;
+    var unitIds = state._attack10ActiveWave.unitIds || [];
+    var alive = 0;
+    var units = (typeof game !== 'undefined' && game && game.units) ? game.units : [];
+    for (var i = 0; i < unitIds.length; i++) {
+      for (var j = 0; j < units.length; j++) {
+        var u = units[j];
+        if (u && (u.id === unitIds[i] || u.uid === unitIds[i]) && (u.hp || 0) > 0) {
+          alive++;
+          break;
+        }
+      }
+    }
+    return alive;
+  }
+
+  function FE_ATTACK10GetReserveTanks(enemyTanks, state) {
+    // Return tanks that are NOT wave-locked.
+    if (!state || !state._attack10ActiveWave) return enemyTanks || [];
+    var waveUnitIds = state._attack10ActiveWave.unitIds || [];
+    var result = [];
+    for (var i = 0; i < (enemyTanks || []).length; i++) {
+      var u = enemyTanks[i];
+      if (!u) continue;
+      var isWave = false;
+      for (var j = 0; j < waveUnitIds.length; j++) {
+        if (u.id === waveUnitIds[j] || u.uid === waveUnitIds[j]) { isWave = true; break; }
+      }
+      if (!isWave) result.push(u);
+    }
+    return result;
+  }
+
+  function FE_ATTACK10UpdateTelemetry(state) {
+    if (typeof game === 'undefined' || !game) return;
+    if (!state || !state._attack10ActiveWave) {
+      game._attack10ActiveWave = null;
+      return;
+    }
+    var wave = state._attack10ActiveWave;
+    var aliveCount = FE_ATTACK10AliveWaveUnitCount(state);
+    var lockedCount = 0;
+    var units = game.units || [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (u && u._attack10WaveLocked && u._attack10WaveId === wave.id && (u.hp || 0) > 0) lockedCount++;
+    }
+    // Count reserve tanks.
+    var reserveCount = 0;
+    var allEnemyTanks = (typeof FE_PATCH_08BEnemyCombatUnits === 'function') ? FE_PATCH_08BEnemyCombatUnits() : [];
+    for (var i = 0; i < allEnemyTanks.length; i++) {
+      var t = allEnemyTanks[i];
+      if (t && !FE_ATTACK10IsWaveLocked(t)) reserveCount++;
+    }
+    game._attack10ActiveWave = {
+      id: wave.id,
+      targetId: wave.targetId,
+      unitIds: wave.unitIds.slice(),
+      aliveCount: aliveCount,
+      lockedCount: lockedCount,
+      reserveTankCount: reserveCount,
+      startedAt: wave.startedAt,
+      orderType: wave.orderType,
+      reason: wave.orderType === 'hq_push' ? 'hq_push' : 'attack'
+    };
+  }
+
+  function FE_ATTACK10CheckAndRelease(state) {
+    if (!state || !state._attack10ActiveWave) return;
+    var wave = state._attack10ActiveWave;
+    // Release conditions:
+    // 1. Target is dead.
+    if (!FE_ATTACK10IsWaveTargetAlive(state)) {
+      FE_ATTACK10ReleaseWave(state, 'target_dead');
+      return;
+    }
+    // 2. All wave units are dead.
+    if (FE_ATTACK10AliveWaveUnitCount(state) <= 0) {
+      FE_ATTACK10ReleaseWave(state, 'all_units_dead');
+      return;
+    }
+    // 3. Game result.
+    if (typeof game !== 'undefined' && game && (game.gameResult || game.result || game.gameEnded || game.ended)) {
+      FE_ATTACK10ReleaseWave(state, 'game_ended');
+      return;
+    }
+  }
+
   function FE_PATCH_08BShouldKeepUnitNearHome(unit, state, radius=FE_10I1_knobs().defendRadiusTiles) {
     if (!unit || !state) return false;
     return unitDistanceCells(unit, { x: state.homeX, y: state.homeY }) > radius;
@@ -3245,6 +3435,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     if (!enemyUnits?.length || !state) return false;
     if (FE_PATCH_08BArmyScore(enemyUnits) < Math.max(1, Number(state.attackScoreThreshold || FE_10I1_knobs().attackScoreThreshold))) {
       for (const unit of enemyUnits) {
+        // ATTACK-10: do not return wave-locked units home — they are in an active attack wave.
+        if (FE_ATTACK10IsWaveLocked(unit)) continue;
         if (FE_PATCH_08BShouldKeepUnitNearHome(unit, state, FE_10I1_knobs().regroupArriveRadiusTiles)) {
           FE_PATCH_08BReturnUnitHome(unit, state);
         }
@@ -3325,6 +3517,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
     if (issued) {
       state.phase = 'attack';
+      // ATTACK-10: lock wave composition — unit IDs are fixed until wave ends.
+      FE_ATTACK10CreateWave(state, target.id || null, _a03Ids || [], attackOrderType);
       return true;
     }
     return false;
@@ -3939,6 +4133,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10D1_tryMove(unit, target, reason) {
     if (!unit || !target) return false;
+    // ATTACK-10: wave-locked units must not be redirected by autopilot/patrol/strength-wait.
+    if (FE_ATTACK10IsWaveLocked(unit)) return false;
     // ATTACK-07: Не перезаписывать движение для enemy танков с активным attack-ордером.
     // Проверка по инварианту юнита, без зависимости от _attack02HqPush.
     if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return false;
@@ -4316,6 +4512,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_clearAttackOrder(unit) {
     if (!unit) return;
+    // ATTACK-10: do not clear attack order for wave-locked units — they stay on target.
+    if (FE_ATTACK10IsWaveLocked(unit)) return;
     // ATTACK-07: Не очищать attack-ордер если у enemy танка живой attack target.
     if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return;
     // ATTACK-05: fallback — проверка через _attack02HqPush.
@@ -4334,6 +4532,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_returnToHq(unit, enemyHQ, index) {
     if (!unit || !enemyHQ) return false;
+    // ATTACK-10: wave-locked units must not be pulled back to HQ.
+    if (FE_ATTACK10IsWaveLocked(unit)) return false;
     // ATTACK-07: Не возвращать танк на базу если у него активный enemy attack-ордер.
     if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return false;
     // ATTACK-05: fallback — проверка через _attack02HqPush.
@@ -4721,6 +4921,15 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
 
 function updateEnemyBot(dt) {
+    // ATTACK-10: check and release active wave if conditions met, update telemetry.
+    try {
+      var _a10State = (typeof game !== 'undefined' && game) ? game._enemyBotState : null;
+      if (_a10State) {
+        FE_ATTACK10CheckAndRelease(_a10State);
+        FE_ATTACK10UpdateTelemetry(_a10State);
+      }
+    } catch (_a10Err) { /* safe — wave-lock is telemetry-only guard */ }
+
     // PATCH-10E1B-STRENGTH-GATE-EARLY-HOOK_START
     try {
       const g10e1b = (typeof FE_10E1_getGameObject === 'function') ? FE_10E1_getGameObject() : null;
@@ -4877,6 +5086,8 @@ function updateEnemyBot(dt) {
 
     if (state.phase === 'regroup') {
       for (const unit of enemyTanks) {
+        // ATTACK-10: wave-locked units stay on their attack, not pulled home.
+        if (FE_ATTACK10IsWaveLocked(unit)) continue;
         if (FE_PATCH_08BShouldKeepUnitNearHome(unit, state, FE_10I1_knobs().regroupArriveRadiusTiles)) {
           FE_PATCH_08BReturnUnitHome(unit, state);
         }
@@ -4887,6 +5098,8 @@ function updateEnemyBot(dt) {
 
     if (state.phase === 'defend' && now < state.openingUntil) {
       for (const unit of enemyTanks) {
+        // ATTACK-10: wave-locked units stay on their attack, not pulled home.
+        if (FE_ATTACK10IsWaveLocked(unit)) continue;
         if (FE_PATCH_08BShouldKeepUnitNearHome(unit, state)) {
           FE_PATCH_08BReturnUnitHome(unit, state);
         }

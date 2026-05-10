@@ -2474,3 +2474,105 @@ Lane: Review
 6. Для отключения: window.FE_ENEMY_LIGHT_TANK_CAP = null
    - telemetry покажет { cap:null, count:null, blocked:false, reason:'cap_disabled', ... }
 7. Для увеличения: window.FE_ENEMY_LIGHT_TANK_CAP = 5
+
+---
+
+Задача: BOT-ATTACK-10 — lock active attack wave composition (MVP)
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-10-lock-active-attack-wave (от sandbox/main)
+
+Цель:
+Зафиксировать состав атакующей волны после dispatch.
+Новые произведённые танки не должны сбрасывать/пересобирать текущую волну.
+PrepareAttack/regroup не должны возвращать/пересобирать locked wave units, пока target жив.
+
+Что сделано:
+
+1. Хелперы ATTACK-10 (main.js, после FE_PATCH_08BAttack04Telemetry):
+   - _attack10WaveCounter — счётчик волн
+   - FE_ATTACK10CreateWave(state, targetId, unitIds, orderType) — создаёт волну, маркирует юниты
+     (unit._attack10WaveId, unit._attack10WaveLocked = true), пишет telemetry _attack10LastWaveLock
+   - FE_ATTACK10ReleaseWave(state, reason) — снимает маркировку, пишет telemetry
+   - FE_ATTACK10IsWaveLocked(unit) — проверяет _attack10WaveLocked && _attack10WaveId
+   - FE_ATTACK10IsWaveTargetAlive(state) — проверяет что target волны жив
+   - FE_ATTACK10AliveWaveUnitCount(state) — считает живых юнитов волны
+   - FE_ATTACK10GetReserveTanks(enemyTanks, state) — фильтрует non-wave танки
+   - FE_ATTACK10UpdateTelemetry(state) — обновляет game._attack10ActiveWave
+   - FE_ATTACK10CheckAndRelease(state) — проверяет условия завершения волны
+
+2. Создание волны при dispatch (FE_PATCH_08BPrepareAttack):
+   - После успешного issued → FE_ATTACK10CreateWave(state, targetId, unitIds, attackOrderType)
+   - unitIds берутся из _a03Ids (ATTACK-03 telemetry)
+
+3. Guard в FE_PATCH_08BReturnUnitHome:
+   - Wave-locked units не возвращаются домой → return false
+
+4. Guard в FE_PATCH_08BPrepareAttack (below-threshold loop):
+   - FE_ATTACK10IsWaveLocked(unit) → continue (не ReturnUnitHome)
+
+5. Guard в FE_PATCH_08BStartRegroup:
+   - Release волны при regroup → FE_ATTACK10ReleaseWave(state, 'regroup_...')
+
+6. Guard в FE_10D1_tryMove:
+   - Wave-locked units не перенаправляются autopilot/patrol/strength-wait → return false
+
+7. Guard в FE_10E1_clearAttackOrder:
+   - Wave-locked units не чистят attack order → return
+
+8. Guard в FE_10E1_returnToHq:
+   - Wave-locked units не возвращаются на HQ → return false
+
+9. Guard в updateEnemyBot regroup/defend loops:
+   - FE_ATTACK10IsWaveLocked(unit) → continue (не ReturnUnitHome)
+
+10. CheckAndRelease + UpdateTelemetry в начале updateEnemyBot:
+    - Каждый тик: FE_ATTACK10CheckAndRelease(state) + FE_ATTACK10UpdateTelemetry(state)
+    - Условия release: target dead, all units dead, game ended
+
+Условия завершения волны:
+1. Target мёртв → release 'target_dead'
+2. Все wave units мертвы → release 'all_units_dead'
+3. Game result victory/defeat → release 'game_ended'
+4. FE_PATCH_08BStartRegroup → release 'regroup_...'
+
+Telemetry:
+- game._attack10ActiveWave = { id, targetId, unitIds, aliveCount, lockedCount, reserveTankCount, startedAt, orderType, reason }
+- game._attack10LastWaveLock = { action:'create'|'release', waveId, targetId, unitIds, reason, at }
+
+Не тронуто:
+- findPath — нет
+- passable — нет
+- combat damage/range/cooldown — нет
+- ATTACK-08 invariant repair — нет (работает для wave-locked units, чинит path/state)
+- ATTACK-09 cap logic — нет
+- ATTACK-03/ATTACK-07 sync — нет (продолжают работать для wave-locked units)
+- scout — нет
+- economy formulas — нет
+- player production — нет
+- map generation — нет
+- render/fog — нет
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- player production затронута: нет
+- economy core изменён: нет
+- ATTACK-08 repair не затронут
+- ATTACK-09 cap не затронут
+- Google Drive sync тронут: нет
+
+Как тестировать:
+1. Запустить игру, начать skirmish
+2. Enemy производит танки, запускает attack wave
+3. Проверить telemetry: console.log(game._attack10ActiveWave)
+   — Должен показать { id:'wave_1', unitIds:[...], aliveCount:3, lockedCount:3, ... }
+4. Новый танк произведён — не добавляется в wave
+5. Wave-locked танки продолжают атаку
+6. game._attack10ActiveWave.reserveTankCount показывает отдельные резервные танки
+7. Когда target уничтожен / все wave units мертвы → wave release
+8. game._attack10LastWaveLock показывает action:'release', reason:'target_dead'
