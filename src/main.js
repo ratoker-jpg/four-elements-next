@@ -4613,8 +4613,9 @@ function updateEnemyBot(dt) {
     FE_10I1_knobs();
     state.nextCheckAt = now + FE_PATCH_08BSeconds(FE_10I1_knobs().checkIntervalMs);
 
-    FE_PATCH_09C2OrderEnemyBuilderBuildSeparator();
-    FE_PATCH_09DOrderEnemyBuilderBuildFactory();
+    // BOT-BRAIN-01: priority decision loop replaces linear checklist.
+    var brainAction = FE_PATCH_BRAIN_01_ChoosePriorityAction(state);
+    FE_PATCH_BRAIN_01_ExecuteAction(brainAction, state);
 
     // PATCH-10B: refresh enemy knowledge before combat-unit early returns.
     // 10B only observes/remembers; current phase-bot decisions stay unchanged.
@@ -6870,6 +6871,99 @@ function debugLog(event, payload={}) {
     return true;
   }
   // BOT-BASELINE-01_WORKER_REPLENISHMENT_END
+
+  // BOT-BRAIN-01: priority decision loop — thin decision layer.
+  // Evaluates current state and chooses the highest-priority action.
+  // Does NOT replace phase-bot (defend/attack/regroup) or AI layers (10B–10I1).
+  // Future: scout, storage, upgrade decisions plug into this loop.
+  var FE_PATCH_BRAIN_01_ACTIONS = [
+    'build_separator',      // no separator exists → build it
+    'build_factory',        // no factory exists → build it
+    'produce_builder',      // builder count below minimum → produce
+    'produce_harvester',    // harvester count below minimum → produce
+    'produce_combat',       // workers ok → produce light_tank / attack
+    'wait'                  // nothing critical — defer to phase-bot
+  ];
+
+  function FE_PATCH_BRAIN_01_ChoosePriorityAction(state) {
+    if (!game) return { action: 'wait', reason: 'no_game' };
+
+    // Priority 1: separator — without it, no energy conversion.
+    if (!FE_PATCH_09C2EnemySeparatorExistsOrQueued()) {
+      return { action: 'build_separator', reason: 'no_separator' };
+    }
+
+    // Priority 2: factory — without it, no unit production.
+    if (!FE_PATCH_09DEnemyFactoryExistsOrQueued()) {
+      return { action: 'build_factory', reason: 'no_factory' };
+    }
+
+    // Priority 3: builder — without builder, no buildings can be built.
+    var buildCount = FE_PATCH_BASELINE_01_CountEnemyWorkers('builder');
+    if (buildCount < FE_PATCH_BASELINE_01_BUILDER_MIN) {
+      // Check if builder is already queued in a factory.
+      var builderQueued = FE_PATCH_BRAIN_01_IsUnitTypeQueued('builder');
+      if (!builderQueued) return { action: 'produce_builder', reason: 'builder_below_min', count: buildCount };
+    }
+
+    // Priority 4: harvester — without harvesters, economy dies.
+    var harvCount = FE_PATCH_BASELINE_01_CountEnemyWorkers('harvester');
+    if (harvCount < FE_PATCH_BASELINE_01_HARVESTER_MIN) {
+      var harvesterQueued = FE_PATCH_BRAIN_01_IsUnitTypeQueued('harvester');
+      if (!harvesterQueued) return { action: 'produce_harvester', reason: 'harvester_below_min', count: harvCount };
+    }
+
+    // Priority 5: combat — workers are ok, time to make army.
+    return { action: 'produce_combat', reason: 'economy_stable' };
+  }
+
+  function FE_PATCH_BRAIN_01_IsUnitTypeQueued(unitType) {
+    var factories = FE_PATCH_09ECompleteEnemyFactories();
+    for (var fi = 0; fi < factories.length; fi++) {
+      var fq = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
+      for (var qi = 0; qi < fq.length; qi++) {
+        if (fq[qi].type === unitType) return true;
+      }
+    }
+    return false;
+  }
+
+  function FE_PATCH_BRAIN_01_ExecuteAction(decision, state) {
+    // Record decision for telemetry / debug panel.
+    game._brain01LastDecision = Object.assign({}, decision, { at: game.time || 0 });
+
+    switch (decision.action) {
+      case 'build_separator':
+        FE_PATCH_09C2OrderEnemyBuilderBuildSeparator();
+        break;
+      case 'build_factory':
+        FE_PATCH_09DOrderEnemyBuilderBuildFactory();
+        break;
+      case 'produce_builder':
+        FE_PATCH_BRAIN_01_TryProduceWorker('builder');
+        break;
+      case 'produce_harvester':
+        FE_PATCH_BRAIN_01_TryProduceWorker('harvester');
+        break;
+      case 'produce_combat':
+        // Combat production is handled by FE_PATCH_09EUpdateEnemyFactoryProduction
+        // which uses FE_PATCH_BASELINE_01_ChooseFactoryUnitType internally.
+        // This action just signals: economy is stable, tank production is appropriate.
+        break;
+      default: // 'wait' — nothing to do, phase-bot handles the rest.
+        break;
+    }
+  }
+
+  function FE_PATCH_BRAIN_01_TryProduceWorker(unitType) {
+    var factories = FE_PATCH_09ECompleteEnemyFactories();
+    for (var fi = 0; fi < factories.length; fi++) {
+      var queue = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
+      if (queue.length > 0) continue; // factory busy, try next.
+      if (FE_PATCH_BASELINE_01_StartFactoryProduction(factories[fi], unitType)) return;
+    }
+  }
+  // BOT-BRAIN-01_PRIORITY_DECISION_LOOP_END
 
   function getBuildCost(type) {
     const def = BUILDINGS[type] || {};
