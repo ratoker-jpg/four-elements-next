@@ -10674,243 +10674,27 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
 
 
   // PATCH-09C1-DEBUG-ENEMY-ECONOMY-PANEL-MVP-V2_START
-  // Dev-only read-only observer. Must not create resources, buildings, units or commands.
-  let FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE = false;
-  let FE_DEBUG_ENEMY_ECONOMY_PANEL_EL = null;
-  let FE_DEBUG_ENEMY_ECONOMY_PANEL_LAST_UPDATE = 0;
-
-  function FE_DEBUG_EnemyEconomyPanelAllowed() {
-    return window.FE_DEBUG_ENEMY_ECONOMY_PANEL_ENABLED !== false;
-  }
-
-  function FE_DEBUG_EnemyEconomyEnsurePanel() {
-    if (FE_DEBUG_ENEMY_ECONOMY_PANEL_EL && document.body.contains(FE_DEBUG_ENEMY_ECONOMY_PANEL_EL)) {
-      return FE_DEBUG_ENEMY_ECONOMY_PANEL_EL;
-    }
-
-    const el = document.createElement('div');
-    el.id = 'fe-debug-enemy-economy-panel';
-    el.style.position = 'fixed';
-    el.style.right = '14px';
-    el.style.top = '78px';
-    el.style.zIndex = '9999';
-    el.style.maxWidth = '360px';
-    el.style.minWidth = '280px';
-    el.style.padding = '10px 12px';
-    el.style.borderRadius = '12px';
-    el.style.background = 'rgba(20, 18, 32, 0.88)';
-    el.style.border = '1px solid rgba(190, 150, 255, 0.45)';
-    el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.35)';
-    el.style.color = '#f4edff';
-    el.style.font = '12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    el.style.pointerEvents = 'none';
-    el.style.whiteSpace = 'normal';
-    el.style.display = 'none';
-
-    document.body.appendChild(el);
-    FE_DEBUG_ENEMY_ECONOMY_PANEL_EL = el;
-    return el;
-  }
-
-  function FE_DEBUG_EnemyEconomySafeNumber(value, fallback=0) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-  }
-
-  function FE_DEBUG_EnemyEconomyReadBucket() {
-    const bucket = (game && game.enemyResources && typeof game.enemyResources === 'object')
-      ? game.enemyResources
-      : {};
-    return {
-      minerals: FE_DEBUG_EnemyEconomySafeNumber(bucket.minerals, 0),
-      energy: Number.isFinite(Number(bucket.energy)) ? Number(bucket.energy) : null,
-      purple: Number.isFinite(Number(bucket.purple)) ? Number(bucket.purple) : null,
-      greenEl: Number.isFinite(Number(bucket.greenEl)) ? Number(bucket.greenEl) : null,
-      cyanEl: Number.isFinite(Number(bucket.cyanEl)) ? Number(bucket.cyanEl) : null,
-      yellowEl: Number.isFinite(Number(bucket.yellowEl)) ? Number(bucket.yellowEl) : null,
-    };
-  }
-
-  function FE_DEBUG_EnemyEconomyHtmlEscape(value) {
-    return String(value ?? '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
-  }
-
-  function FE_DEBUG_EnemyEconomyUnitOwner(unit) {
-    try {
-      return typeof unitOwner === 'function' ? unitOwner(unit) : (unit?.owner || unit?.team || 'player');
-    } catch (_) {
-      return unit?.owner || unit?.team || 'player';
-    }
-  }
-
-  function FE_DEBUG_EnemyEconomyBuildingOwner(building) {
-    try {
-      return typeof buildingOwner === 'function' ? buildingOwner(building) : (building?.owner || building?.team || 'player');
-    } catch (_) {
-      return building?.owner || building?.team || 'player';
-    }
-  }
-
-  function FE_DEBUG_EnemyEconomyCollectState() {
-    const bucket = FE_DEBUG_EnemyEconomyReadBucket();
-    const limits = (typeof getStorageLimitsForOwner === 'function')
-      ? getStorageLimitsForOwner('enemy')
-      : {};
-    const enemyHq = (typeof findBaseBuilding === 'function') ? findBaseBuilding('enemy') : null;
-
-    const enemyUnits = (game?.units || []).filter(u => FE_DEBUG_EnemyEconomyUnitOwner(u) === 'enemy' && (u.hp ?? 1) > 0);
-    const enemyHarvesters = enemyUnits.filter(u => u.type === 'harvester');
-    const enemyBuilders = enemyUnits.filter(u => u.type === 'builder');
-    const enemyTanks = (typeof FE_PATCH_08BEnemyCombatUnits === 'function')
-      ? FE_PATCH_08BEnemyCombatUnits()
-      : enemyUnits.filter(u => u.type === 'light_tank');
-
-    const enemyBuildings = (game?.buildings || []).filter(b => FE_DEBUG_EnemyEconomyBuildingOwner(b) === 'enemy' && !b.destroyed && !b.dead);
-    const buildingCounts = {};
-    for (const b of enemyBuildings) {
-      const key = b?.type || 'unknown';
-      buildingCounts[key] = (buildingCounts[key] || 0) + 1;
-    }
-
-    const botState = game?._enemyBotState || null;
-    const enemyKnowledge = (typeof FE_PATCH_10BEnemyKnowledgeDebugSummary === 'function')
-      ? FE_PATCH_10BEnemyKnowledgeDebugSummary()
-      : null;
-
-    return {
-      bucket,
-      limits,
-      enemyHq,
-      enemyHarvesters,
-      enemyBuilders,
-      enemyTanks,
-      buildingCounts,
-      botState,
-      enemyKnowledge,
-    };
-  }
-
-  function FE_DEBUG_EnemyEconomyFormatHarvester(u) {
-    const id = FE_DEBUG_EnemyEconomyHtmlEscape(u?.id ?? '?');
-    const state = FE_DEBUG_EnemyEconomyHtmlEscape(u?.state || 'idle');
-    const cargo = FE_DEBUG_EnemyEconomySafeNumber(u?.cargo, 0);
-    const cap = FE_DEBUG_EnemyEconomySafeNumber(u?.capacity ?? u?.cargoCap ?? u?.maxCargo, 0);
-    const pathLen = Array.isArray(u?.path) ? u.path.length : 0;
-    const target = u?.targetId || u?.targetMineId || u?.mineId || u?.target || '';
-    const timer = Number.isFinite(Number(u?.actionTimer)) ? Number(u.actionTimer).toFixed(1) : '—';
-    return `<div>• #${id}: ${state}, cargo ${cargo}${cap ? '/' + cap : ''}, path ${pathLen}, timer ${timer}${target ? ', target ' + FE_DEBUG_EnemyEconomyHtmlEscape(target) : ''}</div>`;
-  }
-
-  function FE_DEBUG_EnemyEconomyRenderPanel(force=false) {
-    const el = FE_DEBUG_EnemyEconomyEnsurePanel();
-
-    if (!FE_DEBUG_EnemyEconomyPanelAllowed() || !FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE || game?.screen !== 'game') {
-      el.style.display = 'none';
-      return;
-    }
-
-    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    if (!force && now - FE_DEBUG_ENEMY_ECONOMY_PANEL_LAST_UPDATE < 220) return;
-    FE_DEBUG_ENEMY_ECONOMY_PANEL_LAST_UPDATE = now;
-
-    const st = FE_DEBUG_EnemyEconomyCollectState();
-    const mineralsCap = FE_DEBUG_EnemyEconomySafeNumber(st.limits?.minerals, 0);
-    const energyCap = FE_DEBUG_EnemyEconomySafeNumber(st.limits?.energy, 0);
-    const purpleCap = FE_DEBUG_EnemyEconomySafeNumber(st.limits?.purple, 0);
-    const hqHp = st.enemyHq
-      ? `${Math.max(0, Math.round(FE_DEBUG_EnemyEconomySafeNumber(st.enemyHq.hp, 0)))}/${Math.max(0, Math.round(FE_DEBUG_EnemyEconomySafeNumber(st.enemyHq.maxHp, st.enemyHq.hp || 0)))}`
-      : 'missing';
-
-    const bLines = Object.keys(st.buildingCounts).sort()
-      .map(k => `<span style="display:inline-block;margin:0 8px 3px 0;">${FE_DEBUG_EnemyEconomyHtmlEscape(k)}: ${st.buildingCounts[k]}</span>`)
-      .join('') || '<span style="opacity:.65;">none</span>';
-
-    const harvesterLines = st.enemyHarvesters.slice(0, 6).map(FE_DEBUG_EnemyEconomyFormatHarvester).join('')
-      || '<div style="opacity:.65;">none</div>';
-    const extraHarvesters = st.enemyHarvesters.length > 6
-      ? `<div style="opacity:.65;">… +${st.enemyHarvesters.length - 6} more</div>`
-      : '';
-
-    const botPhase = st.botState?.phase || st.botState?.state || 'n/a';
-
-    const energyText = st.bucket.energy === null
-      ? 'not implemented'
-      : `${Math.round(st.bucket.energy)}${energyCap ? '/' + energyCap : ''}`;
-    const purpleText = st.bucket.purple === null
-      ? 'not implemented'
-      : `${Math.round(st.bucket.purple)}${purpleCap ? '/' + purpleCap : ''}`;
-
-    const knowledgeText = st.enemyKnowledge
-      ? `visible U/B ${st.enemyKnowledge.visibleUnits}/${st.enemyKnowledge.visibleBuildings}, known U/B ${st.enemyKnowledge.knownUnits}/${st.enemyKnowledge.knownBuildings}`
-      : 'not implemented';
-    const knowledgeTopText = st.enemyKnowledge?.top || 'none';
-
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
-        <strong style="font-size:13px;color:#fff;">Enemy economy debug</strong>
-        <span style="opacity:.7;">F2</span>
-      </div>
-      <div style="margin-bottom:6px;">
-        <div>HQ: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(hqHp)}</b></div>
-        <div>Bot phase: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(botPhase)}</b></div>
-        <div>Units: harvesters <b>${st.enemyHarvesters.length}</b>, builders <b>${st.enemyBuilders.length}</b>, tanks <b>${st.enemyTanks.length}</b></div>
-      </div>
-      <div style="margin:6px 0;padding-top:6px;border-top:1px solid rgba(255,255,255,.14);">
-        <div>Raw minerals: <b>${Math.round(st.bucket.minerals)}${mineralsCap ? '/' + mineralsCap : ''}</b></div>
-        <div>Energy: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(energyText)}</b></div>
-        <div>Purple element: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(purpleText)}</b></div>
-      </div>
-      <div style="margin:6px 0;padding-top:6px;border-top:1px solid rgba(255,255,255,.14);">
-        <div style="margin-bottom:3px;color:#d9c5ff;">Harvesters</div>
-        ${harvesterLines}${extraHarvesters}
-      </div>
-      <div style="margin:6px 0;padding-top:6px;border-top:1px solid rgba(255,255,255,.14);">
-        <div style="margin-bottom:3px;color:#d9c5ff;">Buildings</div>
-        <div>${bLines}</div>
-      </div>
-      <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.14);opacity:.75;">
-        Separator: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(typeof FE_PATCH_09C3EnemySeparatorDebugText === 'function' ? FE_PATCH_09C3EnemySeparatorDebugText() : 'not implemented yet')}</b><br>
-        Factory: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(typeof FE_PATCH_09DEnemyFactoryDebugText === 'function' ? FE_PATCH_09DEnemyFactoryDebugText() : 'not implemented yet')}</b><br>
-        Factory queue: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(typeof FE_PATCH_09EEnemyFactoryQueueDebugText === 'function' ? FE_PATCH_09EEnemyFactoryQueueDebugText() : 'not implemented yet')}</b><br>
-        Build order: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(typeof FE_PATCH_09DEnemyBuildOrderDebugText === 'function' ? FE_PATCH_09DEnemyBuildOrderDebugText() : 'not implemented yet')}</b><br>
-        Blocked reason: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(typeof FE_PATCH_09EEnemyFactoryBlockedReasonDebugText === 'function' ? FE_PATCH_09EEnemyFactoryBlockedReasonDebugText() : 'not implemented yet')}</b><br>
-        Knowledge: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(knowledgeText)}</b><br>
-        Known top: <b>${FE_DEBUG_EnemyEconomyHtmlEscape(knowledgeTopText)}</b>
-      </div>
-    `;
-
-    el.style.display = 'block';
-  }
-
-  function FE_DEBUG_ToggleEnemyEconomyPanel() {
-    if (!FE_DEBUG_EnemyEconomyPanelAllowed()) return;
-    FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE = !FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE;
-    FE_DEBUG_EnemyEconomyRenderPanel(true);
-    console.info('[FE DEBUG] Enemy economy panel', FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE ? 'shown' : 'hidden');
-  }
-
-  // Lightweight DOM refresh. It does nothing when the panel is hidden.
-  if (!window.FE_DEBUG_ENEMY_ECONOMY_PANEL_INTERVAL) {
-    window.FE_DEBUG_ENEMY_ECONOMY_PANEL_INTERVAL = setInterval(() => {
-      try {
-        FE_DEBUG_EnemyEconomyRenderPanel(false);
-      } catch (err) {
-        console.warn('[FE DEBUG] Enemy economy panel update failed', err);
-      }
-    }, 250);
-  }
+  // Dev-only read-only observer. Extracted to src/dev/enemy_economy_debug_panel.js (REF-MAIN-GLM-04).
+  window.FE_ENEMY_ECONOMY_DEBUG_PANEL.init({
+    unitOwner,
+    buildingOwner,
+    getStorageLimitsForOwner,
+    findBaseBuilding,
+    FE_PATCH_08BEnemyCombatUnits,
+    FE_PATCH_10BEnemyKnowledgeDebugSummary,
+    FE_PATCH_09C3EnemySeparatorDebugText,
+    FE_PATCH_09DEnemyFactoryDebugText,
+    FE_PATCH_09EEnemyFactoryQueueDebugText,
+    FE_PATCH_09DEnemyBuildOrderDebugText,
+    FE_PATCH_09EEnemyFactoryBlockedReasonDebugText,
+  });
   // PATCH-09C1-DEBUG-ENEMY-ECONOMY-PANEL-MVP-V2_END
 
 window.addEventListener('keydown', e=>{
     // PATCH-09C1-DEBUG-ENEMY-ECONOMY-PANEL-MVP-V2: read-only enemy economy debug panel.
     if (!e.repeat && e.code === 'F2' && game?.screen === 'game') {
       e.preventDefault();
-      FE_DEBUG_ToggleEnemyEconomyPanel();
+      window.FE_ENEMY_ECONOMY_DEBUG_PANEL.toggle();
       return;
     }
 

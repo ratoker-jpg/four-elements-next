@@ -919,3 +919,108 @@ Manual smoke:
 3. Light_tank combat работает
 4. Num9 — overlay появляется/исчезает
 5. Без Num9 — gameplay идентичен
+
+---
+
+Задача: REF-MAIN-GLM-04 — extract enemy economy debug panel from src/main.js
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ref-main-04-enemy-economy-debug-panel-extract (от sandbox/main)
+
+Цель:
+Вынести enemy economy debug panel-блок (FE_DEBUG_EnemyEconomy* — 10 функций + setInterval + F2 handler, ~232 строки)
+из src/main.js в отдельный dev/debug модуль src/dev/enemy_economy_debug_panel.js.
+Это micro-refactor extraction — не gameplay patch, не economy refactor, не bot refactor.
+
+Что вынесено:
+
+10 функций FE_DEBUG_EnemyEconomy* + toggle + interval:
+1. FE_DEBUG_EnemyEconomyPanelAllowed → isAllowed (checks window.FE_DEBUG_ENEMY_ECONOMY_PANEL_ENABLED)
+2. FE_DEBUG_EnemyEconomyEnsurePanel → ensurePanel (DOM panel creation/lookup)
+3. FE_DEBUG_EnemyEconomySafeNumber → safeNumber (pure, no deps)
+4. FE_DEBUG_EnemyEconomyReadBucket → readBucket (game param)
+5. FE_DEBUG_EnemyEconomyHtmlEscape → htmlEscape (pure, no deps)
+6. FE_DEBUG_EnemyEconomyUnitOwner → unitOwnerOf (uses _deps.unitOwner)
+7. FE_DEBUG_EnemyEconomyBuildingOwner → buildingOwnerOf (uses _deps.buildingOwner)
+8. FE_DEBUG_EnemyEconomyCollectState → collectState (uses _deps + window.FE_CORE.game)
+9. FE_DEBUG_EnemyEconomyFormatHarvester → formatHarvester (pure, uses own helpers)
+10. FE_DEBUG_EnemyEconomyRenderPanel → renderPanel (main entry point, uses _deps + window.FE_CORE.game)
+11. FE_DEBUG_ToggleEnemyEconomyPanel → toggle (calls renderPanel(true))
+
+Плюс:
+- 3 IIFE-scope vars → внутренние _visible, _panelEl, _lastUpdate в модуле
+- setInterval auto-refresh → управляется внутри модуля через init()
+- F2 keydown handler → window.FE_ENEMY_ECONOMY_DEBUG_PANEL.toggle()
+
+Архитектура нового модуля:
+- Browser global IIFE: window.FE_ENEMY_ECONOMY_DEBUG_PANEL = (function() { ... })();
+- init(deps) — хранит IIFE-scope function references (unitOwner, buildingOwner, etc.)
+- game доступен через window.FE_CORE.game при вызове (не при загрузке)
+- Все данные game/enemyResources/buildings/units — только READ-ONLY
+- Модуль НЕ мутирует состояние игры
+- Стиль модуля идентичен combat_debug_overlay.js (REF-MAIN-GLM-03)
+
+Изменения в main.js:
+1. Удалены 10 inline функций FE_DEBUG_EnemyEconomy* (232 строки)
+2. Удалены 3 IIFE-scope vars (FE_DEBUG_ENEMY_ECONOMY_PANEL_VISIBLE, _EL, _LAST_UPDATE)
+3. Удалён setInterval блок
+4. Заменён на: window.FE_ENEMY_ECONOMY_DEBUG_PANEL.init({...deps...})
+5. В keydown handler F2: заменён FE_DEBUG_ToggleEnemyEconomyPanel() на
+   window.FE_ENEMY_ECONOMY_DEBUG_PANEL.toggle()
+
+Изменения в index.html:
+- Добавлен <script src="src/dev/enemy_economy_debug_panel.js?v=ref_main_glm_04"></script>
+  перед src/main.js (после combat_debug_overlay.js)
+
+main.js до: 11 783 строк
+main.js после: 11 567 строк
+Разница: -216 строк (-1.8%)
+
+enemy_economy_debug_panel.js: 266 строк (новый файл)
+
+Что НЕ тронуто (по правилам задачи):
+- enemy economy behavior — нет (модуль только read-only)
+- separator processing — нет
+- factory production — нет
+- enemyResources mutation — нет
+- bot decisions/AI behavior — нет
+- combat — нет
+- render loop целиком — нет
+- input/selection — нет
+- movement/pathfinding — нет
+- save/load — нет
+- map generation — нет
+- scout — нет
+- assets — нет
+- configs — нет
+
+Изменённые файлы:
+- src/dev/enemy_economy_debug_panel.js (new, 266 строк)
+- src/main.js (216 строк удалено, ~16 строк добавлено — init + F2 handler)
+- index.html (+1 script tag)
+- PATCH_REPORT.txt (добавлена эта запись)
+- docs/project/REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md (Candidate 3 отмечен DONE)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/dev/enemy_economy_debug_panel.js -> PASS
+- rg: FE_DEBUG_EnemyEconomy* — 0 определений в src/main.js (все удалены)
+- index.html: новый script tag перед src/main.js
+- модуль не мутирует game/enemyResources (только read)
+
+Безопасность:
+- enemy economy behavior не изменён — модоль только читает и отображает
+- separator/factory/production не изменены
+- enemy bot behavior не изменён
+- render/input/save-load/mapgen не изменены
+- rollback: вернуть функции в main.js, удалить script tag
+
+Risks / manual smoke checklist:
+1. Игра загружается
+2. Выбор фракции проходит дальше
+3. F2 — enemy economy debug panel появляется
+4. F2 ещё раз — исчезает
+5. Без F2 — gameplay идентичен
+6. Panel показывает enemy resources, buildings, harvesters, bot phase
+7. Panel auto-refreshes every 250ms
+8. Нет console errors от модуля
