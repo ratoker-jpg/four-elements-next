@@ -60,7 +60,7 @@ player base → player стартовые юниты → enemy base → enemy pu
 Правило действует для GPT и Codex workflow:
 - GPT сам отслеживает счётчик и предлагает docs patch;
 - пользователь не должен отдельно напоминать;
-- docs patch обновляет roadmap, AGENTS, регламент, NEW_CHAT_START_PROMPT, PATCH_REPORT и session summary;
+- docs patch обновляет roadmap, AGENTS, регламент, AI_READ_FIRST (замена архивированного NEW_CHAT_START_PROMPT), PATCH_REPORT и session summary;
 - docs patch после синка обнуляет счётчик.
 
 Текущая точка обнуления:
@@ -96,7 +96,7 @@ PATCH-09E2-DOCS-ENEMY-FACTORY-PRODUCTION-CHECKPOINT
 
 | AGENTS | `AGENTS.md` |
 
-| New chat prompt | `docs/project/NEW_CHAT_START_PROMPT.md` |
+| New chat prompt | `docs/project/AI_READ_FIRST.md` (NEW_CHAT_START_PROMPT.md архивирован: `docs/archive/dangerous_old/`) |
 
 | Stable checkpoint | `PATCH-09E2-DOCS-ENEMY-FACTORY-PRODUCTION-CHECKPOINT` |
 
@@ -887,7 +887,7 @@ Canonical report paths:
 
 ```text
 _inbox/session_summary_20260508_PATCH-08A-BOT-BEHAVIOR-MVP-AUDIT.txt
-docs/project/patch_08a_bot_behavior_mvp_audit.md
+docs/project/patch_08a_bot_behavior_mvp_audit.md  (АРХИВИРОВАН — см. docs/archive/old_audits/)
 ```
 
 Next code candidate:
@@ -1704,7 +1704,7 @@ Failed but safely restored:
 New checkpoint doc:
 
 ```text
-docs/project/four_elements_bot_checkpoint_10E2.md
+docs/project/four_elements_bot_checkpoint_10E2.md  (АРХИВИРОВАН — см. docs/archive/old_checkpoints/)
 ```
 
 Next route:
@@ -1816,7 +1816,7 @@ or a patch report with:
 Sprint doc:
 
 ```text
-docs/project/codex_limit_sprint_20260509_20260510.md
+docs/project/codex_limit_sprint_20260509_20260510.md  (АРХИВИРОВАН — см. docs/archive/old_codex_refactor/)
 ```
 
 Suggested priority:
@@ -1869,7 +1869,7 @@ window.FE_CORE.game.enemyRetreatMvp
 New checkpoint doc:
 
 ```text
-docs/project/four_elements_bot_checkpoint_10H2.md
+docs/project/four_elements_bot_checkpoint_10H2.md  (АРХИВИРОВАН — см. docs/archive/old_checkpoints/)
 ```
 
 Next route depends on smoke:

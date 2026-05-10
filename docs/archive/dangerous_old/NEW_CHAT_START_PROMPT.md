@@ -1,3 +1,18 @@
+---
+> ⚠️ ARCHIVED / NOT SOURCE OF TRUTH
+>
+> Этот документ сохранён только как исторический контекст.
+> Не использовать как актуальную инструкцию для GPT/GLM/Codex.
+> Актуальный порядок чтения: docs/project/AI_READ_FIRST.md.
+>
+> Причина архивации: DANGEROUS_OLD — содержит production-пути
+> (C:\Users\Den\Desktop\four elements\four_elements_core_base),
+> Google Drive mirror ссылки, устаревшие чекпоинты (PATCH-08B3),
+> отсутствует sandbox-контекст.
+> Архивирован: DOCS-CLEANUP-01, 2026-05-10.
+---
+
+
 # NEW CHAT START PROMPT — Four Elements Remake
 
 
