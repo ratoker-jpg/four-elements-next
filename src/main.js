@@ -4,38 +4,14 @@
   // ============================================================
   // Constants / data
   // ============================================================
-  const SAVE_KEY = 'four_elements_core_base_v04_save';
-  const SETTINGS_KEY = 'four_elements_core_base_v04_settings';
-  const TILE_W = 76;
-  const TILE_H = 38;
-  const MAP_SIZES = {
-    standard: { label:'Стандартная', w:48, h:48 },
-    large:    { label:'Большая', w:96, h:96 }
-  };
+  // REF-MAIN-GLM-06: standalone pure constants extracted to src/core/standalone_constants.js
+  const { SAVE_KEY, SETTINGS_KEY, TILE_W, TILE_H, MAP_SIZES, BASE_STORAGE, FACTION_ELEMENT_KEY } = window.FE_STANDALONE_CONSTANTS || {};
   const BUILDING_SIZE = window.FE_BUILDING_SIZE;
 
   // v0.4: здания строятся за энергию. Минералы = сырьё, не строительная валюта.
   const BUILDINGS = window.FE_BUILDINGS;
 
-
-
   const UNIT_DEFS = window.FE_UNITS;
-
-  const BASE_STORAGE = {
-    minerals:200,
-    energy:300,
-    purple:20,
-    greenEl:20,
-    cyanEl:20,
-    yellowEl:20
-  };
-
-  const FACTION_ELEMENT_KEY = {
-    purple:'purple',
-    green:'greenEl',
-    cyan:'cyanEl',
-    yellow:'yellowEl'
-  };
   const FACTIONS = window.FE_FACTIONS;
   const MINE_TYPES = window.FE_MINE_TYPES;
   const OBSTACLE_ASSETS = window.FE_OBSTACLE_ASSETS;
