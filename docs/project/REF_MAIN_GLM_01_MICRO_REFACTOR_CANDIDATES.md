@@ -179,7 +179,10 @@ After: report main.js line count before/after.
 
 ---
 
-### Candidate 2 — Combat debug overlay extraction
+### Candidate 2 — Combat debug overlay extraction ✅ DONE
+
+**Выполнено:** REF-MAIN-GLM-03 (2026-05-10), ветка glm/ref-main-03-combat-debug-overlay-extract
+**Результат:** 6 функций FE_LT_04C6* вынесены в src/dev/combat_debug_overlay.js (218 строк). main.js: 11 919 → 11 783 строк (-136)
 
 **Что сделать:**
 Вынести 6 функций `FE_LT_04C6*` (строки 9297–9439) в `src/dev/combat_debug_overlay.js`.
