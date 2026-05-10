@@ -264,7 +264,10 @@ After: report main.js line count before/after.
 
 ---
 
-### Candidate 3 — Enemy economy debug panel extraction
+### Candidate 3 — Enemy economy debug panel extraction ✅ DONE
+
+**Выполнено:** REF-MAIN-GLM-04 (2026-05-10), ветка glm/ref-main-04-enemy-economy-debug-panel-extract
+**Результат:** 10 функций FE_DEBUG_EnemyEconomy* + toggle + interval вынесены в src/dev/enemy_economy_debug_panel.js (266 строк). main.js: 11 783 → 11 567 строк (-216)
 
 **Что сделать:**
 Вынести 11 функций `FE_DEBUG_EnemyEconomy*` + F2 handler + setInterval (строки 11021–11251) в `src/dev/enemy_economy_panel.js`.
