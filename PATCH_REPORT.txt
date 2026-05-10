@@ -1399,3 +1399,56 @@ Lane: Review
 - Google Drive sync не включён
 - Production paths не затронуты
 - Откат тривиален: git revert восстанавливает все перемещения
+
+---
+
+Задача: BOT-MVP-01 — аудит текущего enemy bot / skirmish для playable 1v1
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+Провести аудит текущего enemy bot / skirmish logic и понять, что нужно
+для минимально играбельного 1v1. Audit-only задача — код НЕ менялся.
+
+Что сделано:
+1. Прочитаны все проектные документы: AI_READ_FIRST.md, AGENTS.md, README_GLM_SANDBOX.md,
+   bot roadmap, checkpoint 10I2, scout roadmap, refactor checkpoint, PATCH_REPORT.
+2. Проанализирован src/main.js (~11 358 строк) на предмет bot/skirmish логики.
+3. Проанализированы src/config/units.js, src/config/buildings.js, src/config/runtime_flags.js.
+4. Проанализированы src/dev/enemy_economy_debug_panel.js, src/dev/combat_debug_overlay.js.
+5. Составлена полная карта bot-систем: enemy start, resources, separator, factory, production,
+   attack waves, phase bot, 7 AI-слоёв (10B–10I1), debug tools, victory/defeat.
+
+Ключевые выводы:
+- Бот уже функционально работоспособен для базового 1v1.
+- Экономическая цепочка полная: harvesters → separator → factory → light_tank.
+- 7 AI-слоёв работают: vision memory, scouting, autopilot guard, strength estimate,
+  vision-driven targeting, retreat/HQ defense, difficulty profiles.
+- Критический пробел: нет восполнения рабочих (harvester/builder) при гибели.
+- Ограничения: только light_tank, очередь max=1, одна factory, scout не интегрирован.
+
+Рекомендованные следующие PR:
+- BOT-MVP-02 — worker replenishment (самый безопасный первый кодовый PR)
+- BOT-MVP-03 — production queue increase (max 1→2)
+- BOT-MVP-04 — second factory
+- BOT-MVP-05 — difficulty production knobs
+- BOT-MVP-06 — bot builds storages
+- BOT-MVP-07 — victory/defeat screen polish
+
+Созданные файлы:
+- docs/project/BOT_MVP_01_CURRENT_ENEMY_BOT_AUDIT.md (new) — полный аудит
+
+Изменённые файлы:
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Проверки:
+- node --check src/main.js -> PASS (smoke only, код не менялся)
+- git diff --name-only: только docs/ файл, PATCH_REPORT.txt
+
+Безопасность:
+- Игровой код не изменён
+- Ассеты не затронуты
+- src/main.js не тронут
+- Google Drive sync не включён
+- Production paths не затронуты
