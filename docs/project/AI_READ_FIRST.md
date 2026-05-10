@@ -28,8 +28,10 @@
 
 | Что | Где | Статус |
 |-----|-----|--------|
-| Код игры | GitHub `sandbox/main` | Единственный source of truth |
-| Live demo | GitHub Pages (https://ratoker-jpg.github.io/glm-game-sandbox/) | Актуальная демо-сборка |
+| Репозиторий | https://github.com/ratoker-jpg/glm-game-sandbox | Единственный source of truth |
+| Ветка | `sandbox/main` | Основная ветка проекта |
+| GitHub Pages | https://ratoker-jpg.github.io/glm-game-sandbox/ | Актуальная демо-сборка |
+| Локальный запуск | `http://localhost:8010/index.html` (подтверждено README_GLM_SANDBOX.md) | Для локальной разработки |
 | Codex failed snapshots | `_gpt_state/`, `_inbox/` | НЕ source of truth. Только исторический контекст |
 | Production WORK | `C:\Users\Den\Desktop\four elements\four_elements_core_base` | НЕ sandbox. Не использовать как актуальный |
 | Production v03 | `four_elements_core_base_v03` | Только fallback/архив |
@@ -42,7 +44,7 @@
 
 - **`docs/archive/*`** — все файлы в архиве. Содержат WARNING-заголовки.
 - **`docs/archive/dangerous_old/NEW_CHAT_START_PROMPT.md`** — production-пути, Google Drive mirror, устаревшие чекпоинты (PATCH-08B3).
-- **`docs/archive/dangerous_old/памятка.txt`** — **устаревшая формула сепаратора** (20->10+1 вместо актуальной 15->10+1), старый порт (8000 вместо 8010), production-пути v03.
+- **`docs/archive/dangerous_old/памятка.txt`** — **устаревшая формула сепаратора** (20->10+1 вместо актуальной 15->10+1), устаревший порт (8000), production-пути v03.
 - **`docs/archive/dangerous_old/THIS_IS_WORK_PROJECT.txt`** — маркер production-проекта, не sandbox.
 - **Старые промпты** — production-era промпты, не адаптированные для sandbox.
 - **Старые Codex sprint-документы** — sprint window истёк, временные документы.
@@ -73,8 +75,7 @@
 
 ### Ключевые формулы
 
-- Сепаратор: **15 сырых минералов -> 10 энергии + 1 элемент фракции** (НЕ 20->10+1)
-- Порт: **8010** (НЕ 8000)
+- Сепаратор: **15 сырых минералов -> 10 энергии + 1 элемент фракции** (НЕ 20->10+1 из архивных документов)
 - main.js: **11 358 строк** после рефактор-спринта
 
 ---

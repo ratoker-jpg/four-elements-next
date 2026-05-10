@@ -1317,7 +1317,7 @@ DOCS-CLEANUP-01 — физическая реорганизация докуме
 
 Задача: DOCS-CLEANUP-01 — реорганизация документов: AI_READ_FIRST + архивация dangerous/stale
 Дата: 2026-05-10
-Lane: Fast
+Lane: Review
 Ветка: glm/docs-cleanup-01-source-of-truth-archive (от sandbox/main)
 
 Цель:
