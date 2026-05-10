@@ -95,7 +95,10 @@ Codex ранее пробовал REFACTOR-MAIN-01/02 — широкий extract
 
 ## 4. Candidate details
 
-### Candidate 1 — Dead code cleanup
+### Candidate 1 — Dead code cleanup ✅ DONE
+
+**Выполнено:** REF-MAIN-GLM-02 (2026-05-10), ветка glm/ref-main-02-dead-code-cleanup
+**Результат:** Удалено 209 строк (9 блоков). main.js: 12 128 → 11 919 строк (-1.7%)
 
 **Что сделать:**
 Удалить из src/main.js весь доказанно dead/disabled код. Не создавать новых файлов. Только удаление.

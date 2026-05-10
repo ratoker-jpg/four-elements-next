@@ -739,3 +739,92 @@ Lane: Fast
 - gameplay не изменён
 - Google Drive sync не тронут
 - Production paths не затронуты
+
+---
+
+Задача: REF-MAIN-GLM-02 — dead code cleanup из audited main.js candidates
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ref-main-02-dead-code-cleanup (от sandbox/main)
+
+Цель:
+Удалить только доказанный dead/unreachable/no-op код из src/main.js на основе
+отчёта REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md (Candidate 1).
+Это micro-refactor cleanup — только удаление, без новых файлов, без index.html,
+без gameplay изменений.
+
+Удалённые блоки (9 блоков, 209 строк):
+
+1. applyTestBuildingCostsX10() — функция (54 строки) + закомментированный вызов + комментарии-обёртки
+   Доказательство: единственный вызов закомментирован: // applyTestBuildingCostsX10();
+   + в теле баг: строка 38 делает def.cost = Math.max(1, (def.cost)) — не делит на 10
+
+2. Dead tail в setLightTankAttack() — 34 строки unreachable кода после unconditional return
+   Доказательство: return setLightTankAttackGeneric(...) — unconditional, код после return недостижим
+
+3. Dead tail в spawnLightTankForOwner() — 29 строк unreachable кода после unconditional return
+   Доказательство: return spawned; — unconditional, код после return недостижим
+
+4. Dead tail в FE_PATCH_07ASetupSkirmishStart() — 29 строк unreachable кода после return {...}
+   Доказательство: return { enemyBase, playerHarvesters, ... } — unconditional, код после return недостижим
+
+5. Dead tail в setLightTankAttackApproach() — 38 строк unreachable кода после unconditional return
+   Доказательство: return setLightTankAttackApproachGeneric(...) — unconditional, код после return недостижим
+
+6. drawIsoShadow() — no-op функция: тело = return;
+   Доказательство: rg даёт 1 вхождение (определение), 0 call sites
+
+7. FE_PATCH_06ADrawEnemyBaseMarker() — no-op функция: тело = return;
+   Доказательство: rg даёт 1 вхождение (определение), 0 call sites
+
+8. drawEnemyUnitMarker() — no-op функция: тело = return;
+   Доказательство: rg даёт 1 вхождение (определение), 0 call sites
+
+9. drawEnemyBuildingMarker() — no-op функция: тело = return;
+   Доказательство: rg даёт 1 вхождение (определение), 0 call sites
+
+Итого удалено: 209 строк
+main.js до: 12 128 строк
+main.js после: 11 919 строк
+Разница: -209 строк (-1.7%)
+
+Что НЕ тронуто (по правилам задачи):
+- FE_UNIT_CONTROLLER_ENABLED block — feature flag, не dead code
+- src/core/unit_controller.js — отдельный файл, требует Review lane
+- backup файлы (main_broken_04c3.js и т.д.) — требуют Review lane
+- Candidate 2-5 из аудита — НЕ выполнялись в этой задаче
+- index.html — не менялся
+- gameplay, render, input, combat, bot, builder, harvester, save/load, map gen — не затронуты
+- debugLog extraction — не тронут
+- combat debug overlay — не тронут
+- enemy economy panel — не тронут
+- snapshot/export — не тронут
+- constants extraction — не тронут
+
+Изменённые файлы:
+- src/main.js (209 строк удалено)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- rg-верификация каждого dead-блока перед удалением: все 9 блоков подтверждены
+- git diff --stat: src/main.js | 209 deletions
+
+Безопасность:
+- assets изменены: нет
+- index.html изменён: нет
+- новые JS-файлы созданы: нет
+- gameplay изменён: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- render изменён: нет
+- input/selection изменён: нет
+- bot AI изменён: нет
+- save/load изменён: нет
+- map generation изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+Rollback:
+git revert — все удалённые строки можно восстановить из git history

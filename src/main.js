@@ -18,67 +18,6 @@
   const BUILDINGS = window.FE_BUILDINGS;
 
 
-  // V04_TEST_BUILDING_COSTS_START
-  // Тестовый режим: стоимость всех зданий уменьшена в 10 раз.
-  // Нужен, чтобы чаще проверять строительство, pathfinding и баги builder.
-  // PATCH-09B3-BUILD-MENU-PRICE-DISPLAY-FIX: build menu must display real costEnergy, not /10 scaled cost.
-  function applyTestBuildingCostsX10() {
-    if (!BUILDINGS || BUILDINGS.__testCostsX10Applied) return;
-
-    for (const [type, def] of Object.entries(BUILDINGS)) {
-      if (!def || typeof def !== 'object') continue;
-
-      if (!def.__originalCostForTest) {
-        def.__originalCostForTest = {};
-      }
-
-      // Основная текущая схема: cost = стоимость здания.
-      if (typeof def.cost === 'number') {
-        def.__originalCostForTest.cost = def.cost;
-        def.cost = Math.max(1, (def.cost));
-      }
-
-      // Поддержка альтернативных схем, если они есть в коде.
-      const directCostKeys = [
-        'costEnergy',
-        'energyCost',
-        'costMinerals',
-        'mineralsCost',
-        'mineralCost',
-        'rawMineralsCost'
-      ];
-
-      for (const key of directCostKeys) {
-        if (typeof def[key] === 'number') {
-          def.__originalCostForTest[key] = def[key];
-          def[key] = Math.max(1, Math.ceil(def[key] / 10));
-        }
-      }
-
-      // Если cost вдруг объект: { energy: 80, minerals: 100 }
-      if (def.cost && typeof def.cost === 'object') {
-        def.__originalCostForTest.cost = Object.assign({}, def.cost);
-
-        for (const [resource, amount] of Object.entries(def.cost)) {
-          if (typeof amount === 'number') {
-            def.cost[resource] = Math.max(1, Math.ceil(amount / 10));
-          }
-        }
-      }
-    }
-
-    BUILDINGS.__testCostsX10Applied = true;
-
-    console.warn('[Four Elements] TEST MODE: building costs divided by 10', BUILDINGS);
-  }
-
-  // PATCH-09B4-DISABLE-TEST-BUILDING-COST-DIVIDER
-  // Старый тестовый режим делил стоимость зданий на 10 через applyTestBuildingCostsX10().
-  // После PATCH-09B2 реальные цены уже снижены в конфиге, поэтому делитель отключён.
-  // applyTestBuildingCostsX10();
-  // V04_TEST_BUILDING_COSTS_END
-
-
 
   const UNIT_DEFS = window.FE_UNITS;
 
@@ -1515,40 +1454,6 @@
   function setLightTankAttack(attacker, target) {
     if (!isLightTank(attacker) || !isPlayerUnit(attacker)) return false;
     return setLightTankAttackGeneric(attacker, target, { toast:true, marker:true });
-
-    const isEnemyTankTarget = isLightTank(target) && isEnemyUnit(target);
-    const isEnemyBuildingTarget = FE_PATCH_06BIsAttackableEnemyBuilding(target);
-    if (!isEnemyTankTarget && !isEnemyBuildingTarget) return false;
-    if (typeof clearLightTankAttackMove === 'function') clearLightTankAttackMove(attacker);
-
-    const stats = getLightTankCombatStats(attacker);
-    const distance = isEnemyBuildingTarget
-      ? FE_PATCH_06BDistanceToBuilding(attacker, target)
-      : unitDistanceCells(attacker, target);
-    const marker = FE_PATCH_06BAttackMarkerPoint(target);
-
-    if (distance > stats.range) {
-      if (marker) addUnitClickMarker(attacker, marker.x, marker.y, 'bad');
-      showToast('Цель вне дальности');
-      return false;
-    }
-
-    attacker.attackTargetId = target.id;
-    attacker.attackTargetKind = isEnemyBuildingTarget ? 'building' : 'unit';
-    attacker.attackCooldown = Math.min(attacker.attackCooldown || 0, 0.05);
-    attacker._attackCommanded = true;
-    attacker.state = 'attacking';
-    attacker.path = [];
-    attacker.manualTarget = null;
-    attacker._queuedManualMove = null;
-    attacker._dirTargetKey = null;
-    attacker._dirDx = 0;
-    attacker._dirDy = 0;
-    FE_PATCH_06BClearAttackApproach(attacker);
-
-    if (marker) addUnitClickMarker(attacker, marker.x, marker.y, 'ok');
-    showToast('Атака: цель захвачена');
-    return true;
   }
 
   function updateLightTankCombat(unit, dt) {
@@ -1744,35 +1649,6 @@
     updateFog();
     showToast(owner === 'enemy' ? `Enemy light_tank: ${spawned.length}` : `Player light_tank: ${spawned.length}`);
     return spawned;
-
-    if (!game || game.screen !== 'game') {
-      console.warn('[FE LT 04A] Start a game before spawning tanks');
-      return [];
-    }
-
-    const total = Math.max(1, Math.min(12, Number(count) || 1));
-    const legacySpawned = [];
-
-    for (let i = 0; i < total; i++) {
-      const cell = findLightTankSpawnCell(owner, i);
-      if (!cell) {
-        showToast('Нет свободной клетки для танка');
-        break;
-      }
-
-      const tank = createUnit('light_tank', cell.x, cell.y);
-      tank.owner = owner;
-      tank.faction = defaultFactionForOwner(owner);
-      tank.hp = getLightTankCombatStats(tank).maxHp;
-      tank.maxHp = getLightTankCombatStats(tank).maxHp;
-      tank.state = 'idle';
-      game.units.push(tank);
-      legacySpawned.push(tank);
-    }
-
-    updateFog();
-    showToast(owner === 'enemy' ? `Enemy light_tank: ${legacySpawned.length}` : `Player light_tank: ${legacySpawned.length}`);
-    return legacySpawned;
   }
 
   function spawnEnemyLightTankNearPlayer(count = 1) {
@@ -2052,35 +1928,6 @@
       enemyTanks: setupEnemyTanks,
       enemyStarterClusterSpawned: setupEnemyStarterClusterSpawned
     };
-
-    const playerCount = Number.isFinite(options.playerTanks)
-      ? options.playerTanks
-      : FE_PATCH_07AReadCount('FE_SKIRMISH_PLAYER_TANKS', 3, 0, 8);
-    const enemyCount = Number.isFinite(options.enemyTanks)
-      ? options.enemyTanks
-      : FE_PATCH_07AReadCount('FE_SKIRMISH_ENEMY_TANKS', 2, 0, 8);
-
-    const enemyBase = FE_PATCH_06ASpawnEnemyBase();
-    const playerTanks = playerCount > 0 ? spawnLightTankForOwner('player', playerCount) : [];
-    const enemyTanks = enemyBase && enemyCount > 0 ? spawnLightTankForOwner('enemy', enemyCount) : [];
-
-    game.skirmishMode = true;
-    game.skirmishStarted = true;
-    game.skirmishEnemyBaseId = enemyBase?.id || null;
-    game.skirmishStartedAt = game.time || 0;
-    game._enemyHqSeen = !!enemyBase;
-
-    updateFog();
-    updateHud(true);
-
-    showToast(`Skirmish: ${playerTanks.length} твоих танка, ${enemyTanks.length} танка врага`);
-    debugLog('skirmish_setup_mvp', {
-      playerTanks: playerTanks.length,
-      enemyTanks: enemyTanks.length,
-      enemyBase: enemyBase ? safeCloneForLog(enemyBase) : null
-    });
-
-    return { enemyBase, playerTanks, enemyTanks };
   }
 
   window.FE_SETUP_SKIRMISH_START = function(options={}) {
@@ -8381,11 +8228,6 @@ setInterval(() => {
     drawSandTile(x,y);
     drawTerritoryTile(x,y, game.territory[y][x]);
   }
-  function drawIsoShadow(p, groundY, size, opts, z) {
-    // v0.4: динамические canvas-тени отключены.
-    // Тени вернём позже через PNG-shadow или alpha-mask, не через ellipse.
-    return;
-  }
 
 
 
@@ -8673,10 +8515,6 @@ if (im && im.complete && im.naturalWidth && im.naturalHeight) {
     ctx.restore();
   }
   // V04_BUILDING_FOOTPRINT_DEBUG_END
-
-  function FE_PATCH_06ADrawEnemyBaseMarker(b, profile) {
-    return;
-  }
 
 
   function drawBuilding(b) {
@@ -10329,15 +10167,6 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
     );
   }
 
-  // FE_PATCH_07A2_ENEMY_VISUAL_DIFFERENTIATION_START
-  function drawEnemyUnitMarker(unit, anchorX, anchorY) {
-    return;
-  }
-
-  function drawEnemyBuildingMarker(building, profile) {
-    return;
-  }
-  // FE_PATCH_07A2_ENEMY_VISUAL_DIFFERENTIATION_END
   // FE_LT_04B1F_SELECTION_RING_GROUP_MOVE_END
 
   // FE_LT_04B2_GROUP_ATTACK_START
@@ -10449,44 +10278,6 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
   function setLightTankAttackApproach(attacker, target) {
     if (!isLightTank(attacker) || !isPlayerUnit(attacker)) return false;
     return setLightTankAttackApproachGeneric(attacker, target, { toast:true, marker:true });
-
-    const isEnemyTankTarget = isLightTank(target) && isEnemyUnit(target);
-    const isEnemyBuildingTarget = FE_PATCH_06BIsAttackableEnemyBuilding(target);
-    if (!isEnemyTankTarget && !isEnemyBuildingTarget) return false;
-    if (typeof clearLightTankAttackMove === 'function') clearLightTankAttackMove(attacker);
-
-    const inRange = isEnemyBuildingTarget
-      ? FE_PATCH_06BDistanceToBuilding(attacker, target) <= getLightTankCombatStats(attacker).range
-      : unitDistanceCells(attacker, target) <= getLightTankCombatStats(attacker).range;
-    if (inRange) {
-      return setLightTankAttack(attacker, target);
-    }
-
-    const cells = attackApproachCellsForTarget(attacker, target);
-
-    for (const cell of cells) {
-      const path = findPath(attacker, cell, attacker.id);
-      if (path === null) continue;
-
-      attacker.attackApproachTargetId = target.id;
-      attacker.attackApproachTargetKind = isEnemyBuildingTarget ? 'building' : 'unit';
-      attacker._attackApproachCommanded = true;
-      FE_PATCH_06BClearAttackTarget(attacker);
-      attacker.path = path;
-      attacker.state = 'attack_approach';
-      attacker.manualTarget = null;
-      attacker._queuedManualMove = null;
-      attacker._dirTargetKey = null;
-      attacker._dirDx = 0;
-      attacker._dirDy = 0;
-
-      addUnitClickMarker(attacker, cell.x, cell.y, 'ok');
-      return true;
-    }
-
-    const marker = FE_PATCH_06BAttackMarkerPoint(target);
-    if (marker) addUnitClickMarker(attacker, marker.x, marker.y, 'bad');
-    return false;
   }
 
   function updateLightTankAttackApproach(unit, dt) {
