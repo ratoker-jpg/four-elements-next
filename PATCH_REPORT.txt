@@ -2779,3 +2779,90 @@ scout оставался в state='idle' с pathLen=0.
    Ожидание: {ok: true, afterState: 'manual_move', pathLen: >0, reason: 'ok'}
 3. Визуально: scout едет к цели
 4. Дождаться достижения цели: state → 'idle', поведенческий цикл назначает новую цель
+
+---
+
+Задача: BOT-SCOUT-01C — исправить зависание скаута с метаданными цели, но без пути
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-01c-fix-scout-stuck-no-path (от glm/bot-scout-01b-fix-enemy-scout-movement)
+
+Проблема:
+После BOT-SCOUT-01B скауты всё ещё не двигались. Ручной тест показал:
+- game._botScout01MoveFix === undefined (телеметрия не записывалась)
+- Скаут стоит idle рядом с фабрикой
+- FE_10C1_trySetScoutMove со исправленным findPath ни разу не достигался
+
+Причина:
+FE_SCOUT01IsScoutEnRoute возвращал true, если скаут имеет _fe10c1ScoutTarget
+(метаданные) и расстояние > 3, даже если path=[] и state='idle'. Это приводило
+к тому, что FE_SCOUT01UpdateEnemyScoutBehavior пропускал скаута каждый тик,
+и исправленный FE_10C1_trySetScoutMove никогда не вызывался.
+
+Что исправлено:
+
+1. FE_SCOUT01IsScoutEnRoute (строка ~3510):
+   - Добавлена проверка: если path пуст и state='idle' → вернуть false
+   - Добавлена проверка: если path пуст и state='manual_move' → вернуть false
+   - Скаут считается "в пути" только если у него есть реальный путь
+
+2. FE_SCOUT01UpdateEnemyScoutBehavior (строка ~3532):
+   - Переставлен порядок проверок: combat/wave-чеки идут первыми
+   - Добавлен repath-блок: если скаут имеет метаданные + нет пути + idle,
+     попытаться перепроложить путь через FE_10C1_trySetScoutMove
+   - Если repath успешен — continue (скаут теперь едет)
+   - Если repath неуспешен — очистить устаревшие метаданные,
+     чтобы выбрать новую цель через FE_SCOUT01ChooseScoutTarget
+   - IsScoutEnRoute проверка перенесена после repath-блока
+
+3. FE_10C1_trySetScoutMove (строка ~4004):
+   - Телеметрия пишется ВСЕГДА, даже при раннем return
+   - Добавлен вызов FE_SCOUT01B_WriteMoveTelemetry в каждом exit path
+   - Причина 'no_target' при unit/target === null
+   - Причина 'skipped_en_route' при атакующих полях
+   - Причина 'repath_empty_path' при неудачном repath (path=[] после idle)
+   - Причина 'no_path' при findPath===null или findPath не найден
+   - Причина 'ok' при успехе
+
+4. FE_SCOUT01B_WriteMoveTelemetry (новая функция, строка ~4099):
+   - Централизованный писатель телеметрии game._botScout01MoveFix
+   - Вызывается из каждого exit path FE_10C1_trySetScoutMove
+   - Поля: {scoutId, fromX, fromY, targetX, targetY, beforeState, afterState,
+            beforePathLen, pathLen, ok, reason, at}
+
+Изменённые файлы:
+- src/main.js — FE_SCOUT01IsScoutEnRoute (path+idle check),
+                 FE_SCOUT01UpdateEnemyScoutBehavior (repath logic),
+                 FE_10C1_trySetScoutMove (always-write telemetry, new reason codes),
+                 FE_SCOUT01B_WriteMoveTelemetry (new helper function)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто:
+- ATTACK-08/09/10 — не изменены
+- findPath — не изменён
+- passable — не изменён
+- combat — не изменён
+- production/cap — не изменён
+- render/fog — не изменены
+- map generation — не изменена
+- FE_10D1 (autopilot/patrol для light_tank) — не изменён
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/cap изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+Как тестировать:
+1. Запустить игру, дождаться производства enemy scout
+2. В консоли: game._botScout01MoveFix
+   Ожидание: {ok: true, reason: 'ok' или 'repath_empty_path', afterState: 'manual_move', pathLen: >0}
+3. Визуально: scout едет от вражеской базы к цели
+4. FE_SCOUT01B_WriteMoveTelemetry вызывается при каждой попытке —
+   телеметрия всегда существует после первой попытки движения
