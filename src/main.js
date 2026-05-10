@@ -11129,197 +11129,22 @@ if (game._saveTimer >= 45) {
 
 
   // V04_DEBUG_SNAPSHOT_START
-
-  function feSnapshotSafe(value, depth=0) {
-    if (depth > 5) return '[max_depth]';
-    if (value === null || value === undefined) return value;
-    if (typeof value !== 'object') return value;
-
-    if (Array.isArray(value)) {
-      return value.slice(0, 80).map(v => feSnapshotSafe(v, depth + 1));
-    }
-
-    const out = {};
-    for (const k of Object.keys(value).slice(0, 80)) {
-      const v = value[k];
-      if (typeof v === 'function') continue;
-      out[k] = feSnapshotSafe(v, depth + 1);
-    }
-
-    return out;
-  }
-
-  function feSnapshotDiagnoseCell(x, y, ignoreUnitId=null) {
-    const info = { x, y };
-
-    try {
-      info.inBounds = typeof inBounds === 'function' ? inBounds(x, y) : null;
-      info.obstacleBlocked = typeof isObstacleBlocked === 'function' ? isObstacleBlocked(x, y) : null;
-      info.mine = typeof mineAt === 'function' ? feSnapshotSafe(mineAt(x, y)) : null;
-      info.building = typeof buildingAt === 'function' ? feSnapshotSafe(buildingAt(x, y)) : null;
-      info.unit = typeof unitAt === 'function' ? feSnapshotSafe(unitAt(x, y, ignoreUnitId)) : null;
-      info.passable = typeof passable === 'function' ? passable(x, y, ignoreUnitId) : null;
-
-      if (!info.inBounds) info.reason = 'out_of_bounds';
-      else if (info.obstacleBlocked) info.reason = 'obstacle';
-      else if (info.mine) info.reason = 'mine';
-      else if (info.building) info.reason = 'building';
-      else if (info.unit) info.reason = 'unit';
-      else if (info.passable) info.reason = 'passable';
-      else info.reason = 'unknown_block';
-    } catch (e) {
-      info.error = String(e && e.message ? e.message : e);
-    }
-
-    return info;
-  }
-
-  function feSnapshotAroundUnit(u) {
-    if (!u) return [];
-
-    const gx = Math.round(u.x);
-    const gy = Math.round(u.y);
-    const cells = [];
-
-    for (let yy = gy - 2; yy <= gy + 2; yy++) {
-      for (let xx = gx - 2; xx <= gx + 2; xx++) {
-        cells.push(feSnapshotDiagnoseCell(xx, yy, u.id));
-      }
-    }
-
-    return cells;
-  }
-
-  function feSnapshotBuildInfo(builder) {
-    if (!builder || !builder.buildOrder) return null;
-
-    const order = builder.buildOrder;
-    const spot = order.spot;
-    const type = order.type;
-    const size = BUILDING_SIZE[type] || [2, 2];
-
-    const info = {
-      order: feSnapshotSafe(order),
-      size,
-      footprint: [],
-      adjacent: [],
-      accessCell: order.accessCell ? feSnapshotSafe(order.accessCell) : null,
-      canPlaceBuilding: null
-    };
-
-    if (spot) {
-      for (let yy = spot.y; yy < spot.y + size[1]; yy++) {
-        const row = [];
-        for (let xx = spot.x; xx < spot.x + size[0]; xx++) {
-          row.push(feSnapshotDiagnoseCell(xx, yy, builder.id));
-        }
-        info.footprint.push(row);
-      }
-
-      try {
-        info.canPlaceBuilding =
-          typeof canPlaceBuilding === 'function'
-            ? canPlaceBuilding(spot.x, spot.y, size[0], size[1])
-            : null;
-      } catch (e) {
-        info.canPlaceBuildingError = String(e && e.message ? e.message : e);
-      }
-
-      try {
-        const adj =
-          typeof adjacentFreeCellsForRect === 'function'
-            ? adjacentFreeCellsForRect(spot.x, spot.y, size[0], size[1], builder.id)
-            : [];
-
-        info.adjacent = adj.map(c => ({
-          cell: c,
-          diagnosis: feSnapshotDiagnoseCell(c.x, c.y, builder.id),
-          pathLength: (() => {
-            try {
-              const p = typeof findPath === 'function' ? findPath(builder, c, builder.id) : null;
-              return p === null ? null : p.length;
-            } catch (e) {
-              return 'path_error: ' + String(e && e.message ? e.message : e);
-            }
-          })()
-        }));
-      } catch (e) {
-        info.adjacentError = String(e && e.message ? e.message : e);
-      }
-    }
-
-    return info;
-  }
-
-  function feMakeSnapshot() {
-    const builders = (game?.units || []).filter(u => u.type === 'builder');
-    const harvesters = (game?.units || []).filter(u => u.type === 'harvester');
-
-    return {
-      createdAt: new Date().toISOString(),
-      note: 'Manual Four Elements debug snapshot',
-      game: game ? {
-        screen: game.screen,
-        paused: game.paused,
-        mapSize: game.mapSize,
-        mapW: game.mapW,
-        mapH: game.mapH,
-        faction: game.faction,
-        time: game.time,
-        resources: feSnapshotSafe(game.resources),
-        storageLimits: typeof getStorageLimits === 'function' ? feSnapshotSafe(getStorageLimits()) : null,
-        camera: feSnapshotSafe(game.camera),
-        buildingsCount: game.buildings?.length || 0,
-        unitsCount: game.units?.length || 0,
-        mineralsCount: game.minerals?.length || 0
-      } : null,
-
-      selected: selected ? feSnapshotSafe(selected) : null,
-
-      builders: builders.map(b => ({
-        unit: feSnapshotSafe(b),
-        grid: { x: Math.round(b.x), y: Math.round(b.y) },
-        currentCell: feSnapshotDiagnoseCell(Math.round(b.x), Math.round(b.y), b.id),
-        around: feSnapshotAroundUnit(b),
-        buildInfo: feSnapshotBuildInfo(b)
-      })),
-
-      harvesters: harvesters.map(h => ({
-        unit: feSnapshotSafe(h),
-        grid: { x: Math.round(h.x), y: Math.round(h.y) },
-        currentCell: feSnapshotDiagnoseCell(Math.round(h.x), Math.round(h.y), h.id),
-        around: feSnapshotAroundUnit(h),
-        targetMine: h.target ? feSnapshotSafe((game.minerals || []).find(m => m.id === h.target)) : null,
-        nearestBase: feSnapshotSafe((game.buildings || []).find(b => b.type === 'hq_base'))
-      })),
-
-      buildings: feSnapshotSafe(game?.buildings || []),
-      visibleMinerals: feSnapshotSafe((game?.minerals || []).slice(0, 80))
-    };
-  }
-
-  window.FE_EXPORT_SNAPSHOT = function () {
-    const snapshot = feMakeSnapshot();
-
-    const blob = new Blob(
-      [JSON.stringify(snapshot, null, 2)],
-      { type: 'application/json' }
-    );
-
-    const a = document.createElement('a');
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-
-    a.href = URL.createObjectURL(blob);
-    a.download = 'four_elements_snapshot_' + ts + '.json';
-
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    setTimeout(() => URL.revokeObjectURL(a.href), 500);
-
-    console.warn('[Four Elements] Snapshot exported', snapshot);
-  };
+  // Snapshot/export system extracted to src/dev/snapshot_export.js (REF-MAIN-GLM-05).
+  // FE_DEV_SPAWN_UNIT remains here — it is a separate dev tool.
+  window.FE_SNAPSHOT_EXPORT.init({
+    inBounds,
+    isObstacleBlocked,
+    mineAt,
+    buildingAt,
+    unitAt,
+    passable,
+    canPlaceBuilding,
+    adjacentFreeCellsForRect,
+    findPath,
+    getStorageLimits,
+    getSelected: () => selected,
+    BUILDING_SIZE,
+  });
 
   // FE_DEV_SPAWN_UNIT: dev-only helper to spawn any known unit type from browser console.
   // Usage: FE_DEV_SPAWN_UNIT('scout', 10, 10)
@@ -11357,16 +11182,6 @@ if (game._saveTimer >= 45) {
     console.warn('[FE_DEV_SPAWN_UNIT] Создан юнит:', def.name, '#' + unit.id, 'на клетке', x + ',' + y);
     return unit;
   };
-
-  window.addEventListener('keydown', function (e) {
-    if (e.key === 'F8') {
-      e.preventDefault();
-      window.FE_EXPORT_SNAPSHOT();
-    }
-  });
-
-  console.warn('[Four Elements] Debug snapshot ready: use FE_EXPORT_SNAPSHOT() or F8');
-
   // V04_DEBUG_SNAPSHOT_END
 
 

@@ -336,7 +336,10 @@ After: report main.js line count before/after.
 
 ---
 
-### Candidate 4 — Snapshot / export system extraction
+### Candidate 4 — Snapshot / export system extraction ✅ DONE
+
+**Выполнено:** REF-MAIN-GLM-05 (2026-05-10), ветка glm/ref-main-05-snapshot-export-extract
+**Результат:** 5 функций fe* + FE_EXPORT_SNAPSHOT + F8 handler вынесены в src/dev/snapshot_export.js (254 строки). main.js: 11 567 → 11 382 строк (-185)
 
 **Что сделать:**
 Вынести `feMakeSnapshot`, `feSnapshotSafe`, `feSnapshotDiagnoseCell`, `feSnapshotAroundUnit`, `feSnapshotBuildInfo`, `FE_EXPORT_SNAPSHOT`, F8 handler (строки 11692–11927) в `src/dev/snapshot.js`.
