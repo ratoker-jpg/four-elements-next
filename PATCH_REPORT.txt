@@ -828,3 +828,94 @@ main.js после: 11 919 строк
 
 Rollback:
 git revert — все удалённые строки можно восстановить из git history
+
+---
+
+Задача: REF-MAIN-GLM-03 — extract combat debug overlay from src/main.js
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ref-main-03-combat-debug-overlay-extract (от sandbox/main)
+
+Цель:
+Вынести combat debug overlay-блок (FE_LT_04C6* — 6 функций, ~143 строки)
+из src/main.js в отдельный dev/debug модуль src/dev/combat_debug_overlay.js.
+Это micro-refactor extraction — не gameplay patch, не combat refactor.
+
+Что вынесено:
+
+6 функций FE_LT_04C6*:
+1. FE_LT_04C6SelectedPlayerLightTanks → selectedPlayerLightTanksFrom (pure, params-based)
+2. FE_LT_04C6DrawRangeDiamond → drawRangeDiamond (ctx, tileToScreen, unit, range)
+3. FE_LT_04C6DrawAttackMoveMarker → drawAttackMoveMarker (ctx, tileToScreen, target)
+4. FE_LT_04C6DrawTargetLine → drawTargetLine (ctx, tileToScreen, unit, target, targetCenter)
+5. FE_LT_04C6DrawPanel → drawPanel (ctx, units, attackMoveArmed, resolveAttackTarget)
+6. FE_LT_04C6DrawCombatDebugOverlay → drawOverlay (deps object с IIFE-scope vars)
+
+Плюс:
+- window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED flag → внутренний _enabled в модуле
+- Num9 hotkey toggle → window.FE_COMBAT_DEBUG_OVERLAY.toggle()
+
+Архитектура нового модуля:
+- Все функции принимают зависимости параметрами (ctx, tileToScreen, etc.)
+- Не захватывает IIFE scope при загрузке — безопасно
+- window.FE_COMBAT_DEBUG_OVERLAY.drawOverlay(deps) — главный entry point
+- game доступен через window.FE_CORE.game при вызове (не при загрузке)
+
+Изменения в main.js:
+1. Удалены 6 inline функций FE_LT_04C6* + обёртки комментариев (143 строки)
+2. Удалён window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED flag (1 строка)
+3. В render(): заменён FE_LT_04C6DrawCombatDebugOverlay() на
+   window.FE_COMBAT_DEBUG_OVERLAY.drawOverlay({...deps...})
+4. В keydown handler Num9: заменён direct flag toggle на
+   window.FE_COMBAT_DEBUG_OVERLAY.toggle()
+
+Изменения в index.html:
+- Добавлен <script src="src/dev/combat_debug_overlay.js?v=ref_main_glm_03"></script>
+  перед src/main.js (после debug_tools.js)
+
+main.js до: 11 919 строк
+main.js после: 11 783 строк
+Разница: -136 строк (-1.1%)
+
+combat_debug_overlay.js: 218 строк (новый файл)
+
+Что НЕ тронуто (по правилам задачи):
+- combat behavior / attack logic / damage / range / cooldown — нет
+- target selection — нет
+- enemy bot — нет
+- movement / pathfinding — нет
+- render() — только замена вызова overlay, остальной render нетронут
+- input / selection — нет
+- save/load — нет
+- map generation — нет
+- economy — нет
+- scout — нет
+- assets — нет
+- configs — нет
+- Candidate 3-5 — НЕ выполнялись
+
+Изменённые файлы:
+- src/dev/combat_debug_overlay.js (новый, 218 строк)
+- src/main.js (136 строк удалено, 10 строк добавлено)
+- index.html (+1 script tag)
+- PATCH_REPORT.txt (добавлена эта запись)
+- docs/project/REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md (Candidate 2 отмечен DONE)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/dev/combat_debug_overlay.js -> PASS
+- rg: FE_LT_04C6* — 0 вхождений в src/main.js (все удалены)
+- index.html: новый script tag перед src/main.js
+
+Безопасность:
+- combat behavior не изменён — overlay только отрисовывает debug info
+- enemy bot не изменён
+- gameplay не изменён — overlay отключён по умолчанию
+- rollback: вернуть функции в main.js, удалить script tag
+
+Manual smoke:
+1. Игра загружается
+2. Выбор фракции проходит
+3. Light_tank combat работает
+4. Num9 — overlay появляется/исчезает
+5. Без Num9 — gameplay идентичен

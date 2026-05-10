@@ -161,7 +161,6 @@
   let selectedUnits = [];
   let dragSelect = { active:false, moved:false, suppressClick:false, startX:0, startY:0, x:0, y:0 };
   let attackMoveArmed = false;
-  window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED = false;
   let lastTime = performance.now();
   let keys = {};
   let mouse = { middle:false, lastX:0, lastY:0 };
@@ -9132,150 +9131,6 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
     }
   }
 
-  // FE_LT_04C6_COMBAT_DEBUG_OVERLAY_START
-  function FE_LT_04C6SelectedPlayerLightTanks() {
-    const group = selectedPlayerLightTanks();
-    if (group.length > 0) return group;
-    return isLightTank(selected) && isPlayerUnit(selected) ? [selected] : [];
-  }
-
-  function FE_LT_04C6DrawRangeDiamond(unit, range) {
-    const top = tileToScreen(unit.x, unit.y - range);
-    const right = tileToScreen(unit.x + range, unit.y);
-    const bottom = tileToScreen(unit.x, unit.y + range);
-    const left = tileToScreen(unit.x - range, unit.y);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(right.x, right.y);
-    ctx.lineTo(bottom.x, bottom.y);
-    ctx.lineTo(left.x, left.y);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(90, 220, 255, 0.07)';
-    ctx.strokeStyle = 'rgba(90, 220, 255, 0.65)';
-    ctx.lineWidth = 1.25;
-    ctx.setLineDash([6, 4]);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function FE_LT_04C6DrawAttackMoveMarker(target) {
-    const p = tileToScreen(target.x, target.y);
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 210, 90, 0.92)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(p.x - 10, p.y);
-    ctx.lineTo(p.x + 10, p.y);
-    ctx.moveTo(p.x, p.y - 10);
-    ctx.lineTo(p.x, p.y + 10);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(30, 26, 18, 0.88)';
-    ctx.fillRect(p.x + 12, p.y - 10, 124, 16);
-    ctx.fillStyle = '#ffd25a';
-    ctx.font = '11px Consolas, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('attack-move target', p.x + 16, p.y - 2);
-    ctx.restore();
-  }
-
-  function FE_LT_04C6DrawTargetLine(unit, target) {
-    const from = tileToScreen(unit.x, unit.y);
-    const center = FE_PATCH_06BTargetCenter(target) || target;
-    const to = tileToScreen(center.x, center.y);
-    const targetType = target?.kind === 'building' ? 'building' : 'target';
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 110, 110, 0.88)';
-    ctx.lineWidth = 1.25;
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
-    ctx.lineTo(to.x, to.y);
-    ctx.stroke();
-
-    const hp = `${Math.max(0, Math.round(target.hp || 0))}/${Math.max(0, Math.round(target.maxHp || 0))}`;
-    ctx.fillStyle = 'rgba(24, 18, 18, 0.88)';
-    ctx.fillRect(to.x + 10, to.y - 10, 112, 16);
-    ctx.fillStyle = '#ff9a9a';
-    ctx.font = '11px Consolas, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${targetType} hp ${hp}`, to.x + 14, to.y - 2);
-    ctx.restore();
-  }
-
-  function FE_LT_04C6DrawPanel(units) {
-    const lines = [
-      `selected ${units.length}`,
-      `attack-move armed ${attackMoveArmed ? 'true' : 'false'}`
-    ];
-
-    for (let i = 0; i < Math.min(units.length, 3); i++) {
-      const unit = units[i];
-      const target = FE_PATCH_06BResolveAttackTarget(unit);
-      const move = unit.attackMoveTarget ? `${Math.round(unit.attackMoveTarget.x)},${Math.round(unit.attackMoveTarget.y)}` : 'none';
-      const targetLabel = target ? `${unit.attackTargetKind || target.kind || 'target'}:${target.id}` : 'none';
-      lines.push(`u${i + 1} state ${unit.state || 'idle'}`);
-      lines.push(`u${i + 1} atk ${targetLabel}`);
-      lines.push(`u${i + 1} move ${move}`);
-    }
-
-    const width = 196;
-    const lineH = 14;
-    const height = 10 + lines.length * lineH;
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(18, 20, 28, 0.78)';
-    ctx.strokeStyle = 'rgba(90, 220, 255, 0.55)';
-    ctx.lineWidth = 1;
-    ctx.fillRect(12, 12, width, height);
-    ctx.strokeRect(12, 12, width, height);
-    ctx.fillStyle = '#d8f6ff';
-    ctx.font = '11px Consolas, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], 20, 18 + i * lineH);
-    }
-
-    ctx.restore();
-  }
-
-  function FE_LT_04C6DrawCombatDebugOverlay() {
-    if (window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED !== true) return;
-    if (!game || game.screen !== 'game') return;
-
-    const units = FE_LT_04C6SelectedPlayerLightTanks();
-    FE_LT_04C6DrawPanel(units);
-    if (!units.length) return;
-
-    for (const unit of units) {
-      const stats = getLightTankCombatStats(unit);
-      const range = Math.max(1, Math.round(stats.range || 1));
-      FE_LT_04C6DrawRangeDiamond(unit, range);
-
-      if (unit.attackMoveTarget) {
-        FE_LT_04C6DrawAttackMoveMarker(unit.attackMoveTarget);
-      }
-
-      if (unit.attackTargetId) {
-        const target = FE_PATCH_06BResolveAttackTarget(unit);
-        if (
-          (target && unit.attackTargetKind === 'building' && FE_PATCH_06BIsAttackableEnemyBuilding(target)) ||
-          (target && unit.attackTargetKind !== 'building' && isLightTank(target) && isEnemyUnit(target))
-        ) {
-          FE_LT_04C6DrawTargetLine(unit, target);
-        }
-      }
-    }
-  }
-  // FE_LT_04C6_COMBAT_DEBUG_OVERLAY_END
-
   function render() {
     if (!game || game.screen !== 'game') {
       if (typeof FE_PATCH_06DHideDomOverlay === 'function') FE_PATCH_06DHideDomOverlay();
@@ -9372,7 +9227,16 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
       }
     }
 
-    FE_LT_04C6DrawCombatDebugOverlay();
+    if (window.FE_COMBAT_DEBUG_OVERLAY) {
+      window.FE_COMBAT_DEBUG_OVERLAY.drawOverlay({
+        ctx, tileToScreen, selectedPlayerLightTanks, selected,
+        attackMoveArmed, isLightTank, isPlayerUnit, isEnemyUnit,
+        getLightTankCombatStats,
+        resolveAttackTarget: FE_PATCH_06BResolveAttackTarget,
+        targetCenter: FE_PATCH_06BTargetCenter,
+        isAttackableEnemyBuilding: FE_PATCH_06BIsAttackableEnemyBuilding
+      });
+    }
     drawDragSelectionBox();
     FE_PATCH_06DDrawGameResultOverlay();
   }
@@ -11163,8 +11027,8 @@ window.addEventListener('keydown', e=>{
   if ((e.key === '9' || e.code === 'Numpad9') && game?.screen === 'game' && !game.paused) {
     e.preventDefault();
     keys['9'] = false;
-    window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED = window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED !== true;
-    showToast(window.FE_LT_04C6_COMBAT_DEBUG_OVERLAY_ENABLED ? 'Combat debug: ON' : 'Combat debug: OFF');
+    const enabled = window.FE_COMBAT_DEBUG_OVERLAY ? window.FE_COMBAT_DEBUG_OVERLAY.toggle() : false;
+    showToast(enabled ? 'Combat debug: ON' : 'Combat debug: OFF');
     return;
   }
 
