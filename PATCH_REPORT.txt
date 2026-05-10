@@ -2576,3 +2576,122 @@ Telemetry:
 6. game._attack10ActiveWave.reserveTankCount показывает отдельные резервные танки
 7. Когда target уничтожен / все wave units мертвы → wave release
 8. game._attack10LastWaveLock показывает action:'release', reason:'target_dead'
+
+---
+
+Задача: BOT-SCOUT-01 — enemy produces and uses scout MVP
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-01-enemy-scout-mvp (от sandbox/main)
+
+Цель:
+Enemy bot производит и использует scout как разведывательный юнит.
+Player также может производить scout с лимитом 2.
+Scout быстрее всех юнитов, имеет лучший обзор, не атакует.
+
+Что сделано:
+
+1. Scout tuning (units.js):
+   - Скорость: 0.72 → 1.08 (+50%)
+   - HP: 70 (без изменений)
+   - view: 7 (без изменений, лучший обзор)
+   - canAttack: false (без изменений)
+
+2. Scout visual (sprite_profiles.js):
+   - size: [84,84] → [92,92] (больше, но меньше light_tank [104,104])
+   - hpOffset: 34 → 38 (скорректирован под новый размер)
+
+3. Selection ring (main.js):
+   - scout: { x:0, y:-28, rx:0.88, ry:0.84 } → { x:0, y:-32, rx:0.92, ry:0.88 }
+   - Подстроен под увеличенный спрайт
+
+4. Scout cap (main.js):
+   - window.FE_SCOUT_CAP = 2 — глобальный лимит для обоих владельцев
+   - FE_SCOUT01GetScoutCountIncludingQueue(owner) — считает alive + queued + producing
+   - FE_SCOUT01PlayerCanProduceScout() — проверка лимита для player
+   - FE_SCOUT01EnemyCanProduceScout() — проверка лимита для enemy
+   - Player cap enforcement: в queueUnitProduction — блокировка + toast
+   - Player UI cap: кнопка scout disabled если кап достигнут
+   - Enemy cap enforcement: в ChooseFactoryUnitType — не возвращает 'scout' если кап достигнут
+
+5. Player scout production:
+   - Scout уже присутствовал в UI фабрики (PATCH-SCOUT-02)
+   - Добавлена проверка лимита в queueUnitProduction и openFactoryMenu
+   - Стоимость: 1 элемент, 18 сек (без изменений)
+   - Player может произвести до 2 scout (alive + queued + producing)
+
+6. Enemy scout production (ChooseFactoryUnitType):
+   - После builder/harvester приоритета, перед light_tank
+   - FE_SCOUT01_ENEMY_SCOUT_MIN = 1: первый scout производится всегда
+   - FE_SCOUT01_ENEMY_SCOUT_CAP = 2: второй scout — только если есть >=2 light_tank
+   - scoutQueued проверка: не ставить scout в очередь дважды
+   - Scout production не блокирует light_tank навсегда — после капа возвращается light_tank
+
+7. Scout behavior:
+   - FE_SCOUT01UpdateEnemyScoutBehavior() — основной цикл поведения scout
+   - Scout отправляется к scouting points: knowledge-based → map center → opposite corner
+   - FE_10C1_isCombatScoutCandidate — добавлен тип 'scout'
+   - FE_10C1_updateEnemyScoutingMvp — предпочитает scout unit type, fallback на light_tank
+   - Scout type не требует "2 tanks before scouting" gate
+   - FE_10G1_isUnitBusyForScout — scout type всегда free (не busy)
+   - Scout не атакует (canAttack:false)
+   - Scout не входит в combat wave (FE_PATCH_08BEnemyCombatUnits только light_tank)
+   - Scout не считается за combat strength
+
+8. isScout helper updates:
+   - FE_10D1_isActiveScout: добавлен u.type === 'scout'
+   - FE_10E1_isScout: добавлен u.type === 'scout'
+   - FE_10H1_isScout: добавлен u.type === 'scout'
+   - Scout type распознаётся как scout во всех подсистемах
+
+9. Scout vision telemetry:
+   - FE_SCOUT01UpdateScoutVision() — проверяет что видят enemy scout'ы
+   - Если scout видит player unit/building в радиусе view (7) — записывает:
+     lastSeenPlayerObjectId, lastSeenX, lastSeenY, lastSeenAt
+   - Telemetry: game._botScout01 = {
+       scoutsAlive, scoutCap, activeScoutId,
+       targetX, targetY, mode,
+       lastSeenPlayerObjectId, lastSeenX, lastSeenY, lastSeenAt
+     }
+
+10. updateEnemyBot hooks:
+    - FE_SCOUT01UpdateEnemyScoutBehavior() — каждый тик
+    - FE_SCOUT01UpdateScoutVision() — каждый тик
+    - Ошибки пишутся в game._botScout01BehaviorError / _botScout01VisionError
+
+Изменённые файлы:
+- src/config/units.js — scout speed 0.72→1.08
+- src/config/sprite_profiles.js — scout size [84,84]→[92,92], hpOffset 34→38
+- src/main.js — scout cap, player cap enforcement, enemy scout production, scout behavior, scout vision, isScout updates, selection ring, factory UI cap
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/config/units.js -> PASS
+- node --check src/config/sprite_profiles.js -> PASS
+
+Не тронуто:
+- findPath — нет
+- passable — нет
+- combat damage/range/cooldown — нет
+- ATTACK-08 invariant repair — нет
+- ATTACK-09 cap logic — нет (scout не считается как light_tank)
+- ATTACK-10 wave-lock — нет (scout не входит в wave через EnemyCombatUnits)
+- economy formulas — нет
+- map generation — нет
+- render/fog — нет (кроме selection ring и hpOffset)
+- save/load — нет
+- pathfinding — нет
+
+Как тестировать:
+1. Запустить игру, начать skirmish
+2. Player может производить scout из фабрики
+3. Player не может произвести больше 2 scout (alive + queued + producing)
+4. Если один scout уничтожен — можно произвести нового
+5. Enemy производит scout перед light_tank (1-2 scout)
+6. Enemy scout двигается к scouting point
+7. Scout не атакует
+8. Scout не входит в attack wave
+9. Enemy продолжает производить light_tank
+10. game._botScout01 обновляется каждый тик
+11. game._botScout01.lastSeenPlayerObjectId обновляется когда scout видит player объект

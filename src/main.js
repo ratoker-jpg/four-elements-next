@@ -2242,6 +2242,12 @@
     const def = UNIT_DEFS[unitType];
     if (!def) return;
 
+    // BOT-SCOUT-01: player scout cap.
+    if (unitType === 'scout' && typeof FE_SCOUT01PlayerCanProduceScout === 'function' && !FE_SCOUT01PlayerCanProduceScout()) {
+      showToast('Лимит разведчиков: максимум ' + (window.FE_SCOUT_CAP || 2));
+      return;
+    }
+
     factory.queue = factory.queue || [];
     if (factory.queue.length >= 2) {
       showToast('Очередь фабрики заполнена: максимум 2 юнита');
@@ -3400,6 +3406,216 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     }
   }
 
+  // BOT-SCOUT-01-ENEMY-SCOUT-MVP_START
+  // Scout cap, production, behavior, and telemetry for enemy + player scout MVP.
+  window.FE_SCOUT_CAP = 2;
+
+  // Count alive + queued + currently-producing scouts for a given owner.
+  function FE_SCOUT01GetScoutCountIncludingQueue(owner) {
+    if (!game) return 0;
+    var alive = 0;
+    var units = game.units || [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (u && u.type === 'scout' && unitOwner(u) === owner && (u.hp ?? 1) > 0) {
+        alive++;
+      }
+    }
+    var queued = 0;
+    // Player factories
+    if (owner === 'player') {
+      for (var bi = 0; bi < (game.buildings || []).length; bi++) {
+        var b = game.buildings[bi];
+        if (b && b.type === 'units_factory' && isPlayerBuilding(b) && Array.isArray(b.queue)) {
+          for (var qi = 0; qi < b.queue.length; qi++) {
+            if (b.queue[qi].type === 'scout') queued++;
+          }
+        }
+      }
+    }
+    // Enemy factories
+    if (owner === 'enemy') {
+      var factories = FE_PATCH_09ECompleteEnemyFactories();
+      for (var fi = 0; fi < factories.length; fi++) {
+        var fq = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
+        for (var qi2 = 0; qi2 < fq.length; qi2++) {
+          if (fq[qi2].type === 'scout') queued++;
+        }
+      }
+    }
+    return alive + queued;
+  }
+
+  // Player scout cap check — returns true if player can produce another scout.
+  function FE_SCOUT01PlayerCanProduceScout() {
+    var cap = window.FE_SCOUT_CAP;
+    if (cap != null && cap > 0) {
+      return FE_SCOUT01GetScoutCountIncludingQueue('player') < cap;
+    }
+    return true;
+  }
+
+  // Enemy scout cap check — returns true if enemy can produce another scout.
+  function FE_SCOUT01EnemyCanProduceScout() {
+    var cap = window.FE_SCOUT_CAP;
+    if (cap != null && cap > 0) {
+      return FE_SCOUT01GetScoutCountIncludingQueue('enemy') < cap;
+    }
+    return true;
+  }
+
+  // Enemy scout production: constants.
+  var FE_SCOUT01_ENEMY_SCOUT_MIN = 1;
+  var FE_SCOUT01_ENEMY_SCOUT_CAP = 2;
+
+  // Get all enemy scout units (alive).
+  function FE_SCOUT01GetEnemyScouts() {
+    return (game?.units || []).filter(u =>
+      u && u.type === 'scout' && isEnemyUnit(u) && (u.hp || 0) > 0
+    );
+  }
+
+  // Get all player scout units (alive).
+  function FE_SCOUT01GetPlayerScouts() {
+    return (game?.units || []).filter(u =>
+      u && u.type === 'scout' && isPlayerUnit(u) && (u.hp || 0) > 0
+    );
+  }
+
+  // Scout behavior: choose next scouting target for an enemy scout.
+  // Priority: knowledge-based → last known player area → map center → opposite corner.
+  function FE_SCOUT01ChooseScoutTarget(scoutUnit) {
+    // Try knowledge-based target first (reuse 10G1 infrastructure).
+    if (typeof FE_10G1_chooseKnowledgeScoutTarget === 'function') {
+      var knowledgeTarget = FE_10G1_chooseKnowledgeScoutTarget(scoutUnit);
+      if (knowledgeTarget) return knowledgeTarget;
+    }
+    // Fallback to map-probe targets.
+    var targets = FE_10C1_chooseScoutTargets();
+    var scoutState = game?.enemyScoutingMvp;
+    if (targets.length) {
+      var idx = ((scoutState?.targetIndex || 0) + 1) % targets.length;
+      if (scoutState) scoutState.targetIndex = idx;
+      return FE_10G1_clampScoutPoint({
+        ...targets[idx],
+        source: 'map_probe',
+        confidence: 0,
+        reason: 'scout_mvp_map_probe'
+      });
+    }
+    return null;
+  }
+
+  // Check if enemy scout has a valid active scout order.
+  function FE_SCOUT01IsScoutEnRoute(scoutUnit) {
+    if (!scoutUnit) return false;
+    if (scoutUnit._fe10c1Role === 'scout' && scoutUnit._fe10c1ScoutTarget) {
+      var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      var age = now - (scoutUnit._fe10c1ScoutIssuedAt || 0);
+      var d = FE_10C1_distTiles(scoutUnit, scoutUnit._fe10c1ScoutTarget);
+      return age < 30000 && d > 3;
+    }
+    return false;
+  }
+
+  // Main enemy scout behavior update loop.
+  function FE_SCOUT01UpdateEnemyScoutBehavior() {
+    if (!game || game.screen !== 'game') return;
+    var scouts = FE_SCOUT01GetEnemyScouts();
+    if (!scouts.length) return;
+
+    for (var i = 0; i < scouts.length; i++) {
+      var s = scouts[i];
+      // Skip if already en route to a scout target.
+      if (FE_SCOUT01IsScoutEnRoute(s)) continue;
+      // Skip if currently in combat/attack state (shouldn't happen but safety).
+      if (s.attackTargetId || s.attackTarget || s._attackCommanded) continue;
+      // Skip if wave-locked (shouldn't happen, scout is excluded from waves).
+      if (FE_ATTACK10IsWaveLocked(s)) continue;
+
+      var target = FE_SCOUT01ChooseScoutTarget(s);
+      if (target) {
+        FE_10C1_trySetScoutMove(s, target);
+      }
+    }
+  }
+
+  // Scout vision: record what enemy scouts see (knowledge/telemetry).
+  function FE_SCOUT01UpdateScoutVision() {
+    if (!game) return;
+    var scouts = FE_SCOUT01GetEnemyScouts();
+    if (!scouts.length) {
+      if (game._botScout01) {
+        game._botScout01.scoutsAlive = 0;
+        game._botScout01.activeScoutId = null;
+        game._botScout01.mode = 'no_scouts';
+      }
+      return;
+    }
+
+    var lastSeenObjectId = null;
+    var lastSeenX = null;
+    var lastSeenY = null;
+    var lastSeenAt = null;
+
+    for (var i = 0; i < scouts.length; i++) {
+      var s = scouts[i];
+      var sx = Math.round(Number.isFinite(s.x) ? s.x : (s.tx || 0));
+      var sy = Math.round(Number.isFinite(s.y) ? s.y : (s.ty || 0));
+      var viewRange = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+
+      // Check if any player unit/building is in vision range.
+      var units = game.units || [];
+      for (var j = 0; j < units.length; j++) {
+        var pu = units[j];
+        if (!pu || !isPlayerUnit(pu) || (pu.hp || 0) <= 0) continue;
+        var px = Math.round(Number.isFinite(pu.x) ? pu.x : (pu.tx || 0));
+        var py = Math.round(Number.isFinite(pu.y) ? pu.y : (pu.ty || 0));
+        var dist = Math.abs(sx - px) + Math.abs(sy - py);
+        if (dist <= viewRange) {
+          lastSeenObjectId = pu.id || null;
+          lastSeenX = px;
+          lastSeenY = py;
+          lastSeenAt = Number(game.time || 0);
+          break;
+        }
+      }
+      if (lastSeenObjectId) break;
+
+      var buildings = game.buildings || [];
+      for (var k = 0; k < buildings.length; k++) {
+        var pb = buildings[k];
+        if (!pb || !isPlayerBuilding(pb) || (pb.hp || 0) <= 0) continue;
+        var bx = Math.round(pb.x + (pb.w || 1) / 2);
+        var by = Math.round(pb.y + (pb.h || 1) / 2);
+        var dist2 = Math.abs(sx - bx) + Math.abs(sy - by);
+        if (dist2 <= viewRange) {
+          lastSeenObjectId = pb.id || null;
+          lastSeenX = bx;
+          lastSeenY = by;
+          lastSeenAt = Number(game.time || 0);
+          break;
+        }
+      }
+      if (lastSeenObjectId) break;
+    }
+
+    // Update telemetry.
+    game._botScout01 = {
+      scoutsAlive: scouts.length,
+      scoutCap: window.FE_SCOUT_CAP || 0,
+      activeScoutId: scouts[0]?.id || null,
+      targetX: scouts[0]?._fe10c1ScoutTarget?.x ?? null,
+      targetY: scouts[0]?._fe10c1ScoutTarget?.y ?? null,
+      mode: scouts.length > 0 ? 'scouting' : 'no_scouts',
+      lastSeenPlayerObjectId: lastSeenObjectId,
+      lastSeenX: lastSeenX,
+      lastSeenY: lastSeenY,
+      lastSeenAt: lastSeenAt
+    };
+  }
+  // BOT-SCOUT-01-ENEMY-SCOUT-MVP_END
+
   function FE_PATCH_08BShouldKeepUnitNearHome(unit, state, radius=FE_10I1_knobs().defendRadiusTiles) {
     if (!unit || !state) return false;
     return unitDistanceCells(unit, { x: state.homeX, y: state.homeY }) > radius;
@@ -3587,7 +3803,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   function FE_10C1_isCombatScoutCandidate(u) {
     if (!FE_10C1_isEnemyUnit(u)) return false;
     const t = String(u.type || '').toLowerCase();
-    return t === 'light_tank' || t.includes('tank');
+    // BOT-SCOUT-01: scout units are preferred scout candidates.
+    return t === 'scout' || t === 'light_tank' || t.includes('tank');
   }
 
   function FE_10C1_getEnemyHQ() {
@@ -3739,6 +3956,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10G1_isUnitBusyForScout(unit) {
     if (!unit) return true;
+    // BOT-SCOUT-01: scout type units are never busy — they are born to scout.
+    if (unit.type === 'scout') return false;
     const s = String(unit.state || unit.command || '').toLowerCase();
     return !!(
       unit.attackTargetId ||
@@ -3868,9 +4087,14 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     scoutState.nextThinkAt = now + FE_10I1_knobs().scoutThinkIntervalMs;
 
     const enemyTanks = FE_10C1_getUnitList().filter(FE_10C1_isCombatScoutCandidate);
+    // BOT-SCOUT-01: separate actual scout units from tank-based scouting.
+    const actualScouts = enemyTanks.filter(u => u.type === 'scout');
     scoutState.availableCombatScouts = enemyTanks.length;
+    scoutState.actualScoutCount = actualScouts.length;
 
-    if (enemyTanks.length < 2) {
+    // If we have actual scout units, they scout immediately (no "need 2 tanks" gate).
+    // If no actual scouts, fall back to old behavior: need 2 tanks.
+    if (!actualScouts.length && enemyTanks.length < 2) {
       scoutState.status = 'waiting_for_second_tank';
       scoutState.targetSource = 'none';
       scoutState.targetConfidence = 0;
@@ -3895,7 +4119,12 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       return;
     }
 
-    const scout = enemyTanks.find((u) => !FE_10G1_isUnitBusyForScout(u));
+    // BOT-SCOUT-01: prefer actual scout units for scouting. Only use tanks as fallback.
+    var freeScout = actualScouts.find((u) => !FE_10G1_isUnitBusyForScout(u));
+    if (!freeScout) {
+      freeScout = enemyTanks.find((u) => u.type !== 'scout' && !FE_10G1_isUnitBusyForScout(u));
+    }
+    const scout = freeScout;
     if (!scout) {
       scoutState.status = 'no_free_scout';
       scoutState.targetSource = 'none';
@@ -4012,7 +4241,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   function FE_10D1_isActiveScout(unit) {
-    return unit?._fe10c1Role === 'scout' || unit?._scouting === true;
+    // BOT-SCOUT-01: actual scout unit type is always a scout.
+    return !!unit && (unit.type === 'scout' || unit._fe10c1Role === 'scout' || unit._scouting === true);
   }
 
   function FE_10D1_hasActiveAttackOrder(unit) {
@@ -4433,7 +4663,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   function FE_10E1_isScout(unit) {
-    return !!unit && (unit._fe10c1Role === 'scout' || unit._scouting === true);
+    // BOT-SCOUT-01: actual scout unit type is always a scout.
+    return !!unit && (unit.type === 'scout' || unit._fe10c1Role === 'scout' || unit._scouting === true);
   }
 
   function FE_10E1_localPlayerTanks(enemyTanks, enemyHQ) {
@@ -4669,7 +4900,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   function FE_10H1_isScout(unit) {
-    return !!unit && (unit._fe10c1Role === 'scout' || unit._scouting === true);
+    // BOT-SCOUT-01: actual scout unit type is always a scout.
+    return !!unit && (unit.type === 'scout' || unit._fe10c1Role === 'scout' || unit._scouting === true);
   }
 
   function FE_10H1_isRetreating(unit) {
@@ -4980,6 +5212,18 @@ function updateEnemyBot(dt) {
     } catch (err) {
       const g10c1 = FE_10C1_getGameObject && FE_10C1_getGameObject();
       if (g10c1) g10c1.enemyScoutingMvpError = String(err && err.message ? err.message : err);
+    }
+
+    // BOT-SCOUT-01: enemy scout behavior and vision telemetry hooks.
+    try {
+      FE_SCOUT01UpdateEnemyScoutBehavior();
+    } catch (err) {
+      if (game) game._botScout01BehaviorError = String(err && err.message ? err.message : err);
+    }
+    try {
+      FE_SCOUT01UpdateScoutVision();
+    } catch (err) {
+      if (game) game._botScout01VisionError = String(err && err.message ? err.message : err);
     }
 
     if (!game || game.screen !== 'game' || game.paused) return;
@@ -7488,14 +7732,15 @@ function debugLog(event, payload={}) {
     }
     game._baseline01LastWorkerCheck = now;
 
-    // Check if a worker is already queued in any factory to avoid double-order.
-    var harvesterQueued = false, builderQueued = false;
+    // Check if a worker/scout is already queued in any factory to avoid double-order.
+    var harvesterQueued = false, builderQueued = false, scoutQueued = false;
     var factories = FE_PATCH_09ECompleteEnemyFactories();
     for (var fi = 0; fi < factories.length; fi++) {
       var fq = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
       for (var qi = 0; qi < fq.length; qi++) {
         if (fq[qi].type === 'harvester') harvesterQueued = true;
         if (fq[qi].type === 'builder') builderQueued = true;
+        if (fq[qi].type === 'scout') scoutQueued = true;
       }
     }
 
@@ -7505,6 +7750,18 @@ function debugLog(event, payload={}) {
     // Builder first (no builder = no buildings), then harvester.
     if (buildCount < FE_PATCH_BASELINE_01_BUILDER_MIN && !builderQueued && buildCount < FE_PATCH_BASELINE_01_BUILDER_CAP) return 'builder';
     if (harvCount < FE_PATCH_BASELINE_01_HARVESTER_MIN && !harvesterQueued && harvCount < FE_PATCH_BASELINE_01_HARVESTER_CAP) return 'harvester';
+
+    // BOT-SCOUT-01: produce scouts before light_tank, up to scout cap.
+    // Scout production does not permanently block light_tank — once cap is reached, skip.
+    if (typeof FE_SCOUT01EnemyCanProduceScout === 'function' && FE_SCOUT01EnemyCanProduceScout() && !scoutQueued) {
+      var scoutCount = typeof FE_SCOUT01GetScoutCountIncludingQueue === 'function'
+        ? FE_SCOUT01GetScoutCountIncludingQueue('enemy') : 0;
+      if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_MIN) return 'scout';
+      // Produce second scout only if we have enough tanks (don't delay army).
+      var tankCount = typeof FE_ATTACK09GetEnemyLightTankCountIncludingQueue === 'function'
+        ? FE_ATTACK09GetEnemyLightTankCountIncludingQueue() : 0;
+      if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_CAP && tankCount >= 2) return 'scout';
+    }
 
     // ATTACK-09: if light_tank cap is reached, return null (factory waits, no builder spam).
     var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
@@ -10252,7 +10509,9 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
       <div style="font-size:13px;color:#ffdca0;margin-bottom:8px">Очередь: ${q.length}/2<br>Элемент фракции: ${elCount}</div>
       ${['builder','harvester','light_tank','scout'].map(type=>{
         const u=UNIT_DEFS[type];
-        const disabled = (q.length>=2 || elCount < u.costElement) ? ' disabled' : '';
+        // BOT-SCOUT-01: disable scout button if cap reached.
+        let disabled = (q.length>=2 || elCount < u.costElement) ? ' disabled' : '';
+        if (type === 'scout' && typeof FE_SCOUT01PlayerCanProduceScout === 'function' && !FE_SCOUT01PlayerCanProduceScout()) disabled = ' disabled';
         const time = u.productionTime;
         return `<button class="action-btn${disabled}" data-produce="${type}">${u.name}<br><span style="font-size:13px;color:#ffdca0">Цена: ${u.costElement} элемент / ${time} сек</span></button>`;
       }).join('')}
@@ -10839,7 +11098,7 @@ function setGroupManualMove(units, tx, ty) {
       light_tank: { x: 0, y: -32, rx: 0.98, ry: 0.92 },
       harvester: { x: 0, y: -30, rx: 1.00, ry: 0.94 },
       builder: { x: 0, y: -12, rx: 0.92, ry: 0.88 },
-      scout: { x: 0, y: -28, rx: 0.88, ry: 0.84 },
+      scout: { x: 0, y: -32, rx: 0.92, ry: 0.88 },
       // PATCH-VIS-04B-ROBUST-FACTION-RING-COLOR-BUILDER-FIX_END
     };
 
