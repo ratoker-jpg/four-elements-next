@@ -3153,6 +3153,54 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return true;
   }
 
+  // ATTACK-08: Глобальный per-tick инвариант-репейр для enemy attack-order.
+  // Вызывается после updateEnemyBot в game loop — чинит рассинхрон state/command
+  // для enemy light_tank с активным attack-ордером, вне зависимости от фазы бота.
+  function FE_ATTACK08RepairEnemyAttackInvariant() {
+    if (typeof game === 'undefined' || !game || !game.units) return;
+    for (var i = 0; i < game.units.length; i++) {
+      var u = game.units[i];
+      if (!u || u.type !== 'light_tank') continue;
+      var _owner = String(u.owner || u.side || u.player || '').toLowerCase();
+      if (_owner !== 'enemy') continue;
+      if (!u.attackApproachTargetId) continue;
+      if (String(u.command || '').toLowerCase() !== 'attack') continue;
+      // Проверяем что target жив
+      var _tgt = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(u) : null;
+      if (!_tgt || (_tgt.hp || 0) <= 0) continue;
+      // Инвариант: state должен быть attack_approach
+      if (u.state === 'attack_approach') continue; // уже ОК
+      // Нарушение инварианта — чиним
+      var _beforeState = u.state || '';
+      var _pathBefore = u.path ? u.path.length : 0;
+      var _action = '';
+      if (u.path && u.path.length > 0) {
+        // Path есть — просто восстанавливаем state, не пересчитываем path
+        u.state = 'attack_approach';
+        _action = 'state_restore';
+      } else {
+        // Path пуст — перепрокладываем путь к target
+        if (typeof setLightTankAttackApproachGeneric === 'function') {
+          setLightTankAttackApproachGeneric(u, _tgt, { toast: false, marker: false });
+        }
+        _action = 'repath';
+      }
+      var _pathAfter = u.path ? u.path.length : 0;
+      // Телеметрия
+      game._attack08LastInvariantRepair = {
+        unitId: u.id || u.uid || null,
+        beforeState: _beforeState,
+        afterState: u.state || '',
+        command: u.command || '',
+        targetId: u.attackApproachTargetId || null,
+        pathLenBefore: _pathBefore,
+        pathLenAfter: _pathAfter,
+        action: _action
+      };
+      game._attack08InvariantRepairCount = (game._attack08InvariantRepairCount || 0) + 1;
+    }
+  }
+
   // ATTACK-04: Helper to write override-check telemetry.
   function FE_PATCH_08BAttack04Telemetry(phase, source, blocked, reason, targetId, count) {
     if (typeof game === 'undefined' || !game) return;
@@ -11628,6 +11676,11 @@ window.addEventListener('keydown', e=>{
     }
 
     updateEnemyBot(dt);
+    // ATTACK-08: Глобальный per-tick инвариант-репейр.
+    // Вызывается ПОСЛЕ movement loop и updateEnemyBot — чинит рассинхрон
+    // state/command/attackApproachTargetId для enemy light_tank.
+    // ATTACK-07 sync работает только в attack phase — если фаза другая, рассинхрон остаётся.
+    FE_ATTACK08RepairEnemyAttackInvariant();
     updateTerritory(dt);
     updateFog();
     FE_PATCH_06DCheckVictoryDefeat('update_check');

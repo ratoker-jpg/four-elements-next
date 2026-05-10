@@ -2315,3 +2315,74 @@ guards не срабатывают, autopilot/strength gate перезаписы
 - Sync loop вызывает setLightTankAttackApproachGeneric на каждом тике attack phase
   для рассинхронизированных танков — может быть дорого если много танков,
   но на практике количество рассинхронов мало.
+
+---
+
+Задача: BOT-ATTACK-08 — global repair for enemy attack-order invariant
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-08-global-attack-invariant-repair (от sandbox/main)
+
+Проблема:
+ATTACK-07 sync loop работает только внутри updateEnemyBot attack phase.
+Если бот перешёл в regroup/prepare_attack — фаза не attack, sync не выполняется.
+Рассинхрон manual_move + command='attack' + attackApproachTargetId остаётся навсегда.
+game._attack07LastInvariantFix остаётся null — repair не вызывается.
+
+Корневая причина:
+ATTACK-07 sync привязан к фазе бота. Инвариант должен проверяться глобально,
+каждый тик, вне зависимости от фазы бота.
+
+Что исправлено:
+
+1. Новая функция FE_ATTACK08RepairEnemyAttackInvariant() (строка ~3159):
+   - Проходит по всем game.units каждый тик
+   - Для каждого enemy light_tank с command='attack' + attackApproachTargetId + живой target:
+     - Если state !== 'attack_approach' — нарушение инварианта
+     - Path есть → state_restore: просто u.state = 'attack_approach' (не пересчитываем path)
+     - Path пуст → repath: setLightTankAttackApproachGeneric(unit, target)
+   - Телеметрия: game._attack08LastInvariantRepair
+   - Счётчик: game._attack08InvariantRepairCount
+
+2. Вызов в game loop (строка ~11635):
+   - После updateEnemyBot(dt) — ПОСЛЕ всех мест, которые могут менять state/path
+   - Порядок: movement loop → updateEnemyBot → ATTACK-08 repair → остальное
+   - Гарантирует что BAD state не остаётся видимым в console watcher больше 1 тика
+
+Инвариант:
+Enemy light_tank с command='attack' + attackApproachTargetId + живой target
+→ state ДОЛЖЕН быть 'attack_approach'
+
+Телеметрия game._attack08LastInvariantRepair:
+{
+  unitId, beforeState, afterState, command,
+  targetId, pathLenBefore, pathLenAfter,
+  action: 'state_restore' | 'repath'
+}
+
+Счётчик: game._attack08InvariantRepairCount
+
+Новая логика: ~45 строк (функция + вызов)
+
+Изменённые файлы:
+- src/main.js — 2 правки: функция + вызов в game loop
+- PATCH_REPORT.txt — добавлена эта запись
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто:
+- findPath, passable — нет
+- combat — нет
+- scout — нет
+- economy — нет
+- updateEnemyBot — нет
+- player manual movement — нет
+
+Риски:
+- state_restore не пересчитывает path — если path ведёт не к attack target,
+  танк будет ехать по неправильному path но в правильном state.
+  Следующий тик ATTACK-07/05 sync поймёт path_goal_mismatch и перепроложит.
+- repath вызывает setLightTankAttackApproachGeneric каждый тик для танков без path —
+  если все approach-клетки заблокированы, это будет повторяться каждый тик.
+  Но findPath быстрый для небольших расстояний.
