@@ -3508,8 +3508,18 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   // Check if enemy scout has a valid active scout order.
   function FE_SCOUT01IsScoutEnRoute(scoutUnit) {
+    // BOT-SCOUT-01C: also return false if path is missing/empty while idle.
     if (!scoutUnit) return false;
     if (scoutUnit._fe10c1Role === 'scout' && scoutUnit._fe10c1ScoutTarget) {
+      // If scout has target metadata but no actual path and is idle,
+      // it is NOT en route — it's stuck and needs a repath.
+      var hasPath = scoutUnit.path && scoutUnit.path.length > 0;
+      var isIdle = !scoutUnit.state || scoutUnit.state === 'idle';
+      if (!hasPath && isIdle) return false;
+
+      // Also not en route if state is manual_move but path disappeared.
+      if (!hasPath && scoutUnit.state === 'manual_move') return false;
+
       var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
       var age = now - (scoutUnit._fe10c1ScoutIssuedAt || 0);
       var d = FE_10C1_distTiles(scoutUnit, scoutUnit._fe10c1ScoutTarget);
@@ -3526,13 +3536,28 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
     for (var i = 0; i < scouts.length; i++) {
       var s = scouts[i];
-      // Skip if already en route to a scout target.
-      if (FE_SCOUT01IsScoutEnRoute(s)) continue;
       // Skip if currently in combat/attack state (shouldn't happen but safety).
       if (s.attackTargetId || s.attackTarget || s._attackCommanded) continue;
       // Skip if wave-locked (shouldn't happen, scout is excluded from waves).
       if (FE_ATTACK10IsWaveLocked(s)) continue;
 
+      var hasPath = s.path && s.path.length > 0;
+      var isIdle = !s.state || s.state === 'idle';
+
+      // BOT-SCOUT-01C: repath if scout has target metadata but no actual path
+      // and is idle — this means the original path assignment failed or was lost.
+      if (s._fe10c1Role === 'scout' && s._fe10c1ScoutTarget && !hasPath && isIdle) {
+        var repathOk = FE_10C1_trySetScoutMove(s, s._fe10c1ScoutTarget);
+        if (repathOk) continue; // repath succeeded, scout is now moving
+        // repath failed — clear stale metadata so a new target can be chosen
+        s._fe10c1ScoutTarget = null;
+        s._fe10c1Role = null;
+      }
+
+      // Skip if already en route to a scout target with a valid path.
+      if (FE_SCOUT01IsScoutEnRoute(s)) continue;
+
+      // Choose a new target and assign path.
       var target = FE_SCOUT01ChooseScoutTarget(s);
       if (target) {
         FE_10C1_trySetScoutMove(s, target);
@@ -3977,16 +4002,25 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   function FE_10C1_trySetScoutMove(unit, target) {
-    // BOT-SCOUT-01B: fixed path assignment — use correct findPath signature,
-    // set state='manual_move', clear direction cache, add telemetry.
-    if (!unit || !target) return false;
+    // BOT-SCOUT-01C: improved telemetry with all reason codes.
+    // Fixed path assignment — use correct findPath signature,
+    // set state='manual_move', clear direction cache.
+    var beforeState = unit.state || 'idle';
+    var beforePathLen = (unit.path && unit.path.length) || 0;
 
-    if (unit.attackTargetId || unit.attackTarget || unit._attackCommanded) return false;
+    // Guard: no unit or no target.
+    if (!unit || !target) {
+      FE_SCOUT01B_WriteMoveTelemetry(unit, beforeState, 0, false, 'no_target', 0, 0, 0, 0);
+      return false;
+    }
+
+    if (unit.attackTargetId || unit.attackTarget || unit._attackCommanded) {
+      FE_SCOUT01B_WriteMoveTelemetry(unit, beforeState, beforePathLen, false, 'skipped_en_route', 0, 0, 0, 0);
+      return false;
+    }
 
     var tx = Math.round(target.x);
     var ty = Math.round(target.y);
-    var beforeState = unit.state || 'idle';
-    var beforePathLen = (unit.path && unit.path.length) || 0;
 
     // Record scout metadata regardless of path success.
     unit._fe10c1ScoutTarget = {
@@ -4012,26 +4046,28 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     unit.attackTarget = null;
     unit._attackCommanded = false;
 
-    // Compute path using the correct findPath(unit, goal, unitId) signature.
-    // findPath expects ({x,y}, {x,y}, unitId) — see line ~5516.
+    // Compute path using the correct findPath({x,y}, {x,y}, unitId) signature.
     var sx = FE_10C1_unitTileX(unit);
     var sy = FE_10C1_unitTileY(unit);
     var pathOk = false;
     var pathFailReason = '';
     var pathLen = 0;
 
+    // Detect if this is a repath attempt (had metadata, no path, idle).
+    var isRepath = beforePathLen === 0 && (beforeState === 'idle' || beforeState === 'manual_move');
+
     // Same-tile check: already at destination.
     if (sx === tx && sy === ty) {
       pathFailReason = 'same_tile';
     } else if (typeof findPath !== 'function') {
-      pathFailReason = 'no_findPath';
+      pathFailReason = 'no_path';
     } else {
       try {
         var path = findPath({ x: sx, y: sy }, { x: tx, y: ty }, unit.id);
         if (path === null) {
-          pathFailReason = 'unreachable';
+          pathFailReason = 'no_path';
         } else if (!Array.isArray(path) || !path.length) {
-          pathFailReason = 'empty_path';
+          pathFailReason = isRepath ? 'repath_empty_path' : 'empty_path';
         } else {
           unit.path = path;
           pathLen = path.length;
@@ -4050,32 +4086,36 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       unit._dirDy = 0;
       unit._blockedTimer = 0;
       unit._stuckTimer = 0;
-    } else {
-      // Path failed — leave state as-is so behavior loop can retry or pick a new target.
-      // Do NOT set state='idle' here; the unit might be doing something else.
     }
+    // If path failed, state stays as-is so behavior loop can retry or pick a new target.
 
-    // BOT-SCOUT-01B telemetry.
+    // Write telemetry (always, for every call).
+    FE_SCOUT01B_WriteMoveTelemetry(unit, beforeState, beforePathLen, pathOk,
+      pathFailReason || 'ok', pathLen, sx, sy, tx, ty);
+
+    return pathOk;
+  }
+
+  // BOT-SCOUT-01C: centralized telemetry writer — always writes game._botScout01MoveFix.
+  function FE_SCOUT01B_WriteMoveTelemetry(unit, beforeState, beforePathLen, ok, reason, pathLen, sx, sy, tx, ty) {
     try {
       if (typeof game !== 'undefined' && game) {
         game._botScout01MoveFix = {
-          scoutId: unit.id || unit.uid || null,
-          fromX: sx,
-          fromY: sy,
-          targetX: tx,
-          targetY: ty,
-          beforeState: beforeState,
-          afterState: unit.state || '',
-          beforePathLen: beforePathLen,
-          pathLen: pathLen,
-          ok: pathOk,
-          reason: pathFailReason || (pathOk ? 'ok' : ''),
+          scoutId: (unit && (unit.id || unit.uid)) || null,
+          fromX: sx || 0,
+          fromY: sy || 0,
+          targetX: tx || 0,
+          targetY: ty || 0,
+          beforeState: beforeState || '',
+          afterState: (unit && unit.state) || '',
+          beforePathLen: beforePathLen || 0,
+          pathLen: pathLen || 0,
+          ok: !!ok,
+          reason: reason || '',
           at: (typeof performance !== 'undefined' ? performance.now() : Date.now())
         };
       }
     } catch (_) {}
-
-    return pathOk;
   }
 
   function FE_10C1_updateEnemyScoutingMvp() {
