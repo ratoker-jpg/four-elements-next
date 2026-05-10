@@ -3140,6 +3140,19 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return phq && (phq.hp || 0) > 0;
   }
 
+  // ATTACK-07: Проверка инварианта — есть ли у enemy light_tank активный attack-ордер.
+  // Не зависит от _attack02HqPush, проверяет только состояние самого юнита.
+  function FE_ATTACK07HasActiveEnemyAttackOrder(unit) {
+    if (!unit || unit.type !== 'light_tank') return false;
+    var _owner = String(unit.owner || unit.side || unit.player || '').toLowerCase();
+    if (_owner !== 'enemy') return false;
+    if (!unit.attackApproachTargetId) return false;
+    if (String(unit.command || '').toLowerCase() !== 'attack') return false;
+    var _target = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(unit) : null;
+    if (!_target || (_target.hp || 0) <= 0) return false;
+    return true;
+  }
+
   // ATTACK-04: Helper to write override-check telemetry.
   function FE_PATCH_08BAttack04Telemetry(phase, source, blocked, reason, targetId, count) {
     if (typeof game === 'undefined' || !game) return;
@@ -3878,7 +3891,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10D1_tryMove(unit, target, reason) {
     if (!unit || !target) return false;
-    // ATTACK-05: do not overwrite movement for tanks with active hq_push attack orders.
+    // ATTACK-07: Не перезаписывать движение для enemy танков с активным attack-ордером.
+    // Проверка по инварианту юнита, без зависимости от _attack02HqPush.
+    if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return false;
+    // ATTACK-05: fallback — проверка через _attack02HqPush.
     if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
       var _a05St3 = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
       if (_a05St3 && _a05St3._attack02HqPush) return false;
@@ -4252,10 +4268,12 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_clearAttackOrder(unit) {
     if (!unit) return;
-    // ATTACK-05: do not clear hq_push attack orders — strength gate must not suppress active hq_push wave.
+    // ATTACK-07: Не очищать attack-ордер если у enemy танка живой attack target.
+    if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return;
+    // ATTACK-05: fallback — проверка через _attack02HqPush.
     if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
       var _a05St = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
-      if (_a05St && _a05St._attack02HqPush) return; // hq_push active — preserve attack order
+      if (_a05St && _a05St._attack02HqPush) return;
     }
     unit.attackTargetId = null;
     unit.attackApproachTargetId = null;
@@ -4268,7 +4286,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_returnToHq(unit, enemyHQ, index) {
     if (!unit || !enemyHQ) return false;
-    // ATTACK-05: do not return tank to base if hq_push attack is active.
+    // ATTACK-07: Не возвращать танк на базу если у него активный enemy attack-ордер.
+    if (typeof FE_ATTACK07HasActiveEnemyAttackOrder === 'function' && FE_ATTACK07HasActiveEnemyAttackOrder(unit)) return false;
+    // ATTACK-05: fallback — проверка через _attack02HqPush.
     if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
       var _a05St2 = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
       if (_a05St2 && _a05St2._attack02HqPush) return false;
@@ -4855,37 +4875,59 @@ function updateEnemyBot(dt) {
           FE_PATCH_08BSetKnownTarget(state, _a03Target, _a03u);
         }
       }
-      // ATTACK-05: sync hq_push tanks — if attackApproachTargetId set but targetX/targetY/state/command
-      // are stale (overwritten by FE_10D1/FE_10E1 patrol/return), re-sync them to match attack approach.
-      if (state._attack02HqPush && _a03Target) {
-        var _a05Synced = 0, _a05Manual = 0, _a05Wrong = 0, _a05NoPath = 0, _a05Sample = [];
-        var _a05PHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
-        var _a05TgtX = _a03Target.x, _a05TgtY = _a03Target.y;
-        for (var _a05j = 0; _a05j < enemyTanks.length; _a05j++) {
-          var _a05u = enemyTanks[_a05j];
-          if (!_a05u || !_a05u.attackApproachTargetId) continue;
-          var _a05tx = Number.isFinite(_a05u.targetX) ? _a05u.targetX : null;
-          var _a05ty = Number.isFinite(_a05u.targetY) ? _a05u.targetY : null;
-          if (_a05u.state === 'manual_move' || _a05u.state === 'moving') _a05Manual++;
-          var _a05approachDist = (_a05tx !== null && _a05ty !== null) ? Math.abs(_a05tx - _a05TgtX) + Math.abs(_a05ty - _a05TgtY) : 9999;
-          if (_a05approachDist > 5) _a05Wrong++;
-          if (!(_a05u.path && _a05u.path.length)) _a05NoPath++;
-          if (_a05u.state !== 'attack_approach' || _a05approachDist > 5 || !(_a05u.path && _a05u.path.length)) {
-            setLightTankAttackApproachGeneric(_a05u, _a03Target, { toast: false, marker: false });
-            _a05Synced++;
+      // ATTACK-07: Расширенная синхронизация — исправляет рассинхрон attack_approach/manual_move
+      // для ВСЕХ enemy light_tank с активным attack-ордером, не только при _attack02HqPush.
+      // ATTACK-05: оригинальная синхронизация зависела от state._attack02HqPush — если флаг сброшен,
+      // рассинхрон не чинился. Теперь проверяем инвариант на самом юните.
+      var _a07Synced = 0, _a07Fixed = [];
+      for (var _a07i = 0; _a07i < enemyTanks.length; _a07i++) {
+        var _a07u = enemyTanks[_a07i];
+        if (!_a07u) continue;
+        // Проверяем инвариант: enemy light_tank с attackApproachTargetId + command=attack
+        var _a07owner = String(_a07u.owner || _a07u.side || _a07u.player || '').toLowerCase();
+        if (_a07u.type !== 'light_tank' || _a07owner !== 'enemy' || !_a07u.attackApproachTargetId) continue;
+        if (String(_a07u.command || '').toLowerCase() !== 'attack') continue;
+        var _a07tgt = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(_a07u) : null;
+        if (!_a07tgt || (_a07tgt.hp || 0) <= 0) continue; // target мёртв — не чиним
+        var _a07needSync = false;
+        var _a07reason = '';
+        if (_a07u.state !== 'attack_approach') { _a07needSync = true; _a07reason = 'state_' + (_a07u.state || 'null'); }
+        else if (!(_a07u.path && _a07u.path.length)) { _a07needSync = true; _a07reason = 'no_path'; }
+        else {
+          var _a07goal = _a07u.path[_a07u.path.length - 1];
+          var _a07tx = Number.isFinite(_a07u.targetX) ? _a07u.targetX : null;
+          var _a07ty = Number.isFinite(_a07u.targetY) ? _a07u.targetY : null;
+          if (_a07tx !== null && _a07ty !== null && _a07goal &&
+              (Math.abs(Math.round(_a07goal.x) - _a07tx) > 1 || Math.abs(Math.round(_a07goal.y) - _a07ty) > 1)) {
+            _a07needSync = true; _a07reason = 'path_goal_mismatch';
           }
-          if (_a05Sample.length < 3) _a05Sample.push({ id: _a05u.id||_a05u.uid, st: _a05u.state, tx: _a05u.targetX, ty: _a05u.targetY, path: !!(_a05u.path&&_a05u.path.length) });
+        }
+        if (!_a07needSync) continue;
+        var _a07beforeState = _a07u.state || '';
+        var _a07pathBefore = _a07u.path ? _a07u.path.length : 0;
+        if (typeof setLightTankAttackApproachGeneric === 'function' &&
+            setLightTankAttackApproachGeneric(_a07u, _a07tgt, { toast: false, marker: false })) {
+          _a07Synced++;
+          if (_a07Fixed.length < 5) _a07Fixed.push({ id: _a07u.id||_a07u.uid, before: _a07beforeState, after: _a07u.state||'', cmd: _a07u.command||'', tgt: _a07u.attackApproachTargetId||null, pathB: _a07pathBefore, pathA: _a07u.path?_a07u.path.length:0, reason: _a07reason });
         }
         if (game) {
-          game._attack05LastOrderSync = {
-            targetId: _a03Target ? (_a03Target.id || null) : null,
-            targetX: _a05TgtX, targetY: _a05TgtY,
-            assignedCount: enemyTanks.filter(function(u){ return u && u.attackApproachTargetId; }).length,
-            syncedCount: _a05Synced, manualMoveLeftCount: _a05Manual, wrongTargetCount: _a05Wrong,
-            withPathCount: enemyTanks.filter(function(u){ return u && u.attackApproachTargetId && u.path && u.path.length; }).length,
-            withoutPathCount: _a05NoPath, sampleUnits: _a05Sample, at: game.time || 0
+          game._attack07LastInvariantFix = {
+            unitId: _a07u.id || _a07u.uid || null,
+            beforeState: _a07beforeState,
+            afterState: _a07u.state || '',
+            command: _a07u.command || '',
+            targetId: _a07u.attackApproachTargetId || null,
+            pathLenBefore: _a07pathBefore,
+            pathLenAfter: _a07u.path ? _a07u.path.length : 0,
+            reason: _a07reason
           };
         }
+      }
+      // ATTACK-05 telemetry (обратносовместима)
+      if (game) {
+        game._attack05LastOrderSync = game._attack05LastOrderSync || {};
+        game._attack05LastOrderSync.attack07SyncedCount = _a07Synced;
+        game._attack05LastOrderSync.attack07Fixed = _a07Fixed;
       }
       if (game) {
         game._attack03LastReorder = {
