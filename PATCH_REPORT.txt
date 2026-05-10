@@ -1564,4 +1564,98 @@ Manual smoke checklist:
 - Не реализовано: bot использует scout (BOT-SCOUT-01)
 - Не реализовано: difficulty влияет на production (BOT-MVP-05)
 - Не реализовано: вторая factory (BOT-MVP-04)
-- Не реализовано: decision loop (BOT-BRAIN-01)
+
+==========================================================================
+BOT-BRAIN-01 | Lane: Bot | Branch: glm/bot-brain-01-priority-decision-loop
+==========================================================================
+Дата: 2026-05-10
+Задача: Добавить priority decision loop — первый слой «мышления» enemy bot.
+Бот выбирает следующее действие по текущему состоянию, а не следует линейному чеклисту.
+
+Дерево решений:
+  Нет separator?      → build_separator
+  Нет factory?        → build_factory
+  Нет builder?        → produce_builder
+  Харвестеров < min?  → produce_harvester
+  Экономика стабильна? → produce_combat (сигнал для tank pipeline)
+  Ничего критичного?  → wait (phase-bot управляет)
+
+Изменения в src/main.js:
+
+Интеграция (updateEnemyBot):
+- Заменён линейный вызов (09C2Order + 09DOrder) на:
+  FE_PATCH_BRAIN_01_ChoosePriorityAction(state) → FE_PATCH_BRAIN_01_ExecuteAction(decision, state)
+- Две удалённые строки → три новые (net +1 в updateEnemyBot)
+
+Новые константы:
+- FE_PATCH_BRAIN_01_ACTIONS — массив допустимых действий (для документации/telemetry)
+
+Новые функции:
+- FE_PATCH_BRAIN_01_ChoosePriorityAction(state) — evaluates state, returns {action, reason}
+  Priority chain: separator → factory → builder → harvester → combat → wait
+- FE_PATCH_BRAIN_01_IsUnitTypeQueued(unitType) — checks if worker type already in factory queue
+- FE_PATCH_BRAIN_01_ExecuteAction(decision, state) — dispatches action, records telemetry
+- FE_PATCH_BRAIN_01_TryProduceWorker(unitType) — finds idle factory and starts worker production
+
+Делегирование:
+- build_separator → FE_PATCH_09C2OrderEnemyBuilderBuildSeparator()
+- build_factory   → FE_PATCH_09DOrderEnemyBuilderBuildFactory()
+- produce_builder/harvester → FE_PATCH_BASELINE_01_StartFactoryProduction()
+- produce_combat  → сигнал (09E pipeline + BASELINE-01 chooser управляют)
+- wait            → phase-bot (08B defend/attack/regroup) управляет
+
+Телеметрия:
+- game._brain01LastDecision — последнее решение бота (action, reason, at)
+
+Изменённые файлы:
+- src/main.js (96 вставок, 2 удаления; net +94 строк новой логики)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Что НЕ трогалось:
+- worker thresholds/caps (BASELINE-01)
+- factory queue size (остался max=1)
+- scout speed/cap/usage
+- storage logic
+- second factory
+- reactor scaling
+- difficulty knobs
+- combat damage/range/cooldown
+- pathfinding
+- save/load schema
+- map generation
+- render/input
+- player factory/production
+- phase-bot logic (08B defend/attack/regroup)
+- AI layers (10B-10I1)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- main.js: 11 453 строк до → 11 549 строк после (разница +96, net new logic +94, в пределах лимита 80-120)
+- git diff --name-only: только src/main.js + PATCH_REPORT.txt
+- Нет изменений scout/pathfinding/combat/render/save-load/mapgen/phase-bot
+
+Manual smoke checklist:
+- [ ] новая игра стартует
+- [ ] выбор фракции проходит дальше
+- [ ] enemy base появляется
+- [ ] enemy bot строит separator первым делом (Priority 1)
+- [ ] после separator → bot строит factory (Priority 2)
+- [ ] если builder погиб → bot производит replacement (Priority 3)
+- [ ] если harvester погиб → bot производит replacement (Priority 4)
+- [ ] при стабильной экономике → bot производит light_tank (Priority 5)
+- [ ] enemy attack/wave logic не сломана
+- [ ] game._brain01LastDecision обновляется каждый tick
+- [ ] victory/defeat не сломаны
+- [ ] console без красных ошибок
+
+Риски:
+- Edge case: если builder погибает ДО постройки factory, бот застрянет на Priority 2 (build_factory) — нет builder'а для стройки, нет factory для производства builder'а. Крайне редкий сценарий (player rush <30 сек). Фикс — в будущих патчах.
+- produce_combat — это только «сигнал», не гарантирует немедленного производства (зависит от ресурсов и queue).
+- Decision loop работает раз в ~1.2 сек (throttle от updateEnemyBot). Для быстрых решений может быть медленно.
+
+Пропущенное:
+- Не реализовано: bot строит storages (BOT-ECO-01)
+- Не реализовано: bot использует scout (BOT-SCOUT-01)
+- Не реализовано: difficulty влияет на decision quality (BOT-MVP-05)
+- Не реализовано: вторая factory (BOT-MVP-04)
+- Не реализовано: army push decision (BOT-BRAIN-02 — «можно ли давить?» нужен strength compare)
