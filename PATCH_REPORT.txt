@@ -1264,3 +1264,51 @@ Lane: Fast
 Выполненные проверки:
 - node --check src/main.js -> PASS (smoke only, без изменений)
 - Визуальная проверка: только новый .md документ + PATCH_REPORT.txt
+
+---
+
+Задача: DOCS-AUDIT-01 — аудит source-of-truth и устаревших документов
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+Аудит всех проектных документов для классификации по категориям
+CANONICAL / ACTIVE / REFERENCE / STALE / ARCHIVE_CANDIDATE / DANGEROUS_OLD / DUPLICATE_OR_OVERLAP.
+Docs-only задача — код, ассеты, gameplay НЕ менялись.
+
+Что сделано:
+1. Прочитаны все 37 документов проекта (README, AGENTS, промпты, роадмапы, чекпоинты, аудит-отчёты, архив)
+2. Каждый документ классифицирован по 7 категориям
+3. Создан аудит-документ: docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md
+
+Ключевые находки:
+- 6 CANONICAL документов (AGENTS.md, README.md, README_GLM_SANDBOX.md, PATCH_REPORT.txt, REF_MAIN_GLM_07, scout_unit_roadmap)
+- 8 ACTIVE документов (GLM_ROADMAP, GLM_STRATEGY_REVIEW, GLM_FUTURE_VISION, bot_roadmap_merged_glm, и др.)
+- 7 REFERENCE документов (исторические, но полезные)
+- 4 STALE/DANGEROUS_OLD документа (NEW_CHAT_START_PROMPT.md — production-пути; памятка.txt — устаревшая формула сепаратора; THIS_IS_WORK_PROJECT.txt; checkpoint_10E2)
+- 8 ARCHIVE_CANDIDATE документов (codex_limit_sprint, checkpoint_10H2, .docx roadmap, и др.)
+- 5 DUPLICATE_OR_OVERLAP групп (регламент+роадмап, бот-чекпоинты, рефакторинг main.js, GLM-планирование, промпты)
+
+Главный риск:
+NEW_CHAT_START_PROMPT.md и памятка.txt содержат устаревшую информацию, способную ввести будущую AI-сессию в заблуждение (устаревшая формула сепаратора 20->10+1 вместо актуальной 15->10+1, production-пути вместо sandbox-путей).
+
+Рекомендованная следующая задача:
+DOCS-CLEANUP-01 — физическая реорганизация документов (перемещение DANGEROUS_OLD и STALE в archive/, добавление WARNING-заголовков, проверка перекрёстных ссылок).
+
+Изменённые файлы:
+- docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md (new)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS (smoke only, без изменений)
+- Визуальная проверка: только новый .md документ + PATCH_REPORT.txt
+
+Безопасность:
+- src/* не изменён
+- assets/* не изменён
+- index.html не изменён
+- gameplay не изменён
+- Google Drive sync не тронут
+- Production paths не затронуты
+- Файлы не перемещались и не удалялись — только аудит
