@@ -408,7 +408,10 @@ After: report main.js line count before/after.
 
 ---
 
-### Candidate 5 — Standalone pure constants extraction
+### Candidate 5 — Standalone pure constants extraction ✅ DONE
+
+**Выполнено:** REF-MAIN-GLM-06 (2026-05-10), ветка glm/ref-main-06-standalone-constants-extract
+**Результат:** 7 standalone pure constants вынесены в src/core/standalone_constants.js (31 строка). main.js: 11 382 → 11 358 строк (-24)
 
 **Что сделать:**
 Вынести 6 standalone констант (без window.* зависимостей) в `src/core/constants.js`.

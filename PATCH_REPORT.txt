@@ -1129,3 +1129,102 @@ Risks / manual smoke checklist:
 6. FE_DEV_SPAWN_UNIT('scout') — работает (не затронут)
 7. Без F8 — gameplay идентичен
 8. Нет console errors
+
+---
+
+Задача: REF-MAIN-GLM-06 — extract standalone constants from src/main.js
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/ref-main-06-standalone-constants-extract (от sandbox/main)
+
+Цель:
+Вынести 7 standalone pure constants из src/main.js в отдельный core module
+src/core/standalone_constants.js. Это Candidate 5 из аудита
+REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md.
+
+Это micro-refactor extraction — не gameplay patch, не balance change,
+не economy/config refactor.
+
+Вынесенные константы (7 штук):
+1. SAVE_KEY = 'four_elements_core_base_v04_save'
+2. SETTINGS_KEY = 'four_elements_core_base_v04_settings'
+3. TILE_W = 76
+4. TILE_H = 38
+5. MAP_SIZES = { standard: {...}, large: {...} }
+6. BASE_STORAGE = { minerals:200, energy:300, purple:20, greenEl:20, cyanEl:20, yellowEl:20 }
+7. FACTION_ELEMENT_KEY = { purple:'purple', green:'greenEl', cyan:'cyanEl', yellow:'yellowEl' }
+
+Все константы — pure/static:
+- строковые и числовые литералы, объектные литералы
+- без функций
+- без runtime reads
+- без обращения к game/window (кроме window.FE_STANDALONE_CONSTANTS при загрузке)
+- значения неизменны
+
+Что НЕ тронуто:
+- BUILDING_SIZE — зависит от window.FE_BUILDING_SIZE
+- BUILDINGS — зависит от window.FE_BUILDINGS
+- UNIT_DEFS — зависит от window.FE_UNITS
+- FACTIONS — зависит от window.FE_FACTIONS
+- MINE_TYPES — зависит от window.FE_MINE_TYPES
+- OBSTACLE_ASSETS — зависит от window.FE_OBSTACLE_ASSETS
+- SPRITE_PROFILES — зависит от window.FE_SPRITE_PROFILES
+- FE_PATCH_07A3_ENEMY_VISUAL_FACTION — оставлен для простоты
+- значения констант — не изменены
+- save/load — не изменён
+- game state structure — не изменён
+- runtime gameplay — не изменён
+- economy — не изменён
+- enemy bot behavior — не изменён
+- combat — не изменён
+- render loop — не изменён
+- input/selection — не изменён
+- movement/pathfinding — не изменён
+- map generation — не изменён
+- scout — не изменён
+- assets — не изменён
+- configs — не изменён
+- window.FE_CORE (TILE_W, TILE_H) — продолжает работать через destructuring
+- localStorage keys — не изменены
+- форма сохранений — не изменена
+
+Изменённые файлы:
+- src/core/standalone_constants.js (new, 31 строка)
+- src/main.js (24 строки удалено, 2 строки добавлено — destructuring + comment)
+- index.html (+1 script tag)
+- PATCH_REPORT.txt (добавлена эта запись)
+- docs/project/REF_MAIN_GLM_01_MICRO_REFACTOR_CANDIDATES.md (Candidate 5 отмечен DONE)
+
+main.js до: 11 382 строк
+main.js после: 11 358 строк
+Разница: -24 строки
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- node --check src/core/standalone_constants.js -> PASS
+- rg: старые определения констант (string literals) — 0 вхождений в src/main.js
+- rg: все ссылки на SAVE_KEY/SETTINGS_KEY/TILE_W/TILE_H/MAP_SIZES/BASE_STORAGE/FACTION_ELEMENT_KEY — работают через destructuring
+- index.html: новый script tag перед src/main.js
+- window.FE_CORE.TILE_W / TILE_H — продолжает работать (деструктуризация определяет локальные const до FE_CORE)
+- значения констант не изменены
+
+Безопасность:
+- save/load не изменён — SAVE_KEY то же значение
+- game state не мутируется
+- TILE_W=76, TILE_H=38 — те же значения
+- MAP_SIZES — те же значения
+- BASE_STORAGE — те же значения
+- FACTION_ELEMENT_KEY — те же значения
+- window.FE_STANDALONE_CONSTANTS доступен через консоль для проверки
+- window.FE_CORE.TILE_W / TILE_H — продолжает работать
+- rollback: вернуть const объявления в main.js, удалить script tag и standalone_constants.js
+
+Risks / manual smoke checklist:
+1. Игра загружается
+2. Выбор фракции проходит дальше
+3. window.FE_STANDALONE_CONSTANTS.TILE_W === 76 в консоли
+4. window.FE_STANDALONE_CONSTANTS.BASE_STORAGE.minerals === 200
+5. window.FE_STANDALONE_CONSTANTS.FACTION_ELEMENT_KEY.purple === 'purple'
+6. window.FE_CORE.TILE_W === 76 (FE_CORE bridge не сломан)
+7. Save/load работает
+8. Нет console errors
