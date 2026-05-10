@@ -2227,3 +2227,91 @@ Manual smoke:
   → лучше чем вечное залипание, но возможна короткая пауза
 - blocker detection для building/mineral/obstacle не делает recovery
   → консервативный подход, не ломает проходимость
+
+---
+
+Задача: BOT-ATTACK-07 — fix enemy attack_approach/manual_move desync
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-07-enemy-attack-approach-manual-move-desync-fix (от sandbox/main)
+
+Проблема:
+Enemy light_tank во время hq_push входит в рассинхронизированное состояние:
+- state = manual_move
+- command = attack
+- attackApproachTargetId = hq_base_101
+- targetX/targetY указывают на HQ approach-точку
+- pathLen не соответствует targetX/targetY
+
+Причина: ATTACK-05 guards зависели от state._attack02HqPush — флага бота.
+Если флаг сброшен (regroup, timer), а у танка attackApproachTargetId ещё жив —
+guards не срабатывают, autopilot/strength gate перезаписывает state/path.
+
+Корневые причины:
+1. FE_10D1_tryMove guard зависел от game._enemyBotState._attack02HqPush
+2. FE_10E1_clearAttackOrder guard зависел от game._enemyBotState._attack02HqPush
+3. FE_10E1_returnToHq guard зависел от game._enemyBotState._attack02HqPush
+4. ATTACK-05 sync loop зависел от state._attack02HqPush
+   — если флаг сброшен, рассинхрон не чинился
+
+Что исправлено:
+
+1. Новый хелпер FE_ATTACK07HasActiveEnemyAttackOrder(unit) (строка ~3145):
+   - Проверяет инвариант на самом юните, БЕЗ зависимости от _attack02HqPush
+   - true когда: light_tank + enemy + command='attack' + attackApproachTargetId + target жив
+   - Используется как первичная проверка во всех guards
+
+2. FE_10D1_tryMove (строка ~3894):
+   - ATTACK-07 guard через FE_ATTACK07HasActiveEnemyAttackOrder — первый приоритет
+   - ATTACK-05 fallback через _attack02HqPush — второй приоритет
+
+3. FE_10E1_clearAttackOrder (строка ~4271):
+   - ATTACK-07 guard через FE_ATTACK07HasActiveEnemyAttackOrder — первый приоритет
+   - ATTACK-05 fallback через _attack02HqPush — второй приоритет
+
+4. FE_10E1_returnToHq (строка ~4289):
+   - ATTACK-07 guard через FE_ATTACK07HasActiveEnemyAttackOrder — первый приоритет
+   - ATTACK-05 fallback через _attack02HqPush — второй приоритет
+
+5. ATTACK-07 sync loop в attack phase (строка ~4878):
+   - Заменяет ATTACK-05 sync loop (который зависел от _attack02HqPush)
+   - Сканирует ВСЕ enemy light_tank с attackApproachTargetId + command='attack'
+   - Если target жив и: state !== 'attack_approach' ИЛИ path отсутствует
+     ИЛИ path goal не совпадает с targetX/targetY → re-sync через setLightTankAttackApproachGeneric
+   - Телеметрия: game._attack07LastInvariantFix
+
+Телеметрия game._attack07LastInvariantFix:
+{
+  unitId, beforeState, afterState, command,
+  targetId, pathLenBefore, pathLenAfter, reason
+}
+
+Причины синхронизации (reason):
+- state_manual_move / state_moving / state_idle / state_null — state не attack_approach
+- no_path — path пустой
+- path_goal_mismatch — конечная точка path не совпадает с targetX/targetY
+
+Новая логика: ~55 строк (хелпер + 3 guards + sync loop + telemetry)
+
+Изменённые файлы:
+- src/main.js — 5 правок
+- PATCH_REPORT.txt — добавлена эта запись
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто:
+- findPath — нет
+- passable — нет
+- combat — нет
+- scout — нет
+- economy — нет
+- updateEnemyBot целиком — нет
+
+Риски:
+- FE_ATTACK07HasActiveEnemyAttackOrder проверяет FE_PATCH_06BResolveApproachTarget —
+  если target временно недоступен (здание в тумане войны), хелпер вернёт false,
+  и guard не сработает. Это консервативное поведение.
+- Sync loop вызывает setLightTankAttackApproachGeneric на каждом тике attack phase
+  для рассинхронизированных танков — может быть дорого если много танков,
+  но на практике количество рассинхронов мало.
