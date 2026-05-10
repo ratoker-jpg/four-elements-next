@@ -1452,3 +1452,116 @@ Lane: Fast
 - src/main.js не тронут
 - Google Drive sync не включён
 - Production paths не затронуты
+
+---
+
+Задача: BOT-BASELINE-01 — enemy bot стартует и выживает
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/bot-baseline-01-start-and-survive (от sandbox/main)
+
+Цель:
+- Выровнять стартовые ресурсы enemy bot с игроком (было 30 энергии → стало 160).
+- Добавить минимальное восполнение enemy harvester и builder через factory.
+
+Часть 1 — стартовая экономика:
+
+Стартовая энергия игрока: 160 (resources.energy в createGameObject, строка 174).
+Стартовая энергия enemy до патча: 0 (enemyResources.energy), затем FE_PATCH_09C2EnsureEnemyScenarioEnergyReserve давала только 30.
+Стартовая энергия enemy после патча: 160 (enemyResources.energy в createGameObject + FE_PATCH_BASELINE_01_START_ENERGY = 160).
+Причина: игрок стартует с 160 энергии — этого хватает на separator (30) + factory (55) = 85, с запасом. Enemy с 30 энергии мог строить только separator, а на factory не хватало. 160 выравнивает возможности.
+
+Изменения:
+- enemyResources в createGameObject: energy:0 → energy:160 (строка 176)
+- FE_PATCH_BASELINE_01_START_ENERGY = 160 — новая константа (строка 6051)
+- FE_PATCH_09C2EnsureEnemyScenarioEnergyReserve: использует FE_PATCH_BASELINE_01_START_ENERGY вместо FE_PATCH_09C2_SEPARATOR_COST_ENERGY
+
+Часть 2 — worker replenishment MVP:
+
+Механика:
+- Если enemy harvesters < 2 → factory производит harvester (приоритет над light_tank).
+- Если enemy builder < 1 → factory производит builder (приоритет над harvester).
+- Если workers на месте → factory производит light_tank как обычно.
+- Приоритет: builder > harvester > light_tank.
+
+Защита от спама:
+- Cooldown: 5 секунд между проверками worker count (FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS).
+- Проверка очереди: если worker данного типа уже в очереди любой factory — не добавлять дубликат.
+- Cap: harvester max 4, builder max 2 — не производить больше cap даже если ниже min (защита от edge case).
+- Factory queue max = 1 (не изменён) — естественный throttle.
+
+Worker thresholds/caps:
+- FE_PATCH_BASELINE_01_HARVESTER_MIN = 2
+- FE_PATCH_BASELINE_01_BUILDER_MIN = 1
+- FE_PATCH_BASELINE_01_HARVESTER_CAP = 4
+- FE_PATCH_BASELINE_01_BUILDER_CAP = 2
+- FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS = 5000
+
+Автозапуск harvester:
+- После спавна enemy harvester из factory, вызывается startHarvester() для автоматической добычи.
+
+Стоимость производства workers (из FE_UNITS):
+- harvester: 1 элемент, 25 сек
+- builder: 1 элемент, 20 сек
+
+Новые функции:
+- FE_PATCH_BASELINE_01_CountEnemyWorkers(type) — считает живых enemy workers по типу
+- FE_PATCH_BASELINE_01_ChooseFactoryUnitType() — выбирает тип юнита для производства (builder > harvester > light_tank)
+- FE_PATCH_BASELINE_01_CanStartFactoryProduction(factory, unitType) — обобщённая проверка для любого типа
+- FE_PATCH_BASELINE_01_StartFactoryProduction(factory, unitType) — обобщённый запуск производства
+
+Изменённые функции:
+- FE_PATCH_09C2EnsureEnemyScenarioEnergyReserve() — использует FE_PATCH_BASELINE_01_START_ENERGY
+- FE_PATCH_09EUpdateEnemyFactoryProduction(dt) — использует ChooseFactoryUnitType + auto-start harvesters
+
+Изменённые файлы:
+- src/main.js (99 вставок, 4 удаления; net +95 строк новой логики)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Что НЕ трогалось:
+- scout speed/cap/usage
+- decision loop / updateEnemyBot main tick
+- storage logic
+- factory queue size (остался max=1)
+- second factory
+- reactor scaling
+- difficulty knobs
+- combat damage/range/cooldown
+- pathfinding
+- save/load schema
+- map generation
+- render/input
+- player factory/production
+- player starting resources
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- main.js: 11 358 строк до → 11 453 строки после (разница +95, в пределах лимита 80-120)
+- git diff --name-only: только src/main.js + PATCH_REPORT.txt
+- Нет изменений scout/pathfinding/combat/render/save-load/mapgen
+
+Manual smoke checklist:
+- [ ] новая игра стартует
+- [ ] выбор фракции проходит дальше
+- [ ] enemy base появляется
+- [ ] enemy bot получает 160 стартовой энергии
+- [ ] enemy bot строит separator/factory по текущей логике
+- [ ] если enemy harvester погиб — factory производит замену
+- [ ] если enemy builder погиб — factory производит замену
+- [ ] бот не спамит бесконечных рабочих
+- [ ] enemy light_tank production не сломана
+- [ ] enemy attack/wave logic не сломана
+- [ ] victory/defeat не сломаны
+- [ ] console без красных ошибок
+
+Риски:
+- Worker production использует ту же factory queue (max=1), что и tank. Пока factory делает worker, она не делает tank. Это осознанный trade-off — бот жертвует танком ради восстановления экономики.
+- Если enemy builder погибает во время постройки separator/factory, бот не сможет построить replacement factory (нет builder → нет зданий). Но теперь factory произведет builder, и экономика восстановится.
+- Cap значения (harvester=4, builder=2) — консервативные, могут потребовать tuning.
+
+Пропущенное:
+- Не реализовано: bot строит storages (BOT-ECO-01)
+- Не реализовано: bot использует scout (BOT-SCOUT-01)
+- Не реализовано: difficulty влияет на production (BOT-MVP-05)
+- Не реализовано: вторая factory (BOT-MVP-04)
+- Не реализовано: decision loop (BOT-BRAIN-01)
