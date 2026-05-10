@@ -3127,6 +3127,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     state.lastKnownTargetId = null;
     state.lastKnownTargetKind = null;
     state.regroupReason = reason;
+    // ATTACK-02: clear hq_push flag on regroup so next attack cycle decides fresh.
+    state._attack02HqPush = false;
+    state._attack02HqPushArmyScore = 0;
   }
 
   function FE_PATCH_08BShouldKeepUnitNearHome(unit, state, radius=FE_10I1_knobs().defendRadiusTiles) {
@@ -3197,6 +3200,16 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         waveSize: Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length))),
         at: game.time || 0
       };
+    }
+
+    // ATTACK-02: mark state when hq_push is used so retreat/strength layers
+    // do not immediately cancel the order on the next tick.
+    if (attackOrderType === 'hq_push') {
+      state._attack02HqPush = true;
+      state._attack02HqPushArmyScore = FE_PATCH_08BArmyScore(enemyUnits);
+    } else {
+      state._attack02HqPush = false;
+      state._attack02HqPushArmyScore = 0;
     }
 
     if (!target) {
@@ -4436,10 +4449,20 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     const estimate = g?.enemyStrengthEstimateMvp || null;
     const previousCount = Number.isFinite(telemetry.enemyTankCount) ? telemetry.enemyTankCount : enemyTankCount;
 
+    // ATTACK-02: during hq_push, retreat is more reluctant.
+    // Bot committed to attacking player HQ — only retreat for critical reasons.
+    // Without this, retreat/strength gate cancels hq_push every tick, tanks never leave base.
+    var isHqPush = !!(state._attack02HqPush);
+    var hqPushArmy = Number(state._attack02HqPushArmyScore) || 0;
+
     if (enemyTankCount <= 1) return 'last_tank_in_attack_wave';
-    if (enemyTankCount < previousCount) return 'lost_tank_during_attack';
-    if (estimate && estimate.attackAllowed === false && phase === 'attack') return String(estimate.reason || 'lost_strength_advantage');
-    if (playerThreatEstimate > 0 && enemyTankCount <= playerThreatEstimate) return 'enemy_not_stronger_than_player_estimate';
+    if (enemyTankCount < previousCount && !isHqPush) return 'lost_tank_during_attack';
+    // During hq_push: only retreat if we lost more than half the army.
+    if (isHqPush && enemyTankCount < previousCount && enemyTankCount < Math.max(2, Math.floor(hqPushArmy * 0.5))) return 'hq_push_heavy_losses';
+    if (estimate && estimate.attackAllowed === false && phase === 'attack' && !isHqPush) return String(estimate.reason || 'lost_strength_advantage');
+    // During hq_push: ignore player threat estimate unless critically outnumbered (2:1).
+    if (!isHqPush && playerThreatEstimate > 0 && enemyTankCount <= playerThreatEstimate) return 'enemy_not_stronger_than_player_estimate';
+    if (isHqPush && playerThreatEstimate > 0 && enemyTankCount * 2 <= playerThreatEstimate) return 'hq_push_critically_outnumbered';
     return null;
   }
 

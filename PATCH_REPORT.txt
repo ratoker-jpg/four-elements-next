@@ -1762,4 +1762,107 @@ Manual smoke checklist:
 - Не реализовано: bot использует scout (BOT-SCOUT-01)
 - Не реализовано: difficulty влияет на decision quality (BOT-MVP-05)
 - Не реализовано: вторая factory (BOT-MVP-04)
-- Не реализовано: army push decision с strength compare (BOT-BRAIN-02)
+
+==========================================================================
+BOT-ATTACK-02 | Lane: Review | Branch: glm/bot-attack-02-wave-order-execution-fix
+==========================================================================
+Дата: 2026-05-11
+Задача: Починить ситуацию, когда enemy bot принимает решение атаковать через
+hq_fallback (ATTACK-01), но танки фактически не выходят в атаку.
+
+Причина: 10H1 retreat layer отменяет hq_push атаку на следующем тике.
+
+Root cause:
+ATTACK-01 добавил HQ fallback: PrepareAttack находит player HQ и отдаёт
+приказ (hq_push). Но на следующем тике updateEnemyBot вызывает 10H1 retreat
+ДО phase checks. 10H1_shouldRetreat видит:
+- enemyTankCount <= playerThreatEstimate (бот «не сильнее» игрока)
+  → retreat → startRetreat → state.phase = 'regroup' → танки отзываются к HQ.
+- estimate.attackAllowed === false (10E1 strength gate)
+  → retreat → то же самое.
+
+Результат: цикл attack → retreat → regroup → prepare_attack → attack → retreat.
+Танки копятся у базы, постоянно получая и тут же теряя attack orders.
+
+Исправление (23 net new lines):
+
+1. FE_PATCH_08BPrepareAttack — при hq_push устанавливает state-флаги:
+   state._attack02HqPush = true
+   state._attack02HqPushArmyScore = N
+   При обычной vision-атаке — флаги сбрасываются.
+
+2. FE_10H1_shouldRetreat — при isHqPush отступление более неохотное:
+   - lost_tank_during_attack → игнорируется (отступаем только при потере >50% армии)
+   - estimate.attackAllowed === false → игнорируется (strength gate не блокирует)
+   - playerThreatEstimate → отступаем только при 2:1 перевесе игрока
+     (вместо «не сильнее» — «критически слабее»)
+
+3. FE_PATCH_08BStartRegroup — очищает hq_push флаги при regroup,
+   чтобы следующий attack cycle решал заново.
+
+Изменённые функции:
+- FE_PATCH_08BPrepareAttack — hq_push state flags
+- FE_10H1_shouldRetreat — hq_push-aware retreat rules
+- FE_PATCH_08BStartRegroup — cleanup hq_push flags
+
+Новые переменные:
+- state._attack02HqPush (boolean)
+- state._attack02HqPushArmyScore (number)
+
+Поведение ПОСЛЕ фикса:
+- hq_push атака: танки идут к player HQ, не отступая при малом перевесе игрока
+- hq_push отступление: только при потере >50% армии ИЛИ при 2:1 перевесе игрока
+- Обычная vision-атака: retreat работает как раньше (без изменений)
+- Regroup после hq_push: флаги сбрасываются, следующий cycle решает fresh
+
+Что НЕ трогалось:
+- combat damage/range/cooldown
+- pathfinding
+- render/input
+- save/load
+- map generation
+- scout speed/cap/usage
+- storage logic
+- factory queue size
+- worker replenishment (BASELINE-01)
+- priority decision loop (BRAIN-01)
+- ATTACK-01 HQ fallback logic
+- 10F1 vision-driven targeting
+- 10E1 strength estimate calculations
+- 10D1 autopilot guard/patrol
+- difficulty knobs (10I1)
+- player factory/production
+- last_tank_in_attack_wave retreat rule (всегда отступает при 1 танке)
+
+Изменённые файлы:
+- src/main.js (26 вставок, 3 удаления; net +23 строк новой логики)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- main.js: 11 577 строк до → 11 600 строк после (разница +23)
+- git diff --name-only: только src/main.js + PATCH_REPORT.txt
+
+Manual smoke checklist:
+- [ ] новая игра стартует
+- [ ] бот строит separator/factory
+- [ ] бот производит light_tank
+- [ ] при tanks >= threshold танки выходят к player HQ (hq_push)
+- [ ] танки НЕ отступают при малом player threat
+- [ ] танки отступают при потере >50% армии
+- [ ] танки отступают при 2:1 перевесе игрока
+- [ ] обычная vision-атака работает как раньше
+- [ ] last_tank rule работает (1 танк → отступает)
+- [ ] regroup после hq_push очищает флаги
+- [ ] worker replenishment не сломан
+- [ ] factory продолжает производство
+- [ ] console без красных ошибок
+
+Риски:
+- hq_push делает бота более агрессивным — он будет идти к HQ даже если чуть слабее.
+  Это осознанный trade-off: лучше агрессивный бот чем стоящий на базе.
+- 2:1 порог для retreat может быть слишком мягким — бот может потерять много танков
+  прежде чем отступит. Но это лучше чем вечный cycle attack→retreat→attack.
+- Флаг _attack02HqPush сохраняется в game._enemyBotState — если save/load
+  сериализует state, нужно добавить миграцию. Но сейчас save/load не сохраняет
+  bot state.
