@@ -1658,4 +1658,108 @@ Manual smoke checklist:
 - Не реализовано: bot использует scout (BOT-SCOUT-01)
 - Не реализовано: difficulty влияет на decision quality (BOT-MVP-05)
 - Не реализовано: вторая factory (BOT-MVP-04)
-- Не реализовано: army push decision (BOT-BRAIN-02 — «можно ли давить?» нужен strength compare)
+
+==========================================================================
+BOT-ATTACK-01 | Lane: Review | Branch: glm/bot-attack-01-wave-dispatch-fix
+==========================================================================
+Дата: 2026-05-10
+Задача: Починить ситуацию, когда enemy bot производит light_tank, но танки копятся
+у базы и не выходят в атаку.
+
+Причина: СТАРЫЙ БАГ (не регрессия после BOT-BRAIN-01).
+
+Root cause:
+10F1 vision-driven target selection (FE_PATCH_10F1SelectAttackDecision) требует
+visible/high-confidence цели для атаки. Если бот не «видит» player объекты
+(нет scout, нет контакта), 10F1 возвращает target=null.
+FE_PATCH_08BPrepareAttack при отсутствии цели ставит phase='defend'.
+Цикл: defend → prepare_attack → нет цели → defend → повтор бесконечно.
+Бот копит танки, но никогда не атакует.
+
+BOT-BRAIN-01 НЕ является причиной: BRAIN-01 заменяет только экономический
+чеклист (separator/factory/workers), attack dispatch flow не тронут.
+
+Исправление (минимальное, 30 net new lines):
+
+1. FE_PATCH_08BPrepareAttack — добавлен HQ fallback:
+   Если 10F1 не нашла цель, но армия достаточная → атаковать player HQ напрямую.
+   Используется новый orderType 'hq_push' (вместо 'attack'), чтобы обойти
+   10F1 vision gate в FE_PATCH_08BCommandEnemyTankAttack.
+
+2. FE_PATCH_10F1CanDirectAttackTarget — добавлено исключение для 'hq_push':
+   orderType === 'hq_push' обходит vision gate, как и 'defend'.
+   Это логично: бот «знает» что у игрока есть HQ — это стартовая позиция.
+
+3. Телеметрия: game._attack01LastDispatch — показывает source ('vision' или 'hq_fallback'),
+   targetId, targetType, armyScore, waveSize.
+
+Изменённые функции:
+- FE_PATCH_08BPrepareAttack — HQ fallback + attackOrderType + телеметрия
+- FE_PATCH_10F1CanDirectAttackTarget — 'hq_push' orderType bypass
+
+Новые переменные:
+- attackOrderType в FE_PATCH_08BPrepareAttack ('attack' | 'hq_push')
+- game._attack01LastDispatch — телеметрия
+
+Что НЕ трогалось:
+- combat damage/range/cooldown
+- pathfinding
+- render/input
+- save/load
+- map generation
+- scout speed/cap/usage
+- storage logic
+- factory queue size
+- worker replenishment (BASELINE-01)
+- priority decision loop (BRAIN-01)
+- retreat logic (10H1)
+- strength estimate (10E1)
+- autopilot guard (10D1)
+- difficulty knobs (10I1)
+- player factory/production
+- 10F1 для видимых/known целей (приоритет остаётся за vision)
+
+Поведение ПОСЛЕ фикса:
+- Если 10F1 видит цель → атака по vision (как раньше)
+- Если 10F1 НЕ видит цель, но армия >= threshold → атака на player HQ (fallback)
+- Если нет цели и нет player HQ → defend (как раньше)
+- Retreat/strength gate продолжают работать: если бот слабее → отступает
+- Wave size применяется к fallback как обычно (нет «один танк атакует один»)
+
+Изменённые файлы:
+- src/main.js (32 вставки, 2 удаления; net +30 строк новой логики)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+- main.js: 11 547 строк до → 11 577 строк после (разница +30)
+- git diff --name-only: только src/main.js + PATCH_REPORT.txt
+- Нет изменений scout/pathfinding/combat/render/save-load/mapgen
+
+Manual smoke checklist:
+- [ ] новая игра стартует
+- [ ] выбор фракции проходит дальше
+- [ ] enemy base появляется
+- [ ] бот строит separator/factory
+- [ ] бот производит light_tank
+- [ ] при tanks >= threshold танки выходят с базы (даже без видимых целей)
+- [ ] танки идут к player HQ
+- [ ] танки атакуют HQ или встречных юнитов
+- [ ] если 10F1 видит цель — атака по vision (не через fallback)
+- [ ] retreat при превосходстве игрока работает
+- [ ] worker replenishment не сломан
+- [ ] factory продолжает производство
+- [ ] game._attack01LastDispatch доступна в консоли
+- [ ] console без красных ошибок
+
+Риски:
+- HQ fallback делает бота более агрессивным: он всегда будет идти к player HQ если нет другой цели. Это может сделать бота слишком предсказуемым (всегда идёт к HQ). Но это лучше чем вечное стояние у базы.
+- 'hq_push' обходит 10F1 vision gate. Если в будущем появятся невидимые/замаскированные здания, нужно будет уточнить логику.
+- Retreat logic может отменить HQ push если бот слабее. Это правильное поведение.
+
+Пропущенное:
+- Не реализовано: bot строит storages (BOT-ECO-01)
+- Не реализовано: bot использует scout (BOT-SCOUT-01)
+- Не реализовано: difficulty влияет на decision quality (BOT-MVP-05)
+- Не реализовано: вторая factory (BOT-MVP-04)
+- Не реализовано: army push decision с strength compare (BOT-BRAIN-02)
