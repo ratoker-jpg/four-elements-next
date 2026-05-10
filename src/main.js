@@ -3085,6 +3085,10 @@ function FE_PATCH_10F1CanDirectAttackTarget(target, orderType) {
   // Local defense / guard behavior is intentionally left alone.
   if (orderType === 'defend') return true;
 
+  // ATTACK-01: HQ push bypasses vision gate — player HQ is always a valid target.
+  // Bot knows the player has an HQ; without this fallback tanks idle at base forever.
+  if (orderType === 'hq_push') return true;
+
   const g = FE_PATCH_10F1Game();
   const knowledge = g && g._enemyKnowledge;
   const targetId = FE_PATCH_10F1ObjectId(target);
@@ -3168,7 +3172,33 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       return false;
     }
 
-    const target = FE_PATCH_08BAttackTarget(state, enemyUnits);
+    var target = FE_PATCH_08BAttackTarget(state, enemyUnits);
+    var attackOrderType = 'attack';
+
+    // ATTACK-01: fallback when 10F1 vision finds no target.
+    // If bot has enough army but no visible/known target, attack player HQ directly.
+    // This prevents tanks from idling at base forever when enemy has no vision.
+    // Uses 'hq_push' orderType so 10F1 vision gate allows the attack on an unseen HQ.
+    if (!target) {
+      var playerHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+      if (playerHQ && (playerHQ.hp || 0) > 0) {
+        target = playerHQ;
+        attackOrderType = 'hq_push';
+      }
+    }
+
+    // ATTACK-01 telemetry: record whether vision or fallback was used.
+    if (game) {
+      game._attack01LastDispatch = {
+        source: attackOrderType === 'hq_push' ? 'hq_fallback' : 'vision',
+        targetId: target ? (target.id || null) : null,
+        targetType: target ? (target.type || null) : null,
+        armyScore: FE_PATCH_08BArmyScore(enemyUnits),
+        waveSize: Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length))),
+        at: game.time || 0
+      };
+    }
+
     if (!target) {
       state.phase = 'defend';
       return false;
@@ -3177,7 +3207,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     let issued = false;
     const waveSize = Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length)));
     for (const unit of enemyUnits.slice(0, waveSize)) {
-      issued = FE_PATCH_08BCommandEnemyTankAttack(unit, target, state, 'attack') || issued;
+      issued = FE_PATCH_08BCommandEnemyTankAttack(unit, target, state, attackOrderType) || issued;
     }
 
     if (issued) {
