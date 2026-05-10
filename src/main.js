@@ -173,7 +173,7 @@
       factionWasRandom:false,
       resources:{ minerals:0, purple:0, greenEl:0, cyanEl:0, yellowEl:0, energy:160, powerTotal:0, powerUsed:0 },
       // FE_PATCH_09A: hidden enemy economy bucket. Not shown in player HUD.
-      enemyResources:{ minerals:0, energy:0, purple:0, greenEl:0, cyanEl:0, yellowEl:0 },
+      enemyResources:{ minerals:0, energy:160, purple:0, greenEl:0, cyanEl:0, yellowEl:0 },
       camera:{ x:0, y:0, zoom:1.05 },
       terrain:[],
       minerals:[],
@@ -6047,6 +6047,8 @@ function debugLog(event, payload={}) {
   }
 
   const FE_PATCH_09C2_SEPARATOR_COST_ENERGY = 30;
+  // BOT-BASELINE-01: enemy starting energy must match player (160).
+  const FE_PATCH_BASELINE_01_START_ENERGY = 160;
 
   function FE_PATCH_09C2EnsureEnemyScenarioEnergyReserve() {
     const bucket = ensureEnemyResources();
@@ -6054,13 +6056,13 @@ function debugLog(event, payload={}) {
 
     bucket.energy = Math.max(
       Number.isFinite(bucket.energy) ? bucket.energy : 0,
-      FE_PATCH_09C2_SEPARATOR_COST_ENERGY
+      FE_PATCH_BASELINE_01_START_ENERGY
     );
     bucket._patch09c2ScenarioEnergyReady = true;
 
     debugLog('enemy_scenario_energy_reserved_09c2', {
       energy: bucket.energy,
-      cost: FE_PATCH_09C2_SEPARATOR_COST_ENERGY
+      baseline: FE_PATCH_BASELINE_01_START_ENERGY
     });
 
     return bucket;
@@ -6705,8 +6707,14 @@ function debugLog(event, payload={}) {
     for (const factory of factories) {
       const queue = FE_PATCH_09EEnsureFactoryQueue(factory);
 
+      // BOT-BASELINE-01: choose unit type — workers have priority over tanks.
       if (!queue.length) {
-        FE_PATCH_09EStartLightTankProduction(factory);
+        var unitType = FE_PATCH_BASELINE_01_ChooseFactoryUnitType();
+        if (unitType === 'light_tank') {
+          FE_PATCH_09EStartLightTankProduction(factory);
+        } else {
+          FE_PATCH_BASELINE_01_StartFactoryProduction(factory, unitType);
+        }
       }
 
       if (!queue.length) continue;
@@ -6723,8 +6731,15 @@ function debugLog(event, payload={}) {
       });
 
       if (q.remaining <= 0) {
+        var unitsBefore = game.units.length;
         const spawned = FE_PATCH_09ESpawnEnemyFactoryUnit(factory, q);
         if (spawned) {
+          // BOT-BASELINE-01: auto-start enemy harvesters after spawn.
+          for (var i = unitsBefore; i < game.units.length; i++) {
+            if (game.units[i].type === 'harvester' && game.units[i].owner === 'enemy') {
+              try { startHarvester(game.units[i]); } catch (e) { /* safe fallback */ }
+            }
+          }
           queue.shift();
         } else {
           q.remaining = 1;
@@ -6775,6 +6790,86 @@ function debugLog(event, payload={}) {
     return status.status || 'none';
   }
   // FE_PATCH_09E_ENEMY_FACTORY_LIGHT_TANK_PRODUCTION_MVP_END
+
+  // BOT-BASELINE-01: worker replenishment — enemy bot can rebuild lost workers.
+  // Workers have production priority over light_tank. Cooldown prevents spam.
+  const FE_PATCH_BASELINE_01_HARVESTER_MIN = 2;
+  const FE_PATCH_BASELINE_01_BUILDER_MIN = 1;
+  const FE_PATCH_BASELINE_01_HARVESTER_CAP = 4;
+  const FE_PATCH_BASELINE_01_BUILDER_CAP = 2;
+  const FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS = 5000;
+
+  function FE_PATCH_BASELINE_01_CountEnemyWorkers(type) {
+    return (game?.units || []).filter(u =>
+      u && u.kind === 'unit' && u.type === type && unitOwner(u) === 'enemy' && (u.hp ?? 1) > 0
+    ).length;
+  }
+
+  function FE_PATCH_BASELINE_01_ChooseFactoryUnitType() {
+    if (!game) return 'light_tank';
+    var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - (game._baseline01LastWorkerCheck || 0) < FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS) return 'light_tank';
+    game._baseline01LastWorkerCheck = now;
+
+    // Check if a worker is already queued in any factory to avoid double-order.
+    var harvesterQueued = false, builderQueued = false;
+    var factories = FE_PATCH_09ECompleteEnemyFactories();
+    for (var fi = 0; fi < factories.length; fi++) {
+      var fq = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
+      for (var qi = 0; qi < fq.length; qi++) {
+        if (fq[qi].type === 'harvester') harvesterQueued = true;
+        if (fq[qi].type === 'builder') builderQueued = true;
+      }
+    }
+
+    var harvCount = FE_PATCH_BASELINE_01_CountEnemyWorkers('harvester');
+    var buildCount = FE_PATCH_BASELINE_01_CountEnemyWorkers('builder');
+
+    // Builder first (no builder = no buildings), then harvester.
+    if (buildCount < FE_PATCH_BASELINE_01_BUILDER_MIN && !builderQueued && buildCount < FE_PATCH_BASELINE_01_BUILDER_CAP) return 'builder';
+    if (harvCount < FE_PATCH_BASELINE_01_HARVESTER_MIN && !harvesterQueued && harvCount < FE_PATCH_BASELINE_01_HARVESTER_CAP) return 'harvester';
+    return 'light_tank';
+  }
+
+  function FE_PATCH_BASELINE_01_CanStartFactoryProduction(factory, unitType) {
+    if (!factory || factory.type !== 'units_factory' || !factory.complete || buildingOwner(factory) !== 'enemy')
+      return { ok: false, reason: 'no_complete_enemy_factory' };
+    var queue = FE_PATCH_09EEnsureFactoryQueue(factory);
+    if (queue.length >= FE_PATCH_09E_FACTORY_MAX_QUEUE)
+      return { ok: false, reason: 'queue_busy', queueLength: queue.length };
+    var def = UNIT_DEFS && UNIT_DEFS[unitType]
+      ? UNIT_DEFS[unitType]
+      : (unitType === 'light_tank' ? FE_PATCH_09EEnemyUnitDef() : { name: unitType, costElement: 1, productionTime: 25 });
+    var elKey = FE_PATCH_09EEnemyElementKey();
+    var cost = Number.isFinite(def.costElement) ? def.costElement : 1;
+    var bucket = ensureEnemyResources();
+    var have = Number.isFinite(bucket[elKey]) ? bucket[elKey] : 0;
+    if (have < cost) return { ok: false, reason: 'not_enough_element', resource: elKey, have: have, amount: cost };
+    return { ok: true, queue: queue, def: def, elKey: elKey, cost: cost };
+  }
+
+  function FE_PATCH_BASELINE_01_StartFactoryProduction(factory, unitType) {
+    var canStart = FE_PATCH_BASELINE_01_CanStartFactoryProduction(factory, unitType);
+    if (!canStart.ok) {
+      FE_PATCH_09ESetProductionStatus(canStart.reason, {
+        resource: canStart.resource || null, have: canStart.have || null, amount: canStart.amount || null,
+        factoryId: factory ? factory.id : null, enemyResources: safeCloneForLog(ensureEnemyResources())
+      });
+      return false;
+    }
+    changeResourceForOwner('enemy', canStart.elKey, -canStart.cost);
+    var productionTime = Number.isFinite(canStart.def.productionTime) ? canStart.def.productionTime : 25;
+    canStart.queue.push({
+      type: unitType, remaining: productionTime, total: productionTime,
+      costElement: canStart.cost, elementKey: canStart.elKey, startedAt: game.time || 0, sourcePatch: 'BASELINE-01'
+    });
+    FE_PATCH_09ESetProductionStatus('producing', {
+      factoryId: factory.id, unitType: unitType, queueLength: canStart.queue.length,
+      costElement: canStart.cost, elementKey: canStart.elKey, enemyResources: safeCloneForLog(ensureEnemyResources())
+    });
+    return true;
+  }
+  // BOT-BASELINE-01_WORKER_REPLENISHMENT_END
 
   function getBuildCost(type) {
     const def = BUILDINGS[type] || {};
