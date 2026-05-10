@@ -2123,3 +2123,107 @@ Lane: Review
 - strength gate не подавляет hq_push attack ордера
 - autopilot не перезаписывает движение hq_push танков
 - танки группой идут к player HQ и атакуют
+
+---
+
+Задача: BOT-ATTACK-06 — enemy attack movement stall fix
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-06-enemy-attack-movement-stall-fix (от sandbox/main)
+
+Проблема:
+Enemy light_tank во время hq_push/attack_approach зависает: attackApproachTargetId назначен,
+pathLen > 0, но x/y почти не меняются и path не расходуется. Танки стоят на месте вместо
+движения к player HQ.
+
+Корневая причина:
+1. updateUnitMovement (строка 5437): если next waypoint заблокирован (passable=false),
+   blockedTimer копится и через 0.35с вызывает recoverUnitPath(unit).
+2. recoverUnitPath (строка 5393): для light_tank нет специальной ветки → падает в default:
+   - unit.path = [] (путь убит)
+   - if (unit.state === 'manual_move') unit.state = 'idle' — но state='attack_approach',
+     не 'manual_move' → state НЕ меняется
+   - Итог: танк в state='attack_approach' с пустым path, attackApproachTargetId жив, но никуда не едет
+3. passable() учитывает unitAt() — другой танк на next waypoint = hard block.
+   Группа танков постоянно блокирует друг друга на узких проходах.
+
+Что исправлено:
+
+1. recoverUnitPath — ATTACK-06 branch для light_tank + attackApproachTargetId (строка ~5400):
+   - Если у танка активный attack approach и target жив → попробовать re-path через
+     setLightTankAttackApproachGeneric вместо безусловной очистки path
+   - Throttle: не чаще раза в 800мс (_attack06LastRepathAt)
+   - Если re-path успешен — вернуть true, attack order сохранён
+   - Если re-path неуспешен или throttled — вернуть false, НЕ очищать path,
+     ATTACK-05 sync loop переприсвоит на следующем тике
+   - Если target dead/invalid — fall through к default (очистка path)
+
+2. updateUnitMovement — ATTACK-06 early recovery в blocked branch (строка ~5463):
+   - Когда isLightTank(unit) && attackApproachTargetId && blockedTimer > 0.5с
+   - Определяется blocker type: unit / building / mineral / obstacle / unknown
+   - Если blocker = unit: попробовать re-path к attack target с throttle 800мс
+   - Если blocker = building/mineral/obstacle: консервативно, записать telemetry,
+     не ломать проходимость
+   - Если re-path успешен: сбросить blockedTimer, сохранить command='attack'
+   - Телеметрия: game._attack06LastMovementStallCheck
+   - Counters: game._attack06StallCounters (checkedCount, stuckCount, recoveredCount, failedRecoveryCount)
+
+Обрабатываемые blocker types:
+- unit: re-path к attack target
+- building: консервативно, telemetry, не ломать
+- mineral: консервативно, telemetry, не ломать
+- obstacle: консервативно, telemetry, не ломать
+- unknown: консервативно, telemetry
+
+Телеметрия game._attack06LastMovementStallCheck:
+{
+  unitId, blockerKind, blockerId, nextX, nextY,
+  pathLenBefore, pathLenAfter, recovered, recoveryReason,
+  targetId, state, command, blockedTimer
+}
+
+Counters game._attack06StallCounters:
+{ checkedCount, stuckCount, recoveredCount, failedRecoveryCount }
+
+Новая логика: ~60 строк (recoverUnitPath branch + updateUnitMovement early recovery + telemetry)
+
+Изменённые файлы:
+- src/main.js — 2 правки: recoverUnitPath + updateUnitMovement
+- PATCH_REPORT.txt — добавлена эта запись
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто (hard rules):
+- findPath algorithm — нет
+- passable globally — нет
+- unitAt globally — нет
+- combat damage/range/cooldown — нет
+- scout — нет
+- economy/storage — нет
+- updateEnemyBot — нет
+- player manual movement — нет
+
+Manual smoke:
+- новая игра стартует
+- enemy base появляется
+- enemy tanks производятся
+- hq_push срабатывает
+- танки получают pathLen > 0
+- если next waypoint занят другим танком, recovery/re-path срабатывает
+- через 10 секунд x/y меняются
+- pathLen уменьшается или пересчитывается
+- distToPlayerHQ уменьшается
+- танки доходят до player HQ
+- танки атакуют
+- player manual tank movement работает
+- harvesters/builders не сломались
+- console без красных ошибок
+
+Риски:
+- re-path может не найти альтернативный маршрут если все approach-клетки заблокированы
+  → в этом случае ATTACK-05 sync loop продолжает попытки на каждом тике
+- throttle 800мс означает что танк может стоять до 0.8с перед re-path
+  → лучше чем вечное залипание, но возможна короткая пауза
+- blocker detection для building/mineral/obstacle не делает recovery
+  → консервативный подход, не ломает проходимость

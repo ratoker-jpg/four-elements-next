@@ -5394,6 +5394,29 @@ function handleCanvasRightClickCancel(e) {
     unit._blockedTimer = 0;
     unit._stuckTimer = 0;
 
+    // ATTACK-06: for light_tank with active attack approach, try re-path before killing path.
+    // recoverUnitPath default branch clears path and sets idle — this stalls attack_approach tanks
+    // whose next waypoint is temporarily blocked by another tank.
+    if (unit.type === 'light_tank' && unit.attackApproachTargetId) {
+      var _a06Target = (typeof FE_PATCH_06BResolveApproachTarget === 'function')
+        ? FE_PATCH_06BResolveApproachTarget(unit) : null;
+      if (_a06Target && (_a06Target.hp || 0) > 0) {
+        var _a06Now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        var _a06LastRepath = unit._attack06LastRepathAt || 0;
+        if (_a06Now - _a06LastRepath >= 800) { // throttle: not every tick
+          unit._attack06LastRepathAt = _a06Now;
+          if (typeof setLightTankAttackApproachGeneric === 'function' &&
+              setLightTankAttackApproachGeneric(unit, _a06Target, { toast: false, marker: false })) {
+            return true; // re-pathed successfully, attack order preserved
+          }
+        }
+        // Re-path failed or throttled — keep attackApproachTargetId, don't clear path entirely
+        // The ATTACK-05 sync loop in updateEnemyBot will re-assign on next tick.
+        return false;
+      }
+      // Target dead/invalid — fall through to default path clear below
+    }
+
     if (unit.type === 'harvester') {
       unit.manualTarget = null;
       assignNextMine(unit);
@@ -5436,6 +5459,62 @@ function updateUnitMovement(unit, dt) {
   // не дёргаться, а пересчитать путь.
   if (!passable(nx, ny, unit.id)) {
     unit._blockedTimer = (unit._blockedTimer || 0) + dt;
+
+    // ATTACK-06: focused recovery for light_tank with active attack approach.
+    // When next waypoint is blocked by another unit, re-path to attack target instead of
+    // letting recoverUnitPath kill the path entirely.
+    if (isLightTank(unit) && unit.attackApproachTargetId && unit._blockedTimer > 0.5) {
+      var _a06BlkUnit = (typeof unitAt === 'function') ? unitAt(nx, ny, unit.id) : null;
+      var _a06BlkKind = _a06BlkUnit ? 'unit' : ((typeof buildingAt === 'function' && buildingAt(nx,ny)) ? 'building' : ((typeof mineAt === 'function' && mineAt(nx,ny)) ? 'mineral' : (isObstacleBlocked(nx,ny) ? 'obstacle' : 'unknown')));
+      var _a06Recovered = false;
+      var _a06Reason = '';
+      var _a06PathLenBefore = unit.path ? unit.path.length : 0;
+      if (_a06BlkKind === 'unit') {
+        var _a06Now2 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        var _a06LastR2 = unit._attack06LastRepathAt || 0;
+        if (_a06Now2 - _a06LastR2 >= 800) {
+          unit._attack06LastRepathAt = _a06Now2;
+          var _a06Tgt2 = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(unit) : null;
+          if (_a06Tgt2 && (_a06Tgt2.hp || 0) > 0 &&
+              typeof setLightTankAttackApproachGeneric === 'function' &&
+              setLightTankAttackApproachGeneric(unit, _a06Tgt2, { toast: false, marker: false })) {
+            _a06Recovered = true;
+            _a06Reason = 'repath_success';
+            unit._blockedTimer = 0;
+          } else {
+            _a06Reason = 'repath_failed';
+          }
+        } else {
+          _a06Reason = 'throttled';
+        }
+      } else {
+        _a06Reason = 'non_unit_blocker_' + _a06BlkKind;
+      }
+      // Telemetry
+      if (typeof game !== 'undefined' && game) {
+        game._attack06LastMovementStallCheck = {
+          unitId: unit.id || unit.uid || null,
+          blockerKind: _a06BlkKind,
+          blockerId: _a06BlkUnit ? (_a06BlkUnit.id || _a06BlkUnit.uid || null) : null,
+          nextX: nx, nextY: ny,
+          pathLenBefore: _a06PathLenBefore,
+          pathLenAfter: unit.path ? unit.path.length : 0,
+          recovered: _a06Recovered,
+          recoveryReason: _a06Reason,
+          targetId: unit.attackApproachTargetId || null,
+          state: unit.state || '',
+          command: unit.command || '',
+          blockedTimer: unit._blockedTimer || 0
+        };
+        game._attack06StallCounters = game._attack06StallCounters || { checkedCount:0, stuckCount:0, recoveredCount:0, failedRecoveryCount:0 };
+        game._attack06StallCounters.checkedCount++;
+        if (!_a06Recovered && _a06Reason !== 'throttled') game._attack06StallCounters.stuckCount++;
+        if (_a06Recovered) game._attack06StallCounters.recoveredCount++;
+        if (_a06Reason === 'repath_failed') game._attack06StallCounters.failedRecoveryCount++;
+      }
+      if (_a06Recovered) return false; // re-pathed, movement will resume next tick with new path
+    }
+
     if (unit._blockedTimer > .35) recoverUnitPath(unit);
     return false;
   }
