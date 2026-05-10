@@ -3878,6 +3878,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10D1_tryMove(unit, target, reason) {
     if (!unit || !target) return false;
+    // ATTACK-05: do not overwrite movement for tanks with active hq_push attack orders.
+    if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
+      var _a05St3 = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
+      if (_a05St3 && _a05St3._attack02HqPush) return false;
+    }
 
     const tx = Math.round(target.x);
     const ty = Math.round(target.y);
@@ -4247,6 +4252,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_clearAttackOrder(unit) {
     if (!unit) return;
+    // ATTACK-05: do not clear hq_push attack orders — strength gate must not suppress active hq_push wave.
+    if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
+      var _a05St = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
+      if (_a05St && _a05St._attack02HqPush) return; // hq_push active — preserve attack order
+    }
     unit.attackTargetId = null;
     unit.attackApproachTargetId = null;
     unit.attackTarget = null;
@@ -4258,6 +4268,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   function FE_10E1_returnToHq(unit, enemyHQ, index) {
     if (!unit || !enemyHQ) return false;
+    // ATTACK-05: do not return tank to base if hq_push attack is active.
+    if (unit._attackApproachCommanded || unit.attackApproachTargetId) {
+      var _a05St2 = (typeof game !== 'undefined' && game) ? (game._enemyBotState || null) : null;
+      if (_a05St2 && _a05St2._attack02HqPush) return false;
+    }
 
     const hqx = Number.isFinite(enemyHQ.x) ? enemyHQ.x : FE_10E1_unitTileX(enemyHQ);
     const hqy = Number.isFinite(enemyHQ.y) ? enemyHQ.y : FE_10E1_unitTileY(enemyHQ);
@@ -4838,6 +4853,38 @@ function updateEnemyBot(dt) {
         if (setLightTankAttackApproachGeneric(_a03u, _a03Target, { toast: false, marker: false })) {
           _a03Reissued++;
           FE_PATCH_08BSetKnownTarget(state, _a03Target, _a03u);
+        }
+      }
+      // ATTACK-05: sync hq_push tanks — if attackApproachTargetId set but targetX/targetY/state/command
+      // are stale (overwritten by FE_10D1/FE_10E1 patrol/return), re-sync them to match attack approach.
+      if (state._attack02HqPush && _a03Target) {
+        var _a05Synced = 0, _a05Manual = 0, _a05Wrong = 0, _a05NoPath = 0, _a05Sample = [];
+        var _a05PHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+        var _a05TgtX = _a03Target.x, _a05TgtY = _a03Target.y;
+        for (var _a05j = 0; _a05j < enemyTanks.length; _a05j++) {
+          var _a05u = enemyTanks[_a05j];
+          if (!_a05u || !_a05u.attackApproachTargetId) continue;
+          var _a05tx = Number.isFinite(_a05u.targetX) ? _a05u.targetX : null;
+          var _a05ty = Number.isFinite(_a05u.targetY) ? _a05u.targetY : null;
+          if (_a05u.state === 'manual_move' || _a05u.state === 'moving') _a05Manual++;
+          var _a05approachDist = (_a05tx !== null && _a05ty !== null) ? Math.abs(_a05tx - _a05TgtX) + Math.abs(_a05ty - _a05TgtY) : 9999;
+          if (_a05approachDist > 5) _a05Wrong++;
+          if (!(_a05u.path && _a05u.path.length)) _a05NoPath++;
+          if (_a05u.state !== 'attack_approach' || _a05approachDist > 5 || !(_a05u.path && _a05u.path.length)) {
+            setLightTankAttackApproachGeneric(_a05u, _a03Target, { toast: false, marker: false });
+            _a05Synced++;
+          }
+          if (_a05Sample.length < 3) _a05Sample.push({ id: _a05u.id||_a05u.uid, st: _a05u.state, tx: _a05u.targetX, ty: _a05u.targetY, path: !!(_a05u.path&&_a05u.path.length) });
+        }
+        if (game) {
+          game._attack05LastOrderSync = {
+            targetId: _a03Target ? (_a03Target.id || null) : null,
+            targetX: _a05TgtX, targetY: _a05TgtY,
+            assignedCount: enemyTanks.filter(function(u){ return u && u.attackApproachTargetId; }).length,
+            syncedCount: _a05Synced, manualMoveLeftCount: _a05Manual, wrongTargetCount: _a05Wrong,
+            withPathCount: enemyTanks.filter(function(u){ return u && u.attackApproachTargetId && u.path && u.path.length; }).length,
+            withoutPathCount: _a05NoPath, sampleUnits: _a05Sample, at: game.time || 0
+          };
         }
       }
       if (game) {
@@ -10478,6 +10525,19 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
       attacker._dirTargetKey = null;
       attacker._dirDx = 0;
       attacker._dirDy = 0;
+      // ATTACK-05: sync targetX/targetY/command with attack approach destination.
+      // Without this, stale targetX/targetY from patrol/regroup/move remain,
+      // and command stays 'move', causing console table to show wrong coords.
+      attacker.targetX = cell.x;
+      attacker.targetY = cell.y;
+      attacker.command = 'attack';
+      attacker.moveTarget = { x: cell.x, y: cell.y };
+      attacker.destination = { x: cell.x, y: cell.y };
+      attacker.targetTile = { x: cell.x, y: cell.y };
+      attacker.destX = cell.x;
+      attacker.destY = cell.y;
+      attacker.goalX = cell.x;
+      attacker.goalY = cell.y;
 
       if (options.marker !== false) addUnitClickMarker(attacker, cell.x, cell.y, 'ok');
       return true;
