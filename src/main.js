@@ -2734,7 +2734,8 @@
   function FE_PATCH_08BNeedsNewAttackOrder(unit, target, now, lastOrderAt) {
     if (!unit || !target) return false;
     if (FE_PATCH_08BUnitHasTarget(unit, target)) return false;
-    if (unit.path && unit.path.length && unit.state === 'attack_approach') return false;
+    // ATTACK-03: only skip if the approach is for THIS target; wrong-target approach must be overridden.
+    if (unit.path && unit.path.length && unit.state === 'attack_approach' && unit.attackApproachTargetId === target.id) return false;
     if ((now - (lastOrderAt || 0)) < FE_PATCH_08BSeconds(FE_10I1_knobs().minOrderGapMs)) return false;
     return true;
   }
@@ -3219,8 +3220,30 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
     let issued = false;
     const waveSize = Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length)));
-    for (const unit of enemyUnits.slice(0, waveSize)) {
+    const waveSlice = enemyUnits.slice(0, waveSize);
+    for (const unit of waveSlice) {
       issued = FE_PATCH_08BCommandEnemyTankAttack(unit, target, state, attackOrderType) || issued;
+    }
+
+    // ATTACK-03 telemetry: detailed per-unit assignment info after dispatch.
+    if (game) {
+      var _a03Ids = [], _a03wt = 0, _a03wp = 0, _a03wop = 0;
+      for (var _a03k = 0; _a03k < waveSlice.length; _a03k++) {
+        var _a03w = waveSlice[_a03k];
+        _a03Ids.push(_a03w.id || _a03w.uid || null);
+        if (_a03w.attackTargetId || _a03w.attackApproachTargetId) _a03wt++;
+        if (_a03w.path && _a03w.path.length) _a03wp++; else _a03wop++;
+      }
+      game._attack03LastDispatch = {
+        orderType: attackOrderType,
+        targetId: target.id || null,
+        assignedCount: _a03Ids.length,
+        assignedUnitIds: _a03Ids,
+        withTargetCount: _a03wt,
+        withPathCount: _a03wp,
+        withoutPathCount: _a03wop,
+        at: game.time || 0
+      };
     }
 
     if (issued) {
@@ -4722,6 +4745,48 @@ function updateEnemyBot(dt) {
     }
 
     if (state.phase === 'attack') {
+      // ATTACK-03: Re-issue attack orders for tanks that lost their targets during attack phase.
+      // When a tank's path is consumed/cleared and re-path fails, it goes idle but phase stays 'attack'
+      // → updateEnemyBot returns immediately → no re-ordering ever happens. Fix: detect lost-order
+      // tanks and re-assign via setLightTankAttackApproachGeneric, bypassing NeedsNewAttackOrder throttle.
+      var _a03Target = state._attack02HqPush
+        ? (typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null)
+        : (state.lastKnownTargetId ? FE_PATCH_08BResolveBotTarget(state.lastKnownTargetId, state.lastKnownTargetKind) : null);
+      var _a03OrderType = state._attack02HqPush ? 'hq_push' : 'attack';
+      var _a03Lost = 0, _a03Reissued = 0, _a03Assigned = [], _a03WT = 0, _a03WP = 0, _a03WoP = 0;
+      for (var _a03i = 0; _a03i < enemyTanks.length; _a03i++) {
+        var _a03u = enemyTanks[_a03i];
+        if (!_a03u) continue;
+        _a03Assigned.push(_a03u.id || _a03u.uid || null);
+        if (_a03u.attackTargetId || _a03u.attackApproachTargetId || _a03u.state === 'attacking') {
+          _a03WT++;
+          if (_a03u.path && _a03u.path.length) _a03WP++;
+          continue;
+        }
+        _a03Lost++;
+        _a03WoP++;
+        if (!_a03Target || (_a03Target.hp || 0) <= 0) continue;
+        var _a03Kind = FE_PATCH_07BGetHostileLightTankTargetKind(_a03u, _a03Target);
+        if (!_a03Kind) continue;
+        if (setLightTankAttackApproachGeneric(_a03u, _a03Target, { toast: false, marker: false })) {
+          _a03Reissued++;
+          FE_PATCH_08BSetKnownTarget(state, _a03Target, _a03u);
+        }
+      }
+      if (game) {
+        game._attack03LastReorder = {
+          orderType: _a03OrderType,
+          targetId: _a03Target ? (_a03Target.id || null) : null,
+          lostCount: _a03Lost,
+          reissuedCount: _a03Reissued,
+          assignedCount: _a03Assigned.length,
+          assignedUnitIds: _a03Assigned,
+          withTargetCount: _a03WT,
+          withPathCount: _a03WP,
+          withoutPathCount: _a03WoP,
+          at: game.time || 0
+        };
+      }
       return;
     }
 
@@ -10397,11 +10462,15 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
       return true;
     }
 
-    const ok = setLightTankAttackApproach(unit, target);
+    // ATTACK-03: use Generic variant for enemy tanks so they can re-path correctly.
+    // setLightTankAttackApproach has isPlayerUnit guard — always returns false for enemy units.
+    const ok = isPlayerUnit(unit)
+      ? setLightTankAttackApproach(unit, target)
+      : setLightTankAttackApproachGeneric(unit, target, { toast: false, marker: false });
     if (!ok) {
       clearLightTankAttackApproach(unit);
       unit.state = 'idle';
-      showToast('Танк не может подъехать к цели');
+      if (isPlayerUnit(unit)) showToast('Танк не может подъехать к цели');
     }
 
     return true;
