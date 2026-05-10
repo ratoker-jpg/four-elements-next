@@ -6961,6 +6961,32 @@ function debugLog(event, payload={}) {
   const FE_PATCH_09E_FACTORY_UNIT_TYPE = 'light_tank';
   const FE_PATCH_09E_FACTORY_MAX_QUEUE = 1;
 
+  // ATTACK-09: experimental enemy light_tank production cap.
+  // Set window.FE_ENEMY_LIGHT_TANK_CAP = 3 (default) to limit enemy tank count.
+  // null / undefined / <=0 disables the cap.
+  window.FE_ENEMY_LIGHT_TANK_CAP = 3;
+
+  function FE_ATTACK09GetEnemyLightTankCountIncludingQueue() {
+    if (!game) return 0;
+    var alive = 0;
+    var units = game.units || [];
+    for (var i = 0; i < units.length; i++) {
+      var u = units[i];
+      if (u && u.type === 'light_tank' && unitOwner(u) === 'enemy' && (u.hp ?? 1) > 0) {
+        alive++;
+      }
+    }
+    var queued = 0;
+    var factories = FE_PATCH_09ECompleteEnemyFactories();
+    for (var fi = 0; fi < factories.length; fi++) {
+      var fq = FE_PATCH_09EEnsureFactoryQueue(factories[fi]);
+      for (var qi = 0; qi < fq.length; qi++) {
+        if (fq[qi].type === 'light_tank') queued++;
+      }
+    }
+    return alive + queued;
+  }
+
   function FE_PATCH_09EEnemyElementKey() {
     const faction = defaultFactionForOwner('enemy');
     return FACTION_ELEMENT_KEY[faction] || 'purple';
@@ -7001,6 +7027,15 @@ function debugLog(event, payload={}) {
   function FE_PATCH_09ECanStartLightTankProduction(factory) {
     if (!factory || factory.type !== 'units_factory' || !factory.complete || buildingOwner(factory) !== 'enemy') {
       return { ok:false, reason:'no_complete_enemy_factory' };
+    }
+
+    // ATTACK-09: experimental light_tank production cap.
+    var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
+    if (_a09Cap != null && _a09Cap > 0) {
+      var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
+      if (_a09Count >= _a09Cap) {
+        return { ok:false, reason:'attack09_tank_cap', attack09Cap:_a09Cap, attack09Count:_a09Count };
+      }
     }
 
     const queue = FE_PATCH_09EEnsureFactoryQueue(factory);
@@ -7106,13 +7141,29 @@ function debugLog(event, payload={}) {
       return;
     }
 
+    // ATTACK-09: telemetry snapshot for enemy light_tank production cap.
+    var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
+    var _a09CapEnabled = _a09Cap != null && _a09Cap > 0;
+    var _a09Count = _a09CapEnabled ? FE_ATTACK09GetEnemyLightTankCountIncludingQueue() : null;
+    var _a09Blocked = _a09CapEnabled && _a09Count >= _a09Cap;
+    game._attack09EnemyTankCap = {
+      cap: _a09CapEnabled ? _a09Cap : null,
+      count: _a09Count,
+      blocked: _a09Blocked,
+      reason: _a09Blocked ? 'cap_reached' : (_a09CapEnabled ? null : 'cap_disabled'),
+      factoryId: factories.length ? factories[0].id : null,
+      at: game.time || 0
+    };
+
     for (const factory of factories) {
       const queue = FE_PATCH_09EEnsureFactoryQueue(factory);
 
       // BOT-BASELINE-01: choose unit type — workers have priority over tanks.
       if (!queue.length) {
         var unitType = FE_PATCH_BASELINE_01_ChooseFactoryUnitType();
-        if (unitType === 'light_tank') {
+        if (!unitType) {
+          // ATTACK-09: cap reached or no production needed — factory waits, no builder spam.
+        } else if (unitType === 'light_tank') {
           FE_PATCH_09EStartLightTankProduction(factory);
         } else {
           FE_PATCH_BASELINE_01_StartFactoryProduction(factory, unitType);
@@ -7208,9 +7259,20 @@ function debugLog(event, payload={}) {
   }
 
   function FE_PATCH_BASELINE_01_ChooseFactoryUnitType() {
-    if (!game) return 'light_tank';
+    // ATTACK-09 helper: if light_tank cap is reached, return null regardless of early-exit path.
+    var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
+    var _a09CapEnabled = _a09Cap != null && _a09Cap > 0;
+    var _a09CapBlocked = false;
+    if (_a09CapEnabled) {
+      var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
+      _a09CapBlocked = _a09Count >= _a09Cap;
+    }
+
+    if (!game) return _a09CapBlocked ? null : 'light_tank';
     var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    if (now - (game._baseline01LastWorkerCheck || 0) < FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS) return 'light_tank';
+    if (now - (game._baseline01LastWorkerCheck || 0) < FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS) {
+      return _a09CapBlocked ? null : 'light_tank';
+    }
     game._baseline01LastWorkerCheck = now;
 
     // Check if a worker is already queued in any factory to avoid double-order.
@@ -7230,6 +7292,14 @@ function debugLog(event, payload={}) {
     // Builder first (no builder = no buildings), then harvester.
     if (buildCount < FE_PATCH_BASELINE_01_BUILDER_MIN && !builderQueued && buildCount < FE_PATCH_BASELINE_01_BUILDER_CAP) return 'builder';
     if (harvCount < FE_PATCH_BASELINE_01_HARVESTER_MIN && !harvesterQueued && harvCount < FE_PATCH_BASELINE_01_HARVESTER_CAP) return 'harvester';
+
+    // ATTACK-09: if light_tank cap is reached, return null (factory waits, no builder spam).
+    var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
+    if (_a09Cap != null && _a09Cap > 0) {
+      var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
+      if (_a09Count >= _a09Cap) return null;
+    }
+
     return 'light_tank';
   }
 
