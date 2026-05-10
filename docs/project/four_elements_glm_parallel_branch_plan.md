@@ -295,7 +295,7 @@ or a patch report with:
 Sprint doc:
 
 ```text
-docs/project/codex_limit_sprint_20260509_20260510.md
+docs/project/codex_limit_sprint_20260509_20260510.md  (АРХИВИРОВАН — см. docs/archive/old_codex_refactor/)
 ```
 
 Suggested priority:
@@ -348,7 +348,7 @@ window.FE_CORE.game.enemyRetreatMvp
 New checkpoint doc:
 
 ```text
-docs/project/four_elements_bot_checkpoint_10H2.md
+docs/project/four_elements_bot_checkpoint_10H2.md  (АРХИВИРОВАН — см. docs/archive/old_checkpoints/)
 ```
 
 Next route depends on smoke:

@@ -1264,3 +1264,138 @@ Lane: Fast
 Выполненные проверки:
 - node --check src/main.js -> PASS (smoke only, без изменений)
 - Визуальная проверка: только новый .md документ + PATCH_REPORT.txt
+
+---
+
+Задача: DOCS-AUDIT-01 — аудит source-of-truth и устаревших документов
+Дата: 2026-05-10
+Lane: Fast
+Ветка: sandbox/main (direct push)
+
+Цель:
+Аудит всех проектных документов для классификации по категориям
+CANONICAL / ACTIVE / REFERENCE / STALE / ARCHIVE_CANDIDATE / DANGEROUS_OLD / DUPLICATE_OR_OVERLAP.
+Docs-only задача — код, ассеты, gameplay НЕ менялись.
+
+Что сделано:
+1. Прочитаны все 37 документов проекта (README, AGENTS, промпты, роадмапы, чекпоинты, аудит-отчёты, архив)
+2. Каждый документ классифицирован по 7 категориям
+3. Создан аудит-документ: docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md
+
+Ключевые находки:
+- 6 CANONICAL документов (AGENTS.md, README.md, README_GLM_SANDBOX.md, PATCH_REPORT.txt, REF_MAIN_GLM_07, scout_unit_roadmap)
+- 8 ACTIVE документов (GLM_ROADMAP, GLM_STRATEGY_REVIEW, GLM_FUTURE_VISION, bot_roadmap_merged_glm, и др.)
+- 7 REFERENCE документов (исторические, но полезные)
+- 4 STALE/DANGEROUS_OLD документа (NEW_CHAT_START_PROMPT.md — production-пути; памятка.txt — устаревшая формула сепаратора; THIS_IS_WORK_PROJECT.txt; checkpoint_10E2)
+- 8 ARCHIVE_CANDIDATE документов (codex_limit_sprint, checkpoint_10H2, .docx roadmap, и др.)
+- 5 DUPLICATE_OR_OVERLAP групп (регламент+роадмап, бот-чекпоинты, рефакторинг main.js, GLM-планирование, промпты)
+
+Главный риск:
+NEW_CHAT_START_PROMPT.md и памятка.txt содержат устаревшую информацию, способную ввести будущую AI-сессию в заблуждение (устаревшая формула сепаратора 20->10+1 вместо актуальной 15->10+1, production-пути вместо sandbox-путей).
+
+Рекомендованная следующая задача:
+DOCS-CLEANUP-01 — физическая реорганизация документов (перемещение DANGEROUS_OLD и STALE в archive/, добавление WARNING-заголовков, проверка перекрёстных ссылок).
+
+Изменённые файлы:
+- docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md (new)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS (smoke only, без изменений)
+- Визуальная проверка: только новый .md документ + PATCH_REPORT.txt
+
+Безопасность:
+- src/* не изменён
+- assets/* не изменён
+- index.html не изменён
+- gameplay не изменён
+- Google Drive sync не тронут
+- Production paths не затронуты
+- Файлы не перемещались и не удалялись — только аудит
+
+---
+
+Задача: DOCS-CLEANUP-01 — реорганизация документов: AI_READ_FIRST + архивация dangerous/stale
+Дата: 2026-05-10
+Lane: Review
+Ветка: glm/docs-cleanup-01-source-of-truth-archive (от sandbox/main)
+
+Цель:
+На основе аудита DOCS-AUDIT-01 физически привести docs в порядок:
+1. Создать AI_READ_FIRST.md — точка входа для новой AI-сессии.
+2. Переместить DANGEROUS_OLD и ARCHIVE_CANDIDATE документы в docs/archive/.
+3. Добавить WARNING-заголовки в архивные документы.
+4. Обновить ссылки в ACTIVE документах на новые пути архива.
+5. Не удалять файлы.
+6. Не менять код.
+
+Это docs-only задача. Не gameplay patch. Не code refactor.
+
+Созданные файлы:
+- docs/project/AI_READ_FIRST.md (new) — точка входа для AI-сессии
+- docs/archive/dangerous_old/ (new directory)
+- docs/archive/old_checkpoints/ (new directory)
+- docs/archive/old_codex_refactor/ (new directory)
+- docs/archive/old_roadmaps/ (new directory)
+- docs/archive/old_audits/ (new directory)
+- docs/archive/old_prompts/ (new directory — пустая)
+
+Перемещённые DANGEROUS_OLD файлы (3):
+- docs/project/NEW_CHAT_START_PROMPT.md → docs/archive/dangerous_old/NEW_CHAT_START_PROMPT.md
+  Причина: production-пути, Google Drive mirror, устаревшие чекпоинты
+- docs/project/памятка.txt → docs/archive/dangerous_old/памятка.txt
+  Причина: устаревшая формула сепаратора 20→10+1 (актуальная 15→10+1), старый порт 8000
+- THIS_IS_WORK_PROJECT.txt → docs/archive/dangerous_old/THIS_IS_WORK_PROJECT.txt
+  Причина: маркер production-проекта, не sandbox
+
+Перемещённые ARCHIVE_CANDIDATE файлы (3):
+- docs/project/codex_limit_sprint_20260509_20260510.md → docs/archive/old_codex_refactor/
+  Причина: sprint window истёк
+- docs/project/four_elements_patch_roadmap_actual.docx → docs/archive/old_roadmaps/
+  Причина: бинарный формат, устарел относительно .md-версии
+- docs/project/patch_08a_bot_behavior_mvp_audit.md → docs/archive/old_audits/
+  Причина: аудит PATCH-08A уже выполнен и принят
+
+Перемещённые STALE файлы (2):
+- docs/project/four_elements_bot_checkpoint_10E2.md → docs/archive/old_checkpoints/
+  Причина: перекрыт чекпоинтом 10I2
+- docs/project/four_elements_bot_checkpoint_10H2.md → docs/archive/old_checkpoints/
+  Причина: перекрыт чекпоинтом 10I2
+
+Обновлён WARNING-заголовок:
+- docs/project/archive/four_elements_workflow_reglament_v5_20260506.md — добавлен WARNING
+
+Обновлённые ссылки в ACTIVE документах:
+- docs/prompts/PROMPT_NEW_CHAT_GPT_FOUR_ELEMENTS_GLM_FIRST.txt — NEW_CHAT_START_PROMPT → AI_READ_FIRST.md
+- docs/project/four_elements_workflow_reglament.md — 5 ссылок обновлены
+- docs/project/four_elements_patch_roadmap_actual.md — 5 ссылок обновлены
+- docs/project/four_elements_bot_roadmap_merged_glm.md — 3 ссылки обновлены
+- docs/project/four_elements_glm_parallel_branch_plan.md — 2 ссылки обновлены
+
+Что НЕ сделано (по правилам задачи):
+- Файлы НЕ удалялись — только перемещались в archive
+- src/* НЕ затронуты
+- index.html НЕ затронут
+- assets/* НЕ затронуты
+- CANONICAL документы НЕ перемещались
+- ACTIVE документы НЕ перемещались
+- REFERENCE документы НЕ перемещались
+- PLAYWRIGHT_VISUAL_SCENARIOS.md, playwright_codegen_routes.md — низкий приоритет, не перемещены
+- project_structure.md, reglament_local_tools_addendum.md — STALE, но не рекомендованы аудитом для архива
+- 01_BUILD_GPT_CONTEXT_WORK.bat — не обновлён (production-era скрипт, не sandbox)
+- docs/codex/Open_Codex_Chat.lnk — не перемещён (Windows ярлык)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS (smoke only, код не менялся)
+- git diff --name-only: только docs/ файлы, PATCH_REPORT.txt
+- Ручная проверка: ни один CANONICAL/ACTIVE/REFERENCE документ не перемещён
+- Ручная проверка: все архивные файлы содержат WARNING-заголовок
+- Ручная проверка: все ссылки в ACTIVE документах обновлены
+
+Безопасность:
+- Игровой код не изменён
+- Ассеты не затронуты
+- src/main.js не тронут
+- Google Drive sync не включён
+- Production paths не затронуты
+- Откат тривиален: git revert восстанавливает все перемещения

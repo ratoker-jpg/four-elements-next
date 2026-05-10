@@ -34,7 +34,7 @@
 
 | Roadmap | `docs/project/four_elements_patch_roadmap_actual.md` |
 
-| New chat prompt | `docs/project/NEW_CHAT_START_PROMPT.md` |
+| New chat prompt | `docs/project/AI_READ_FIRST.md` (NEW_CHAT_START_PROMPT.md архивирован: `docs/archive/dangerous_old/`) |
 
 | Codex Gate | Codex только с `CODEX_APPROVED_*` |
 
@@ -89,7 +89,7 @@ Codex не является вариантом по умолчанию, даже
    - `README_SYNC.txt`;
    - `project_docs/AGENTS.md`;
    - `project_docs/docs/project/four_elements_workflow_reglament.md`;
-   - `project_docs/docs/project/NEW_CHAT_START_PROMPT.md`;
+   - `project_docs/docs/project/NEW_CHAT_START_PROMPT.md` (АРХИВИРОВАН — см. `docs/archive/dangerous_old/`);
    - `project_docs/docs/project/four_elements_patch_roadmap_actual.md`;
    - `gpt_state/LAST_SYNC.txt`;
    - `gpt_state/LAST_PATCH_REPORT.txt`;
@@ -102,7 +102,7 @@ Codex не является вариантом по умолчанию, даже
 _exports\GPT_WORK_SEND_THIS_CONTEXT.zip
 ```
 
-5. Если ZIP неполный, например не содержит ожидаемые `AGENTS.md`, `NEW_CHAT_START_PROMPT.md`, регламент, roadmap или актуальный `PATCH_REPORT.txt`, это считается предупреждением. Для рискованных задач по коду нужно остановиться и попросить пересобрать/прислать корректный контекст.
+5. Если ZIP неполный, например не содержит ожидаемые `AGENTS.md`, `AI_READ_FIRST.md` (замена архивированного `NEW_CHAT_START_PROMPT.md`), регламент, roadmap или актуальный `PATCH_REPORT.txt`, это считается предупреждением. Для рискованных задач по коду нужно остановиться и попросить пересобрать/прислать корректный контекст.
 6. При конфликте источников явно назвать конфликт и выбрать более свежий источник только по фактам: timestamp, `PATCH_REPORT.txt`, `LAST_SYNC.txt`, содержимое файлов.
 7. Запрещено подставлять старые пути, старые patch names или старый статус из памяти, если они не подтверждены свежим mirror/context.
 
@@ -132,7 +132,7 @@ _exports\GPT_WORK_SEND_THIS_CONTEXT.zip
 1. Считать только принятые успешные патчи.
 2. Не считать failed/partial/superseded попытки, пока нет принятого replacement-патча.
 3. После двух принятых патчей GPT обязан сам остановить следующий feature/code step и предложить docs patch.
-4. Docs patch обновляет актуальный статус в `AGENTS.md`, регламенте, `NEW_CHAT_START_PROMPT.md`, roadmap, `PATCH_REPORT.txt` и `_inbox/session_summary_...txt`, если эти файлы релевантны.
+4. Docs patch обновляет актуальный статус в `AGENTS.md`, регламенте, `AI_READ_FIRST.md` (замена `NEW_CHAT_START_PROMPT.md`), roadmap, `PATCH_REPORT.txt` и `_inbox/session_summary_...txt`, если эти файлы релевантны.
 5. После синка docs patch счётчик обнуляется.
 6. Пользователь не должен отдельно напоминать об обновлении документации.
 
@@ -262,7 +262,7 @@ project_docs/AGENTS.md
 
 project_docs/docs/project/four_elements_workflow_reglament.md
 
-project_docs/docs/project/NEW_CHAT_START_PROMPT.md
+project_docs/docs/project/NEW_CHAT_START_PROMPT.md  (АРХИВИРОВАН — см. docs/archive/dangerous_old/)
 
 project_docs/docs/project/four_elements_patch_roadmap_actual.md
 
@@ -412,7 +412,7 @@ _exports\gpt_context_latest.zip
 
 - `docs/project/four_elements_workflow_reglament.md`;
 
-- `docs/project/NEW_CHAT_START_PROMPT.md`;
+- `docs/project/NEW_CHAT_START_PROMPT.md` (АРХИВИРОВАН — см. `docs/archive/dangerous_old/`);
 
 - `docs/project/four_elements_patch_roadmap_actual.md`;
 
@@ -1786,7 +1786,7 @@ Failed but safely restored:
 New checkpoint doc:
 
 ```text
-docs/project/four_elements_bot_checkpoint_10E2.md
+docs/project/four_elements_bot_checkpoint_10E2.md  (АРХИВИРОВАН — см. docs/archive/old_checkpoints/)
 ```
 
 Next route:
@@ -1898,7 +1898,7 @@ or a patch report with:
 Sprint doc:
 
 ```text
-docs/project/codex_limit_sprint_20260509_20260510.md
+docs/project/codex_limit_sprint_20260509_20260510.md  (АРХИВИРОВАН — см. docs/archive/old_codex_refactor/)
 ```
 
 Suggested priority:
@@ -1951,7 +1951,7 @@ window.FE_CORE.game.enemyRetreatMvp
 New checkpoint doc:
 
 ```text
-docs/project/four_elements_bot_checkpoint_10H2.md
+docs/project/four_elements_bot_checkpoint_10H2.md  (АРХИВИРОВАН — см. docs/archive/old_checkpoints/)
 ```
 
 Next route depends on smoke:

@@ -1,3 +1,17 @@
+---
+> ⚠️ ARCHIVED / NOT SOURCE OF TRUTH
+>
+> Этот документ сохранён только как исторический контекст.
+> Не использовать как актуальную инструкцию для GPT/GLM/Codex.
+> Актуальный порядок чтения: docs/project/AI_READ_FIRST.md.
+>
+> Причина архивации: STALE — ранний чекпоинт бота (10D1, 10E1).
+> Перекрыт более полными чекпоинтами 10H2 и 10I2_codex_sprint.
+> Актуальный чекпоинт: four_elements_bot_checkpoint_10I2_codex_sprint.md.
+> Архивирован: DOCS-CLEANUP-01, 2026-05-10.
+---
+
+
 # Four Elements Remake — Bot checkpoint 10E2
 
 **Patch:** `PATCH-10E2-DOCS-BOT-AUTOPILOT-AND-STRENGTH-CHECKPOINT`  

@@ -1,3 +1,13 @@
+> ⚠️ ARCHIVED / NOT SOURCE OF TRUTH
+>
+> Этот документ сохранён только как исторический контекст.
+> Не использовать как актуальную инструкцию для GPT/GLM/Codex.
+> Актуальный порядок чтения: docs/project/AI_READ_FIRST.md.
+>
+> Причина архивации: устаревшая v5 регламента (ссылается на v03 WORK folder, порт 8000).
+> Актуальный регламент: docs/project/four_elements_workflow_reglament.md.
+> Архивирован: DOCS-CLEANUP-01, 2026-05-10.
+
 # Four Elements — Workflow Reglament v5
 
 ## 0. Главный принцип

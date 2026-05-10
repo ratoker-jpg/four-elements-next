@@ -1,0 +1,26 @@
+---
+> ⚠️ ARCHIVED / NOT SOURCE OF TRUTH
+>
+> Этот документ сохранён только как исторический контекст.
+> Не использовать как актуальную инструкцию для GPT/GLM/Codex.
+> Актуальный порядок чтения: docs/project/AI_READ_FIRST.md.
+>
+> Причина архивации: DANGEROUS_OLD — маркер production-проекта (не sandbox).
+> Перечисляет устаревшие маркеры main.js (FE_LT_04A, 04B1).
+> Архивирован: DOCS-CLEANUP-01, 2026-05-10.
+---
+
+
+﻿THIS IS THE ACTIVE WORK PROJECT.
+Use this folder for GPT patches and local playable testing.
+
+Canonical src/main.js must contain:
+- FE_LT_04A_COMBAT_START
+- FE_LT_04B1_DRAG_SELECT_START
+- FE_LT_04B1F_SELECTION_RING_GROUP_MOVE_START
+- FE_LT_04B2_GROUP_ATTACK_START
+- setGroupManualMove
+- setGroupLightTankAttack
+
+Do not run Qwen/GitHub experiments here.
+

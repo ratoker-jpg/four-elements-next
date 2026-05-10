@@ -20,7 +20,7 @@ FourElements_WORK_MIRROR
 
 Если есть доступ к Google Drive / file_search:
 1. Найди папку FourElements_WORK_MIRROR.
-2. Начни с NEW_CHAT_START_PROMPT.md.
+2. Начни с docs/project/AI_READ_FIRST.md (NEW_CHAT_START_PROMPT.md архивирован как устаревший).
 3. Потом смотри AGENTS.md, workflow_reglament, roadmap, PATCH_REPORT.
 4. Не патчь Google Drive mirror напрямую.
 

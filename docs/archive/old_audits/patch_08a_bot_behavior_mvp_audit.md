@@ -1,3 +1,16 @@
+---
+> ⚠️ ARCHIVED / NOT SOURCE OF TRUTH
+>
+> Этот документ сохранён только как исторический контекст.
+> Не использовать как актуальную инструкцию для GPT/GLM/Codex.
+> Актуальный порядок чтения: docs/project/AI_READ_FIRST.md.
+>
+> Причина архивации: ARCHIVE_CANDIDATE — аудит PATCH-08A уже выполнен
+> и принят (08B тоже выполнен). Историческая ценность, не actionable.
+> Архивирован: DOCS-CLEANUP-01, 2026-05-10.
+---
+
+
 # PATCH-08A-BOT-BEHAVIOR-MVP-AUDIT
 
 Source: `_inbox/session_summary_20260508_PATCH-08A-BOT-BEHAVIOR-MVP-AUDIT.txt`
