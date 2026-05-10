@@ -2386,3 +2386,91 @@ Enemy light_tank с command='attack' + attackApproachTargetId + живой targe
 - repath вызывает setLightTankAttackApproachGeneric каждый тик для танков без path —
   если все approach-клетки заблокированы, это будет повторяться каждый тик.
   Но findPath быстрый для небольших расстояний.
+
+---
+
+Задача: BOT-ATTACK-09 — экспериментальный production cap для enemy light_tank
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-09-experimental-enemy-light-tank-production-cap (от sandbox/main)
+
+Цель:
+Экспериментальный production cap для проверки влияния массового производства enemy light_tank.
+Ограничить количество enemy light_tank, которое бот может одновременно иметь (живые + в очереди + в производстве).
+
+Что сделано:
+
+1. Глобальный флаг cap (main.js, после FE_PATCH_09E_FACTORY_MAX_QUEUE):
+   - window.FE_ENEMY_LIGHT_TANK_CAP = 3
+   - null / undefined / <=0 отключает cap
+   - Настраивается из консоли: window.FE_ENEMY_LIGHT_TANK_CAP = 5 или window.FE_ENEMY_LIGHT_TANK_CAP = null
+
+2. Хелпер подсчёта (main.js, FE_ATTACK09GetEnemyLightTankCountIncludingQueue):
+   - Считает живые enemy light_tank (game.units, owner=enemy, hp>0)
+   - Считает light_tank в очередях всех enemy factories (_enemyFactoryQueue09E, type=light_tank)
+   - Первый элемент очереди — это текущее производство, уже учтён в очереди
+   - Возвращает alive + queued
+
+3. Guard в FE_PATCH_09ECanStartLightTankProduction (main.js):
+   - Если cap enabled и count >= cap → return { ok:false, reason:'attack09_tank_cap', attack09Cap, attack09Count }
+   - Проверка стоит ДО проверки queue_busy и not_enough_element
+   - StartLightTankProduction получает reject с reason и пишет в SetProductionStatus
+
+4. Guard в FE_PATCH_BASELINE_01_ChooseFactoryUnitType (main.js):
+   - Если cap enabled и count >= cap → return null (вместо 'light_tank')
+   - Фабрика остаётся idle — не производится ни light_tank, ни builder (нет builder spam)
+   - Guard применяется на всех early-return путях: !game, cooldown — тоже проверяют cap
+
+5. Обработка null в FE_PATCH_09EUpdateEnemyFactoryProduction (main.js):
+   - var unitType = FE_PATCH_BASELINE_01_ChooseFactoryUnitType()
+   - if (!unitType) → factory ждёт (noop), builder spam исключён
+   - else if (unitType === 'light_tank') → StartLightTankProduction(factory)
+   - else → StartFactoryProduction(factory, unitType)
+
+6. Telemetry (main.js, game._attack09EnemyTankCap):
+   - Обновляется каждый тик в FE_PATCH_09EUpdateEnemyFactoryProduction
+   - Структура: { cap, count, blocked, reason, factoryId, at }
+   - cap: число если enabled, null если disabled
+   - count: число light_tank (alive + queued) если enabled, null если disabled
+   - blocked: true если count >= cap
+   - reason: 'cap_reached' | 'cap_disabled' | null
+   - factoryId: id первой enemy factory или null
+   - at: game.time
+
+Изменённые файлы:
+- src/main.js — 5 правок (cap flag + helper, guard in CanStart, guard in ChooseFactoryUnitType, null handling in UpdateEnemyFactoryProduction, telemetry)
+- PATCH_REPORT.txt
+
+Что НЕ тронуто:
+- findPath — нет
+- passable — нет
+- combat — нет
+- ATTACK-08 repair — нет
+- scout — нет
+- economy formulas — нет
+- player production — нет
+- movement / pathfinding / render — нет
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- player production затронута: нет
+- economy core изменён: нет
+- ATTACK-08 repair не затронут
+- Google Drive sync тронут: нет
+- Production paths не затронуты
+
+Как тестировать:
+1. Запустить игру, начать skirmish
+2. Подождать пока enemy построит фабрику и произведёт 3 light_tank
+3. Проверить telemetry: console.log(game._attack09EnemyTankCap)
+   - Должно показать { cap:3, count:3, blocked:true, reason:'cap_reached', ... }
+4. Убить один enemy light_tank
+5. Проверить что бот производит новый танк (count упал до 2, cap не blocked)
+6. Для отключения: window.FE_ENEMY_LIGHT_TANK_CAP = null
+   - telemetry покажет { cap:null, count:null, blocked:false, reason:'cap_disabled', ... }
+7. Для увеличения: window.FE_ENEMY_LIGHT_TANK_CAP = 5
