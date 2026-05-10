@@ -1866,3 +1866,106 @@ Manual smoke checklist:
 - Флаг _attack02HqPush сохраняется в game._enemyBotState — если save/load
   сериализует state, нужно добавить миграцию. Но сейчас save/load не сохраняет
   bot state.
+
+---
+
+Задача: BOT-ATTACK-03 — enemy wave group attack order assignment fix
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-03-wave-group-order-fix (от sandbox/main)
+
+Цель:
+Починить ситуацию, когда enemy bot уже принимает решение атаковать через hq_fallback,
+формирует waveSize 8, но танки всё равно стоят у базы или двигаются частично.
+Continuation после BOT-ATTACK-01/02.
+
+Причина бага — три комбинированных проблемы в order execution pipeline:
+
+1. FE_PATCH_08BNeedsNewAttackOrder (строка 2737): пропускал танки с
+   state='attack_approach' и непустым path, даже если path ведёт к ДРУГОЙ цели
+   (autopilot patrol, defend order). Танк с подходом к patrol-точке не получал
+   новый приказ атаки HQ — NeedsNewAttackOrder возвращал false.
+   Исправлено: добавлена проверка attackApproachTargetId === target.id — skip
+   только если подход уже для ЭТОЙ цели.
+
+2. updateLightTankAttackApproach (строка 10400): при повторной маршрутизации
+   (path consumed, re-path) вызывал setLightTankAttackApproach, который содержит
+   isPlayerUnit guard — всегда возвращает false для enemy tanks. Результат:
+   attackApproachTargetId очищен, state='idle', но phase остаётся 'attack' —
+   updateEnemyBot делает немедленный return, и танк навсегда idle.
+   Исправлено: для enemy tanks вызывается setLightTankAttackApproachGeneric,
+   которая не имеет isPlayerUnit guard.
+
+3. updateEnemyBot (строка 4724-4726): при phase='attack' делал немедленный return,
+   не переназначая приказы танкам, потерявшим цель. Если танк терял приказ
+   (re-path fail, override autopilot/retreat), он оставался idle навсегда, потому
+   что phase='attack' блокировал повторную выдачу.
+   Исправлено: добавлен блок ATTACK-03 reorder — при phase='attack' сканирует
+   enemyTanks, находит юниты без attackTargetId/attackApproachTargetId/state='attacking',
+   и напрямую вызывает setLightTankAttackApproachGeneric, обходя NeedsNewAttackOrder throttle.
+
+Что именно было не так с group order assignment:
+- Не все танки получали приказ — NeedsNewAttackOrder skip на wrong-target approach
+- Танки теряли приказ на полпути — re-path через player-only функцию → idle
+- Потерянные приказы не восстанавливались — attack phase immediate return
+
+Какие поля/функции исправлены:
+- FE_PATCH_08BNeedsNewAttackOrder: добавлена проверка attackApproachTargetId === target.id
+- updateLightTankAttackApproach: заменён setLightTankAttackApproach →
+  isPlayerUnit ? setLightTankAttackApproach : setLightTankAttackApproachGeneric
+- updateEnemyBot: добавлен ATTACK-03 reorder block в phase='attack'
+- FE_PATCH_08BPrepareAttack: добавлена ATTACK-03 telemetry (game._attack03LastDispatch)
+- updateEnemyBot: добавлена ATTACK-03 reorder telemetry (game._attack03LastReorder)
+
+Telementry:
+- game._attack03LastDispatch: orderType, targetId, assignedCount, assignedUnitIds,
+  withTargetCount, withPathCount, withoutPathCount, at
+- game._attack03LastReorder: orderType, targetId, lostCount, reissuedCount,
+  assignedCount, assignedUnitIds, withTargetCount, withPathCount, withoutPathCount, at
+
+Что НЕ трогалось:
+- pathfinding algorithm
+- combat damage/range/cooldown
+- scout
+- economy/storage
+- save/load
+- map generation
+- render/input
+- factory production
+- updateEnemyBot (кроме attack phase block)
+- BRAIN-01 priority loop
+- 10H1 retreat logic
+- 10D1 autopilot guard
+- 10C1 scouting
+- ATTACK-01 hq_fallback
+- ATTACK-02 hq_push flag
+
+Изменённые файлы:
+- src/main.js
+- PATCH_REPORT.txt
+
+Выполняемые проверки:
+- node --check src/main.js -> PASS
+
+Manual smoke:
+- новая игра стартует;
+- enemy base появляется;
+- enemy tanks производятся;
+- hq_fallback находит player HQ;
+- waveSize >= 3;
+- танки выходят с базы группой;
+- танки идут к player HQ;
+- танки атакуют;
+- console без красных ошибок, кроме favicon.ico 404.
+
+Debug proof:
+После dispatch показать:
+- game._attack03LastDispatch: assignedCount, withTargetCount, withPathCount, withoutPathCount
+- game._attack03LastReorder: lostCount, reissuedCount, withTargetCount, withPathCount
+
+Risks:
+- Низкий: reorder block работает только при phase='attack', не затрагивает defend/regroup
+- Низкий: setLightTankAttackApproachGeneric может вернуть false если pathfinding не может
+  найти путь — танк остаётся idle, но reorder попробует снова на следующем tick
+- Средний: если player HQ уничтожен, reorder найдёт null target и пропустит — корректно,
+  но OverChasing/AttackStateInvalid должны перевести в regroup
