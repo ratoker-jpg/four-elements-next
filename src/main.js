@@ -3977,87 +3977,105 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   function FE_10C1_trySetScoutMove(unit, target) {
+    // BOT-SCOUT-01B: fixed path assignment — use correct findPath signature,
+    // set state='manual_move', clear direction cache, add telemetry.
     if (!unit || !target) return false;
 
     if (unit.attackTargetId || unit.attackTarget || unit._attackCommanded) return false;
 
-    const tx = Math.round(target.x);
-    const ty = Math.round(target.y);
+    var tx = Math.round(target.x);
+    var ty = Math.round(target.y);
+    var beforeState = unit.state || 'idle';
+    var beforePathLen = (unit.path && unit.path.length) || 0;
 
-    const helperNames = [
-      'issueUnitMoveCommand',
-      'commandMoveUnit',
-      'moveUnitTo',
-      'setUnitDestination',
-      'orderUnitMove',
-      'setUnitMoveTarget'
-    ];
+    // Record scout metadata regardless of path success.
+    unit._fe10c1ScoutTarget = {
+      x: tx,
+      y: ty,
+      label: target.label || 'scout',
+      source: target.source || 'map_probe',
+      confidence: Number.isFinite(target.confidence) ? target.confidence : 0,
+      reason: target.reason || ''
+    };
+    unit._fe10c1ScoutIssuedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    unit._fe10c1Role = 'scout';
 
-    for (const name of helperNames) {
+    // Sync movement target fields.
+    unit.targetX = tx;
+    unit.targetY = ty;
+    unit.destX = tx;
+    unit.destY = ty;
+    unit.goalX = tx;
+    unit.goalY = ty;
+    unit.command = 'move';
+    unit.attackTargetId = null;
+    unit.attackTarget = null;
+    unit._attackCommanded = false;
+
+    // Compute path using the correct findPath(unit, goal, unitId) signature.
+    // findPath expects ({x,y}, {x,y}, unitId) — see line ~5516.
+    var sx = FE_10C1_unitTileX(unit);
+    var sy = FE_10C1_unitTileY(unit);
+    var pathOk = false;
+    var pathFailReason = '';
+    var pathLen = 0;
+
+    // Same-tile check: already at destination.
+    if (sx === tx && sy === ty) {
+      pathFailReason = 'same_tile';
+    } else if (typeof findPath !== 'function') {
+      pathFailReason = 'no_findPath';
+    } else {
       try {
-        const fn = (typeof window !== 'undefined' && window[name]) || (typeof globalThis !== 'undefined' && globalThis[name]);
-        if (typeof fn === 'function') {
-          const result = fn(unit, tx, ty, { silent: true, source: 'enemy_scouting_mvp' });
-          unit._fe10c1ScoutTarget = {
-            x: tx,
-            y: ty,
-            label: target.label || 'scout',
-            source: target.source || 'map_probe',
-            confidence: Number.isFinite(target.confidence) ? target.confidence : 0,
-            reason: target.reason || ''
-          };
-          unit._fe10c1ScoutIssuedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-          unit._fe10c1Role = 'scout';
-          return result !== false;
+        var path = findPath({ x: sx, y: sy }, { x: tx, y: ty }, unit.id);
+        if (path === null) {
+          pathFailReason = 'unreachable';
+        } else if (!Array.isArray(path) || !path.length) {
+          pathFailReason = 'empty_path';
+        } else {
+          unit.path = path;
+          pathLen = path.length;
+          pathOk = true;
         }
-      } catch (_) {}
-    }
-
-    try {
-      unit.destination = { x: tx, y: ty };
-      unit.moveTarget = { x: tx, y: ty };
-      unit.targetTile = { x: tx, y: ty };
-      unit.targetX = tx;
-      unit.targetY = ty;
-      unit.destX = tx;
-      unit.destY = ty;
-      unit.goalX = tx;
-      unit.goalY = ty;
-      unit.command = unit.command || 'move';
-      unit.state = unit.state === 'attacking' ? 'moving' : (unit.state || 'moving');
-      unit.attackTargetId = null;
-      unit.attackTarget = null;
-      unit._attackCommanded = false;
-      unit._fe10c1ScoutTarget = {
-        x: tx,
-        y: ty,
-        label: target.label || 'scout',
-        source: target.source || 'map_probe',
-        confidence: Number.isFinite(target.confidence) ? target.confidence : 0,
-        reason: target.reason || ''
-      };
-      unit._fe10c1ScoutIssuedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      unit._fe10c1Role = 'scout';
-
-      const maybePathFn =
-        (typeof findPath === 'function' && findPath) ||
-        (typeof window !== 'undefined' && typeof window.findPath === 'function' && window.findPath) ||
-        null;
-      if (maybePathFn) {
-        try {
-          const sx = FE_10C1_unitTileX(unit);
-          const sy = FE_10C1_unitTileY(unit);
-          const path = maybePathFn(sx, sy, tx, ty);
-          if (Array.isArray(path) && path.length) {
-            unit.path = path;
-            unit.pathIndex = 0;
-          }
-        } catch (_) {}
+      } catch (err) {
+        pathFailReason = 'exception:' + (err && err.message ? err.message : String(err));
       }
-      return true;
-    } catch (_) {
-      return false;
     }
+
+    if (pathOk) {
+      unit.state = 'manual_move';
+      // Clear direction cache so the sprite re-orients immediately.
+      unit._dirTargetKey = null;
+      unit._dirDx = 0;
+      unit._dirDy = 0;
+      unit._blockedTimer = 0;
+      unit._stuckTimer = 0;
+    } else {
+      // Path failed — leave state as-is so behavior loop can retry or pick a new target.
+      // Do NOT set state='idle' here; the unit might be doing something else.
+    }
+
+    // BOT-SCOUT-01B telemetry.
+    try {
+      if (typeof game !== 'undefined' && game) {
+        game._botScout01MoveFix = {
+          scoutId: unit.id || unit.uid || null,
+          fromX: sx,
+          fromY: sy,
+          targetX: tx,
+          targetY: ty,
+          beforeState: beforeState,
+          afterState: unit.state || '',
+          beforePathLen: beforePathLen,
+          pathLen: pathLen,
+          ok: pathOk,
+          reason: pathFailReason || (pathOk ? 'ok' : ''),
+          at: (typeof performance !== 'undefined' ? performance.now() : Date.now())
+        };
+      }
+    } catch (_) {}
+
+    return pathOk;
   }
 
   function FE_10C1_updateEnemyScoutingMvp() {
@@ -12177,6 +12195,10 @@ window.addEventListener('keydown', e=>{
       }
       if (u.type==='scout') {
         updateUnitMovement(u,dt);
+        // BOT-SCOUT-01B: when path is exhausted, reset state so behavior loop can re-target.
+        if (u.state === 'manual_move' && (!u.path || !u.path.length)) {
+          u.state = 'idle';
+        }
       }
 
       if (u.type === 'builder' || u.type === 'harvester' || u.type === 'light_tank' || u.type === 'scout') {

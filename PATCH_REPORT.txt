@@ -2695,3 +2695,87 @@ Scout быстрее всех юнитов, имеет лучший обзор, 
 9. Enemy продолжает производить light_tank
 10. game._botScout01 обновляется каждый тик
 11. game._botScout01.lastSeenPlayerObjectId обновляется когда scout видит player объект
+
+---
+
+Задача: BOT-SCOUT-01B — исправить назначение пути движения вражеского скаута
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-01b-fix-enemy-scout-movement (от glm/bot-scout-01-enemy-scout-mvp)
+
+Проблема:
+Вражеские скауты производятся корректно, выбирают цель, но не двигаются.
+Runtime-наблюдение: scout_129: state='idle', command='move', pathLen=0.
+
+Причина:
+В FE_10C1_trySetScoutMove вызов findPath использовал неправильную сигнатуру:
+  maybePathFn(sx, sy, tx, ty)  — 4 числа
+Но findPath ожидает: findPath(start, goal, unitId) — 2 объекта {x,y} + unitId.
+Результат: findPath получал невалидные аргументы, путь не создавался,
+scout оставался в state='idle' с pathLen=0.
+
+Дополнительно:
+- state устанавливался в 'moving' вместо 'manual_move' (канонический state для ручного движения)
+- direction cache (_dirTargetKey, _dirDx, _dirDy) не сбрасывался
+- Не было telemetry для диагностики проблем пути
+- При исчерпании пути scout оставался в state='manual_move' навсегда
+
+Что исправлено:
+
+1. FE_10C1_trySetScoutMove — полная переработка:
+   - Убран поиск несуществующих helper-функций (issueUnitMoveCommand и т.д.)
+   - Прямой вызов findPath({x:sx, y:sy}, {x:tx, y:ty}, unit.id) — правильная сигнатура
+   - Обработка результатов: null → 'unreachable', [] → 'empty_path', OK → path присвоен
+   - state = 'manual_move' при успешном пути (вместо 'moving')
+   - Сброс direction cache: _dirTargetKey=null, _dirDx=0, _dirDy=0
+   - Сброс stuck/blocked timers: _blockedTimer=0, _stuckTimer=0
+   - Синхронизация target-полей: targetX/Y, destX/Y, goalX/Y, command='move'
+   - При ошибке пути state не меняется (поведенческий цикл попробует новую цель)
+   - Return pathOk (true/false) вместо всегда true
+
+2. Game loop (строка ~12196) — scout path exhaustion reset:
+   - Добавлена проверка: if (state === 'manual_move' && path пуст) → state = 'idle'
+   - Позволяет поведенческому циклу FE_SCOUT01UpdateEnemyScoutBehavior
+     переназначить цель после достижения текущей
+
+3. Telemetry: game._botScout01MoveFix
+   Поля: {scoutId, fromX, fromY, targetX, targetY, beforeState, afterState,
+          beforePathLen, pathLen, ok, reason, at}
+   - reason при неудаче: 'same_tile', 'no_findPath', 'unreachable', 'empty_path', 'exception:...'
+   - reason при успехе: 'ok'
+
+Изменённые файлы:
+- src/main.js — FE_10C1_trySetScoutMove (переписана), game loop scout section (добавлен state reset)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто:
+- ATTACK-08/09/10 — не изменены
+- findPath — не изменён
+- passable — не изменён
+- combat — не изменён
+- production/cap — не изменён (ChooseFactoryUnitType, queueUnitProduction, openFactoryMenu)
+- render/fog — не изменены
+- map generation — не изменена
+- FE_SCOUT01UpdateEnemyScoutBehavior — не изменена
+- FE_SCOUT01ChooseScoutTarget — не изменена
+- FE_SCOUT01IsScoutEnRoute — не изменена
+- FE_SCOUT01UpdateScoutVision — не изменена
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/cap изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+Как тестировать:
+1. Запустить игру, дождаться производства enemy scout
+2. В консоли: game._botScout01MoveFix
+   Ожидание: {ok: true, afterState: 'manual_move', pathLen: >0, reason: 'ok'}
+3. Визуально: scout едет к цели
+4. Дождаться достижения цели: state → 'idle', поведенческий цикл назначает новую цель
