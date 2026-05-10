@@ -2041,3 +2041,85 @@ BOT-ATTACK-03 починил выдачу приказа, но три други
 - танки не разворачиваются обратно через пару секунд
 - танки продолжают движение к player HQ
 - отступают только при: 1 танк, >50% потерь, 2:1 перевес, HQ уничтожен
+
+---
+
+Задача: BOT-ATTACK-05 — sync hq_push attack target with movement command
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-05-sync-hq-push-movement (от sandbox/main)
+
+Проблема:
+После BOT-ATTACK-04 танки получают attackApproachTargetId = player HQ, но movement fields не синхронизированы:
+- command часто = 'move' (должен быть 'attack')
+- state = manual_move / moving (должен быть attack_approach)
+- targetX/targetY показывают старые координаты от patrol/regroup (40,40 / 36,2 / 33,3 / 75,75)
+- часть танков едет не к player HQ, а к случайным точкам
+- FE_10E1 strength gate очищает attackApproachTargetId и отправляет танки домой
+- FE_10D1 autopilot перезаписывает targetX/targetY на patrol-точки
+
+Корневые причины:
+1. setLightTankAttackApproachGeneric НЕ устанавливает targetX/targetY/command/moveTarget/destination
+   — старые значения от patrol/regroup остаются, показывают неверные координаты в console table
+2. FE_10E1_clearAttackOrder очищает attackApproachTargetId при strength gate
+   — если attackAllowed=false, все attack ордера стираются, танки отправляются домой
+3. FE_10E1_returnToHq перезаписывает targetX/targetY/state на координаты enemy HQ
+   — даже если у танка активный hq_push attack order
+4. FE_10D1_tryMove перезаписывает targetX/targetY/command/state на patrol/return координаты
+   — даже если у танка активный hq_push attack order
+
+Что исправлено:
+
+1. setLightTankAttackApproachGeneric (строка ~10481):
+   - Добавлена синхронизация: targetX=targetY=cell.x/cell.y, command='attack'
+   - Также установлены moveTarget, destination, targetTile, destX/destY, goalX/goalY
+   - Старые координаты от patrol/regroup полностью заменяются
+
+2. FE_10E1_clearAttackOrder guard (строка ~4250):
+   - Если у танка _attackApproachCommanded или attackApproachTargetId и hq_push активен
+   — очистка ордера блокируется, attack order сохраняется
+
+3. FE_10E1_returnToHq guard (строка ~4266):
+   - Если у танка _attackApproachCommanded или attackApproachTargetId и hq_push активен
+   — return-to-HQ блокируется, танк остаётся на attack_approach
+
+4. FE_10D1_tryMove guard (строка ~3881):
+   - Если у танка _attackApproachCommanded или attackApproachTargetId и hq_push активен
+   — patrol/return/move перезапись блокируется, танк продолжает attack_approach
+
+5. ATTACK-05 sync loop в attack phase (строка ~4858):
+   - Каждый тик attack phase: проверяет все танки с attackApproachTargetId
+   - Если state != attack_approach, targetX/targetY далеко от HQ, или нет path
+   — вызывает setLightTankAttackApproachGeneric для пересинхронизации
+   - Телеметрия: game._attack05LastOrderSync
+
+Телеметрия game._attack05LastOrderSync:
+{
+  targetId, targetX, targetY, assignedCount, syncedCount,
+  manualMoveLeftCount, wrongTargetCount, withPathCount,
+  withoutPathCount, sampleUnits, at
+}
+
+Новая логика: ~45 строк guard + ~30 строк sync loop + 13 строк field sync = ~88 строк
+
+Изменённые файлы:
+- src/main.js — 5 guard/sync правок + telemetry
+- PATCH_REPORT.txt — добавлена эта запись
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто (hard rules):
+- combat damage/range/cooldown — нет
+- pathfinding algorithm — нет
+- scout — нет
+- economy/storage — нет
+- updateEnemyBot целиком — нет, только точечные правки
+
+Ожидаемое поведение после патча:
+- hq_push wave выходит группой к player HQ
+- targetX/targetY у каждого танка указывают на player HQ или approach-точку рядом
+- command = 'attack', state = 'attack_approach' (не manual_move/moving)
+- strength gate не подавляет hq_push attack ордера
+- autopilot не перезаписывает движение hq_push танков
+- танки группой идут к player HQ и атакуют
