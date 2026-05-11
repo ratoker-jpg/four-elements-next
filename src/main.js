@@ -3501,6 +3501,14 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 22;   // seconds: hard timeout for entire sweep phase
   var FE_SCOUT02D_SWEEP_ARRIVE_DIST = 2;    // tiles: distance to count as arrived at sweep point
 
+  // BOT-SCOUT-02D3: edge-aware perimeter sweep constants.
+  var FE_SCOUT02D3_DIR_COUNT = 24;           // angular samples around base center
+  var FE_SCOUT02D3_MIN_RADIUS = 5;           // tiles: minimum sweep distance from center
+  var FE_SCOUT02D3_MAX_RADIUS = 9;           // tiles: maximum sweep distance from center
+  var FE_SCOUT02D3_EDGE_MARGIN = 2;          // tiles: minimum distance from map edge for sweep points
+  var FE_SCOUT02D3_MAX_SELECTED = 3;         // max sweep points with angular spread selection
+  var FE_SCOUT02D3_MIN_ANGLE_DEG = 45;       // minimum angular separation between selected points (degrees)
+
   // BOT-SCOUT-02E: outbound target selection constants.
   var FE_SCOUT02E_HQ_RALLY_MIN_RADIUS = 3;  // tiles: minimum distance from HQ center for rally point
   var FE_SCOUT02E_HQ_RALLY_MAX_RADIUS = 7;  // tiles: maximum distance from HQ center for rally point
@@ -3675,9 +3683,14 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       && scout.path.length > 0;
   }
 
-  // BOT-SCOUT-02D: generate candidate sweep points around observed player base center.
-  // Returns array of { x, y } objects (valid, in-bounds, safe at generation time).
-  // Sets scout._scout02DSweepCenterX/Y to the chosen center for telemetry.
+  // BOT-SCOUT-02D3: edge-aware perimeter sweep candidate generation.
+  // Replaces the original 8 fixed compass points with angular sampling,
+  // multi-radius probing, edge-margin filtering, danger filtering,
+  // dry-run reachability checking, and angular-spread selection of up to 3 points.
+  //
+  // Returns array of { x, y, angle } objects (valid, in-bounds, safe, reachable).
+  // Sets scout._scout02DSweepCenterX/Y and 02D3 telemetry fields on the scout.
+  //
   // Center selection uses ONLY what the scout has actually seen:
   //   1. If scout._scout02CSeenPlayerHq === true → use player HQ from game.buildings;
   //   2. Else if scout._scout02CSeenPlayerBuildingsCount > 0 → nearest player building within scout view;
@@ -3687,6 +3700,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var centerX = null, centerY = null;
     var buildings = game.buildings || [];
     var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+
+    // BOT-SCOUT-02D3: telemetry counters.
+    var _02d3SkippedOOB = 0;
+    var _02d3SkippedDanger = 0;
+    var _02d3SkippedUnreachable = 0;
 
     // Strategy 1: scout has seen player HQ — use its position as center.
     if (scout._scout02CSeenPlayerHq === true) {
@@ -3717,30 +3735,149 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     }
 
     // Strategy 3: no seen buildings at all — cannot sweep.
-    if (centerX === null || centerY === null) return candidates;
+    if (centerX === null || centerY === null) {
+      // Store telemetry even on early exit.
+      scout._scout02D3RawCandidatesCount = 0;
+      scout._scout02D3SelectedCandidatesCount = 0;
+      scout._scout02D3SkippedOutOfBoundsCount = 0;
+      scout._scout02D3SkippedDangerCount = 0;
+      scout._scout02D3SkippedUnreachableCount = 0;
+      scout._scout02D3CandidateMode = '02d3_angular_spread';
+      scout._scout02D3SelectionReason = 'no_center';
+      return candidates;
+    }
 
     // Store center metadata on scout for telemetry.
     scout._scout02DSweepCenterX = centerX;
     scout._scout02DSweepCenterY = centerY;
 
-    // Generate 8 directional ring points around center.
+    // BOT-SCOUT-02D3: generate angular samples with multi-radius probing.
     var mapSize = FE_10C1_getMapSize();
-    var R = FE_SCOUT02D_SWEEP_RADIUS;
-    // Directions: N, NE, E, SE, S, SW, W, NW (dx, dy offsets).
-    var dirs = [
-      { dx: 0, dy: -R }, { dx: R, dy: -R }, { dx: R, dy: 0 }, { dx: R, dy: R },
-      { dx: 0, dy: R },  { dx: -R, dy: R }, { dx: -R, dy: 0 }, { dx: -R, dy: -R }
-    ];
-    for (var d = 0; d < dirs.length; d++) {
-      var px = centerX + dirs[d].dx;
-      var py = centerY + dirs[d].dy;
-      // In-bounds check.
-      if (px < 1 || py < 1 || px >= mapSize.width - 1 || py >= mapSize.height - 1) continue;
-      // Safe from player tanks at generation time.
-      if (!FE_SCOUT02DIsSweepPointSafe(px, py)) continue;
-      candidates.push({ x: px, y: py });
+    var edgeMargin = FE_SCOUT02D3_EDGE_MARGIN;
+    var sx = FE_10C1_unitTileX(scout);
+    var sy = FE_10C1_unitTileY(scout);
+    var rawCount = 0;
+
+    // For each of 24 angular directions, try radii from min to max.
+    // Keep the first reachable candidate per direction (closest radius preferred).
+    for (var di = 0; di < FE_SCOUT02D3_DIR_COUNT; di++) {
+      var angle = (di / FE_SCOUT02D3_DIR_COUNT) * 2 * Math.PI;
+      var cosA = Math.cos(angle);
+      var sinA = Math.sin(angle);
+      var dirCandidate = null;
+
+      for (var r = FE_SCOUT02D3_MIN_RADIUS; r <= FE_SCOUT02D3_MAX_RADIUS; r += 2) {
+        var px = centerX + Math.round(r * cosA);
+        var py = centerY + Math.round(r * sinA);
+        rawCount++;
+
+        // In-bounds check.
+        if (px < 1 || py < 1 || px >= mapSize.width - 1 || py >= mapSize.height - 1) {
+          _02d3SkippedOOB++;
+          continue;
+        }
+        // Edge margin check: skip points too close to map edge.
+        if (px < edgeMargin || py < edgeMargin || px >= mapSize.width - edgeMargin || py >= mapSize.height - edgeMargin) {
+          _02d3SkippedOOB++;
+          continue;
+        }
+        // Skip same tile as scout current position.
+        if (px === sx && py === sy) continue;
+        // Safe from player tanks at generation time.
+        if (!FE_SCOUT02DIsSweepPointSafe(px, py)) {
+          _02d3SkippedDanger++;
+          continue;
+        }
+        // Dry-run findPath to check reachability without mutating scout.
+        var dryPath = null;
+        try {
+          if (typeof findPath === 'function') {
+            dryPath = findPath({ x: sx, y: sy }, { x: px, y: py }, scout.id);
+          }
+        } catch (_e) { /* pathfinding error — skip this candidate */ }
+        if (dryPath === null || !Array.isArray(dryPath) || dryPath.length === 0) {
+          _02d3SkippedUnreachable++;
+          continue;
+        }
+
+        // First valid candidate for this direction (closest radius) — use it.
+        dirCandidate = { x: px, y: py, angle: angle };
+        break;
+      }
+
+      if (dirCandidate) {
+        candidates.push(dirCandidate);
+      }
     }
-    return candidates;
+
+    // BOT-SCOUT-02D3: angular spread selection.
+    // From all valid candidates, select up to MAX_SELECTED with good angular spread.
+    var selected = [];
+    var selectionReason = '';
+
+    if (candidates.length === 0) {
+      selectionReason = 'no_valid';
+    } else if (candidates.length <= FE_SCOUT02D3_MAX_SELECTED) {
+      // Fewer candidates than max — use all of them.
+      selected = candidates.slice();
+      selectionReason = 'selected_' + selected.length;
+    } else {
+      // Angular spread selection: pick points with maximum angular separation.
+      // Start with the candidate closest to the scout's current position.
+      var bestStartDist = Infinity;
+      var bestStartIdx = 0;
+      for (var si = 0; si < candidates.length; si++) {
+        var _sd = FE_10C1_distTiles(scout, candidates[si]);
+        if (_sd < bestStartDist) {
+          bestStartDist = _sd;
+          bestStartIdx = si;
+        }
+      }
+      selected.push(candidates[bestStartIdx]);
+
+      // Greedy: add the candidate with the largest minimum angular distance to all selected.
+      var minAngleRad = FE_SCOUT02D3_MIN_ANGLE_DEG * Math.PI / 180;
+      var usedIndices = [bestStartIdx];
+
+      while (selected.length < FE_SCOUT02D3_MAX_SELECTED) {
+        var bestMinAngle = -1;
+        var bestAddIdx = -1;
+
+        for (var ci = 0; ci < candidates.length; ci++) {
+          if (usedIndices.indexOf(ci) >= 0) continue;
+          // Compute minimum angular distance from this candidate to all selected.
+          var minAngDist = Infinity;
+          for (var ui = 0; ui < selected.length; ui++) {
+            var angDiff = Math.abs(candidates[ci].angle - selected[ui].angle);
+            if (angDiff > Math.PI) angDiff = 2 * Math.PI - angDiff;
+            if (angDiff < minAngDist) minAngDist = angDiff;
+          }
+          if (minAngDist >= minAngleRad && minAngDist > bestMinAngle) {
+            bestMinAngle = minAngDist;
+            bestAddIdx = ci;
+          }
+        }
+
+        if (bestAddIdx < 0) break;  // no candidate satisfies minimum angular separation
+        selected.push(candidates[bestAddIdx]);
+        usedIndices.push(bestAddIdx);
+      }
+      selectionReason = 'selected_' + selected.length;
+    }
+
+    // Sort selected by angle for deterministic traversal order (clockwise from north).
+    selected.sort(function(a, b) { return a.angle - b.angle; });
+
+    // Store 02D3 telemetry on scout.
+    scout._scout02D3RawCandidatesCount = rawCount;
+    scout._scout02D3SelectedCandidatesCount = selected.length;
+    scout._scout02D3SkippedOutOfBoundsCount = _02d3SkippedOOB;
+    scout._scout02D3SkippedDangerCount = _02d3SkippedDanger;
+    scout._scout02D3SkippedUnreachableCount = _02d3SkippedUnreachable;
+    scout._scout02D3CandidateMode = '02d3_angular_spread';
+    scout._scout02D3SelectionReason = selectionReason;
+
+    return selected;
   }
 
   // BOT-SCOUT-02D: assign next sweep point from candidate list to scout.
@@ -6276,6 +6413,14 @@ function updateEnemyBot(dt) {
           sweepSkippedDangerCount: _s02b._scout02DSweepSkippedDangerCount ?? 0,
           sweepReason: _s02b._scout02DSweepReason || '',
           sweepStartedAt: _s02b._scout02DSweepStartedAt || 0,
+          // BOT-SCOUT-02D3: edge-aware perimeter sweep telemetry
+          sweepRawCandidatesCount: _s02b._scout02D3RawCandidatesCount ?? 0,
+          sweepSelectedCandidatesCount: _s02b._scout02D3SelectedCandidatesCount ?? 0,
+          sweepSkippedOutOfBoundsCount: _s02b._scout02D3SkippedOutOfBoundsCount ?? 0,
+          sweepSkippedDangerAtGenCount: _s02b._scout02D3SkippedDangerCount ?? 0,
+          sweepSkippedUnreachableCount: _s02b._scout02D3SkippedUnreachableCount ?? 0,
+          sweepCandidateMode: _s02b._scout02D3CandidateMode || '',
+          sweepSelectionReason: _s02b._scout02D3SelectionReason || '',
           // BOT-SCOUT-02E: outbound target selection telemetry
           outboundTargetSource: _s02b._fe10c1ScoutTarget?.source || game?.enemyScoutingMvp?.outboundTargetSource || 'none',
           outboundTargetReason: _s02b._fe10c1ScoutTarget?.reason || game?.enemyScoutingMvp?.outboundTargetReason || '',
@@ -6331,6 +6476,14 @@ function updateEnemyBot(dt) {
           sweepSkippedDangerCount: 0,
           sweepReason: '',
           sweepStartedAt: 0,
+          // BOT-SCOUT-02D3: edge-aware perimeter sweep telemetry defaults
+          sweepRawCandidatesCount: 0,
+          sweepSelectedCandidatesCount: 0,
+          sweepSkippedOutOfBoundsCount: 0,
+          sweepSkippedDangerAtGenCount: 0,
+          sweepSkippedUnreachableCount: 0,
+          sweepCandidateMode: '',
+          sweepSelectionReason: '',
           // BOT-SCOUT-02E: outbound target selection telemetry defaults
           outboundTargetSource: 'none',
           outboundTargetReason: '',
