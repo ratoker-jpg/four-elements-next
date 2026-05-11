@@ -3514,6 +3514,171 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT02E_HQ_RALLY_MAX_RADIUS = 7;  // tiles: maximum distance from HQ center for rally point
   var FE_SCOUT02E_RALLY_DIR_COUNT = 8;       // number of angular samples per radius ring
 
+  // BOT-INTEL-01: persistent enemy intel snapshot from scout observations.
+  // Init game.enemyIntel if not present. Returns the intel object.
+  function FE_INTEL01Init(g) {
+    if (g.enemyIntel) return g.enemyIntel;
+    g.enemyIntel = {
+      playerHqSeen: false,
+      playerHqX: null,
+      playerHqY: null,
+      playerHqCenterX: null,
+      playerHqCenterY: null,
+      lastScoutSweepDoneAt: 0,
+      lastUsefulIntelAt: 0,
+      seenPlayerUnitsCount: 0,
+      seenPlayerBuildingsCount: 0,
+      knownPlayerUnitsByType: {
+        harvester: 0,
+        builder: 0,
+        light_tank: 0,
+        scout: 0,
+        other: 0
+      },
+      knownPlayerBuildingsByType: {
+        hq_base: 0,
+        units_factory: 0,
+        separator: 0,
+        minerals_storage: 0,
+        energy_storage: 0,
+        elements_storage: 0,
+        power_plant: 0,
+        energy_reactor: 0,
+        repair_center: 0,
+        defense_tower: 0,
+        other: 0
+      },
+      nearestKnownPlayerTankDist: -1,
+      intelSource: 'scout'
+    };
+    return g.enemyIntel;
+  }
+
+  // Update game.enemyIntel from a scout's current view scan.
+  // Uses max(old, current) for known counts — scout never "forgets" already seen objects.
+  // lastUsefulIntelAt only updates when scan actually sees player units/buildings/HQ.
+  function FE_INTEL01UpdateFromScout(scout, now, reason) {
+    var intel = FE_INTEL01Init(game);
+    if (!game || !scout) return;
+
+    var viewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+
+    // Scan visible player units.
+    var curUnitsByType = { harvester: 0, builder: 0, light_tank: 0, scout: 0, other: 0 };
+    var curUnitsTotal = 0;
+    var nearestTankDist = -1;
+    var _allU = game.units || [];
+    for (var _ui = 0; _ui < _allU.length; _ui++) {
+      var _uu = _allU[_ui];
+      if (!_uu || (_uu.hp || 0) <= 0) continue;
+      var _ud = FE_10C1_distTiles(scout, _uu);
+      if (_ud > viewR) continue;
+      if (!isPlayerUnit(_uu)) continue;
+      curUnitsTotal++;
+      var ut = _uu.type || 'other';
+      if (curUnitsByType[ut] !== undefined) {
+        curUnitsByType[ut]++;
+      } else {
+        curUnitsByType.other++;
+      }
+      // Track nearest player light_tank distance.
+      if (ut === 'light_tank') {
+        if (nearestTankDist < 0 || _ud < nearestTankDist) nearestTankDist = _ud;
+      }
+    }
+
+    // Scan visible player buildings.
+    var curBuildingsByType = {
+      hq_base: 0, units_factory: 0, separator: 0,
+      minerals_storage: 0, energy_storage: 0, elements_storage: 0,
+      power_plant: 0, energy_reactor: 0, repair_center: 0, defense_tower: 0, other: 0
+    };
+    var curBuildingsTotal = 0;
+    var hqSeenThisScan = false;
+    var hqX = null, hqY = null, hqCX = null, hqCY = null;
+    var _allB = game.buildings || [];
+    for (var _bi2 = 0; _bi2 < _allB.length; _bi2++) {
+      var _ub = _allB[_bi2];
+      if (!_ub || (_ub.hp || 0) <= 0) continue;
+      var _bd2 = FE_10C1_distTiles(scout, _ub);
+      if (_bd2 > viewR) continue;
+      if (!isPlayerBuilding(_ub)) continue;
+      curBuildingsTotal++;
+      var bt = _ub.type || 'other';
+      if (curBuildingsByType[bt] !== undefined) {
+        curBuildingsByType[bt]++;
+      } else {
+        curBuildingsByType.other++;
+      }
+      if (bt === 'hq_base' || bt === 'hq') {
+        hqSeenThisScan = true;
+        // HQ center: building x,y is top-left, size is 3x3.
+        var bw = _ub.w || (_ub.type === 'hq_base' ? 3 : 2);
+        var bh = _ub.h || (_ub.type === 'hq_base' ? 3 : 2);
+        hqX = _ub.x;
+        hqY = _ub.y;
+        hqCX = Math.round(_ub.x + bw / 2);
+        hqCY = Math.round(_ub.y + bh / 2);
+      }
+    }
+
+    // Also try to get HQ center from scout target metadata if not seen in this scan.
+    if (!hqSeenThisScan && scout._fe10c1ScoutTarget) {
+      if (scout._fe10c1ScoutTarget.playerHqCenterX != null && scout._fe10c1ScoutTarget.playerHqCenterY != null) {
+        hqCX = scout._fe10c1ScoutTarget.playerHqCenterX;
+        hqCY = scout._fe10c1ScoutTarget.playerHqCenterY;
+        hqX = scout._fe10c1ScoutTarget.playerHqX ?? hqX;
+        hqY = scout._fe10c1ScoutTarget.playerHqY ?? hqY;
+      }
+    }
+
+    // Check if this scan produced any useful intel.
+    var sawAnything = curUnitsTotal > 0 || curBuildingsTotal > 0 || hqSeenThisScan;
+
+    // Merge into intel: use max(old, current) for known counts.
+    intel.seenPlayerUnitsCount = Math.max(intel.seenPlayerUnitsCount, curUnitsTotal);
+    intel.seenPlayerBuildingsCount = Math.max(intel.seenPlayerBuildingsCount, curBuildingsTotal);
+
+    var _utypes = Object.keys(curUnitsByType);
+    for (var _tk1 = 0; _tk1 < _utypes.length; _tk1++) {
+      intel.knownPlayerUnitsByType[_utypes[_tk1]] = Math.max(
+        intel.knownPlayerUnitsByType[_utypes[_tk1]] || 0,
+        curUnitsByType[_utypes[_tk1]] || 0
+      );
+    }
+    var _btypes = Object.keys(curBuildingsByType);
+    for (var _tk2 = 0; _tk2 < _btypes.length; _tk2++) {
+      intel.knownPlayerBuildingsByType[_btypes[_tk2]] = Math.max(
+        intel.knownPlayerBuildingsByType[_btypes[_tk2]] || 0,
+        curBuildingsByType[_btypes[_tk2]] || 0
+      );
+    }
+
+    // playerHqSeen: sticky true. HQ coords saved on first confirmation and never reset.
+    if (hqSeenThisScan || intel.playerHqSeen) {
+      intel.playerHqSeen = true;
+    }
+    if (hqSeenThisScan) {
+      // Save HQ coords on first confirmation (or update if we have a better scan).
+      if (intel.playerHqX == null) intel.playerHqX = hqX;
+      if (intel.playerHqY == null) intel.playerHqY = hqY;
+      if (intel.playerHqCenterX == null) intel.playerHqCenterX = hqCX;
+      if (intel.playerHqCenterY == null) intel.playerHqCenterY = hqCY;
+    }
+
+    // nearestKnownPlayerTankDist: update only if we saw a tank this scan.
+    if (nearestTankDist >= 0) {
+      intel.nearestKnownPlayerTankDist = nearestTankDist;
+    }
+
+    // lastUsefulIntelAt: only update when scan actually saw something.
+    if (sawAnything) {
+      intel.lastUsefulIntelAt = now;
+    }
+
+    // lastScoutSweepDoneAt: handled separately at sweep_done transition.
+  }
+
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
     try {
@@ -4229,6 +4394,17 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         s._scout02CSeenPlayerUnitsCount = _pUnitsCount;
         s._scout02CSeenPlayerBuildingsCount = _pBuildingsCount;
         s._scout02CSeenPlayerHq = _pHqSeen;
+
+        // BOT-INTEL-01: update persistent intel from scout observations.
+        // Called here because this block runs for outbound/observing/sweeping states.
+        try {
+          FE_INTEL01UpdateFromScout(s, now, s._scout02BState || 'unknown');
+          s._scout02IntelUpdated = true;
+          s._scout02IntelUpdateReason = s._scout02BState || 'unknown';
+        } catch (_intelErr) {
+          s._scout02IntelUpdated = false;
+          s._scout02IntelUpdateReason = 'error';
+        }
       }
       // Also update _scout02BLastHp for returning/cooldown scouts so it's fresh on next outbound.
       if (s._scout02BState) {
@@ -4359,6 +4535,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
             s._scout02BReason = _retDone ? 'sweep_done' : 'return_no_route';
             s._scout02DSweepReason = 'sweep_done';
             s._scout02DSweepActive = false;
+            // BOT-INTEL-01: record sweep completion timestamp.
+            try { FE_INTEL01Init(game).lastScoutSweepDoneAt = now; } catch(_e) {}
             continue;
           }
           // Advance index and assign next sweep point.
@@ -4373,6 +4551,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
             : (_retNoMore ? 'sweep_no_valid_points' : 'return_no_route');
           s._scout02DSweepReason = s._scout02DSweepCompletedCount > 0 ? 'sweep_done' : 'sweep_no_valid_points';
           s._scout02DSweepActive = false;
+          // BOT-INTEL-01: record sweep completion timestamp (only on real sweep_done).
+          if (s._scout02DSweepCompletedCount > 0) { try { FE_INTEL01Init(game).lastScoutSweepDoneAt = now; } catch(_e) {} }
           continue;
         }
 
@@ -4411,6 +4591,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
                 : (_retSkip ? 'sweep_no_valid_points' : 'return_no_route');
               s._scout02DSweepReason = s._scout02DSweepCompletedCount > 0 ? 'sweep_done' : 'sweep_no_valid_points';
               s._scout02DSweepActive = false;
+              // BOT-INTEL-01: record sweep completion timestamp (only on real sweep_done).
+              if (s._scout02DSweepCompletedCount > 0) { try { FE_INTEL01Init(game).lastScoutSweepDoneAt = now; } catch(_e2) {} }
             }
           }
         }
@@ -6433,7 +6615,10 @@ function updateEnemyBot(dt) {
           targetDistToPlayerHq: _s02b._fe10c1ScoutTarget?.targetDistToPlayerHq ?? game?.enemyScoutingMvp?.targetDistToPlayerHq ?? -1,
           oldKnowledgeTargetX: _s02b._fe10c1ScoutTarget?.oldKnowledgeTargetX ?? game?.enemyScoutingMvp?.oldKnowledgeTargetX ?? null,
           oldKnowledgeTargetY: _s02b._fe10c1ScoutTarget?.oldKnowledgeTargetY ?? game?.enemyScoutingMvp?.oldKnowledgeTargetY ?? null,
-          fallbackUsed: !!(_s02b._fe10c1ScoutTarget?.fallbackUsed ?? game?.enemyScoutingMvp?.fallbackUsed)
+          fallbackUsed: !!(_s02b._fe10c1ScoutTarget?.fallbackUsed ?? game?.enemyScoutingMvp?.fallbackUsed),
+          // BOT-INTEL-01: intel update indicators.
+          intelUpdated: !!_s02b._scout02IntelUpdated,
+          intelUpdateReason: _s02b._scout02IntelUpdateReason || ''
         };
       } else {
         game._botScout02B = {
@@ -6496,11 +6681,54 @@ function updateEnemyBot(dt) {
           targetDistToPlayerHq: -1,
           oldKnowledgeTargetX: null,
           oldKnowledgeTargetY: null,
-          fallbackUsed: false
+          fallbackUsed: false,
+          // BOT-INTEL-01: intel update indicators (no scout = no update).
+          intelUpdated: false,
+          intelUpdateReason: ''
         };
       }
     } catch (err) {
       if (game) game._botScout02BError = String(err && err.message ? err.message : err);
+    }
+
+    // BOT-INTEL-01: debug telemetry for enemy intel snapshot.
+    try {
+      var _intel01Obj = game && game.enemyIntel;
+      var _intel01Now = game ? (game.time || 0) : 0;
+      if (_intel01Obj) {
+        game._botIntel01 = {
+          playerHqSeen: !!_intel01Obj.playerHqSeen,
+          playerHqX: _intel01Obj.playerHqX,
+          playerHqY: _intel01Obj.playerHqY,
+          playerHqCenterX: _intel01Obj.playerHqCenterX,
+          playerHqCenterY: _intel01Obj.playerHqCenterY,
+          lastScoutIntelAt: _intel01Obj.lastUsefulIntelAt,
+          lastScoutSweepDoneAt: _intel01Obj.lastScoutSweepDoneAt,
+          seenPlayerUnitsCount: _intel01Obj.seenPlayerUnitsCount,
+          seenPlayerBuildingsCount: _intel01Obj.seenPlayerBuildingsCount,
+          knownPlayerUnitsByType: Object.assign({}, _intel01Obj.knownPlayerUnitsByType),
+          knownPlayerBuildingsByType: Object.assign({}, _intel01Obj.knownPlayerBuildingsByType),
+          nearestKnownPlayerTankDist: _intel01Obj.nearestKnownPlayerTankDist,
+          intelSource: _intel01Obj.intelSource,
+          intelFreshnessSec: _intel01Obj.lastUsefulIntelAt > 0 ? (_intel01Now - _intel01Obj.lastUsefulIntelAt) : -1,
+          lastUpdateReason: (game._botScout02B && game._botScout02B.intelUpdateReason) || ''
+        };
+      } else {
+        game._botIntel01 = {
+          playerHqSeen: false,
+          playerHqX: null, playerHqY: null,
+          playerHqCenterX: null, playerHqCenterY: null,
+          lastScoutIntelAt: 0, lastScoutSweepDoneAt: 0,
+          seenPlayerUnitsCount: 0, seenPlayerBuildingsCount: 0,
+          knownPlayerUnitsByType: {}, knownPlayerBuildingsByType: {},
+          nearestKnownPlayerTankDist: -1,
+          intelSource: 'none',
+          intelFreshnessSec: -1,
+          lastUpdateReason: ''
+        };
+      }
+    } catch (_intel01Err) {
+      if (game) game._botIntel01Error = String(_intel01Err && _intel01Err.message ? _intel01Err.message : _intel01Err);
     }
 
     if (!game || game.screen !== 'game' || game.paused) return;
