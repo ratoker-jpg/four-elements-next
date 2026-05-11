@@ -3858,6 +3858,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         var _prevHp = s._scout02BLastHp || (s.hp || 0);
         var _curHp = s.hp || 0;
         if (_curHp < _prevHp) {
+          // BOT-SCOUT-02D2: cleanup sweep telemetry on damage abort.
+          if (s._scout02BState === 'sweeping') {
+            s._scout02DSweepActive = false;
+            s._scout02DSweepReason = 'damaged';
+          }
           s._scout02BState = 'returning';
           s._scout02BLastHp = _curHp;
           var _returnFromDamage = FE_SCOUT02BResolveReturnMove(s);
@@ -3885,6 +3890,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         s._scout02CThreatSeen = _nearbyDanger || _threatAware;
         s._scout02CNearestThreatDist = _nearestThreatDist;
         if (_nearbyDanger) {
+          // BOT-SCOUT-02D2: cleanup sweep telemetry on danger abort.
+          if (s._scout02BState === 'sweeping') {
+            s._scout02DSweepActive = false;
+            s._scout02DSweepReason = 'threat_danger';
+          }
           s._scout02BState = 'returning';
           var _returnFromThreat = FE_SCOUT02BResolveReturnMove(s);
           s._scout02BReason = _returnFromThreat ? 'threat_danger' : 'return_no_route';

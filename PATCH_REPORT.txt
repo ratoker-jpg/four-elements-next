@@ -3485,3 +3485,52 @@ Lane: Review
 - BOT-SCOUT-02B2 return fallback internals не тронуты
 - BOT-SCOUT-02C threat thresholds не тронуты
 - Google Drive sync тронут: нет
+
+---
+
+Задача: BOT-SCOUT-02D2 — cleanup sweep telemetry при threat/damage abort
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02d-base-perimeter-sweep (amend к BOT-SCOUT-02D)
+
+Проблема:
+При threat/damage abort во время sweeping (_scout02BState='sweeping') скаут
+переходил в returning через общий BOT-SCOUT-02C threat detection block,
+но _scout02DSweepActive оставалось true, а _scout02DSweepReason не обновлялся.
+Telemetry показывала активный sweep при state='returning'.
+
+Что исправлено:
+
+1. Damage branch (scout took damage):
+   - Если s._scout02BState === 'sweeping': s._scout02DSweepActive = false,
+     s._scout02DSweepReason = 'damaged'
+   - Затем стандартный переход sweeping → returning
+
+2. Danger branch (player light_tank ≤ DANGER_RADIUS):
+   - Если s._scout02BState === 'sweeping': s._scout02DSweepActive = false,
+     s._scout02DSweepReason = 'threat_danger'
+   - Затем стандартный переход sweeping → returning
+
+Что НЕ тронуто:
+- BOT-SCOUT-02C threat thresholds (DANGER_RADIUS=2, AWARE_RADIUS=5)
+- Sweep candidate logic (GenerateSweepCandidates, AssignNextSweepPoint)
+- BOT-SCOUT-02B2 return fallback internals
+- ATTACK-08/09/10
+- Tank attack-chain
+- findPath / passable / combat / map / render / save / load
+
+Изменённые файлы:
+- src/main.js
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- BOT-SCOUT-02C thresholds не тронуты
+- BOT-SCOUT-02B2 return fallback не тронут
+- Google Drive sync тронут: нет
