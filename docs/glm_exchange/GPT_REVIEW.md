@@ -1,52 +1,87 @@
 # GPT_REVIEW
 
-Task: VISUAL-COMBAT-FX-01 — minimal procedural light_tank shot and hit effects
+Task: BOT-ECONOMY-01 — audit enemy economy scaling and recovery path
 
-Verdict: APPROVED_FOR_PHASE_2
+Verdict: APPROVED_FOR_PHASE_2_WITH_REDUCED_SCOPE
+
+Approved implementation task:
+
+BOT-ECONOMY-01A — enemy builds elements_storage when element storage is near full
 
 ## 1. Что в аудите ок
 
-- Root cause простой и верный: combat damage happens in `updateLightTankCombat()`, but no visual event is emitted.
-- Правильно найден safe insertion point: after successful damage application and cooldown reset.
-- Правильно выбран подход: procedural Canvas 2D FX, no asset dependency.
-- Хорошо, что existing dust system is used only as a pattern, not merged or rewritten.
-- Scope can stay visual-only: shot/muzzle flash + hit burst + short lifetime + particle cap.
+- Root cause по экономике выглядит валидно: enemy separator can stall when element storage is full.
+- BRAIN-01 currently does not build `elements_storage`, so element cap can become a hard bottleneck.
+- The audit correctly identifies that broader economy scaling/recovery has multiple separate problems:
+  - element storage pressure;
+  - no economy scaling actions;
+  - death spiral when no factory and no builder;
+  - factory queue depth = 1.
 
 ## 2. Что вызывает сомнения
 
-- Не надо делать полноценную ballistic/projectile simulation.
-- Не надо делать complex tracer trajectory or persistent bullets.
-- Не надо менять `damageUnit()` / `FE_PATCH_06BDamageBuilding()` logic.
-- Не надо трогать save/load. Combat FX are transient visual-only and must not be persisted.
-- Fog visibility check is good, but must stay simple. Do not rewrite fog/render.
-- Do not touch combat balance, bot AI, pathfinding, economy, unit state machine, HP bars, sprite rendering.
+The full audit scope is too broad for one patch.
 
-## 3. Как сделать лучше
+Do NOT include in this patch:
+- emergency builder recovery;
+- factory queue depth change;
+- second separator;
+- second factory;
+- minerals_storage / energy_storage scaling;
+- power/upkeep system;
+- target chaining after kill;
+- player economy changes.
 
-Approved implementation should:
+Those are separate future tasks.
 
-1. Add a small visual-only particle list, e.g. `game.combatFxParticles`.
-2. Add spawn/update/draw functions:
-   - `spawnCombatShotFx(attacker, target, isBuildingTarget)` or similar;
-   - `spawnCombatHitFx(target, isBuildingTarget)` or similar;
-   - `updateCombatFxParticles(dt)`;
-   - `drawCombatFxParticles()`.
-3. Spawn FX only when a light_tank actually fires, after damage is applied in `updateLightTankCombat()`.
-4. Keep effects short and readable:
-   - shot/muzzle flash around 0.12–0.20 sec;
-   - hit flash around 0.18–0.30 sec;
-   - hard cap around 60 particles.
-5. Use procedural Canvas only: no assets, no spritesheets.
-6. Respect fog simply:
-   - player attacker: show;
-   - enemy attacker: show only if attacker or target tile is visible.
-7. Keep telemetry minimal:
-   - `game._combatFx01.shotCount`
-   - `game._combatFx01.hitCount`
-   - `game._combatFx01.activeParticles`
+## 3. Approved reduced scope
 
-## 4. Вердикт
+Implement only BOT-ECONOMY-01A:
 
-Approved for Phase 2 with the constraints above.
+Enemy BRAIN-01 should order `elements_storage` when enemy element storage is near full.
+
+Allowed behavior:
+1. Detect enemy element storage pressure, e.g. current faction element >= 80% of limit.
+2. If enemy already has or queued `elements_storage`, do nothing.
+3. If enemy has separator/factory baseline and has enough energy, order one free enemy builder to build `elements_storage`.
+4. Add BRAIN-01 action/case only for this one storage type.
+5. Add minimal telemetry for this action.
+
+## 4. Constraints
+
+Allowed file:
+- `src/main.js`
+
+Do NOT touch:
+- combat damage/range/cooldown;
+- pathfinding/findPath/passable;
+- scout lifecycle;
+- BOT-ATTACK-11/12;
+- BOT-COMBAT-AWARENESS-01;
+- BOT-DEFENSE-RETREAT-01;
+- BOT-PROGRESSION-01;
+- VISUAL-COMBAT-FX-01;
+- harvester mining state machine;
+- separator conversion formula;
+- player economy;
+- save/load;
+- render/fog/mapgen;
+- power/upkeep system;
+- factory queue depth;
+- emergency builder.
+
+## 5. Telemetry
+
+Add minimal telemetry only for BOT-ECONOMY-01A:
+
+- `game._economy01.elementsStorageOrderCount`
+- `game._economy01.elementsStorageLastOrderAt`
+- `game._economy01.elementsStorageLastReason`
+
+No noisy per-frame telemetry.
+
+## 6. Вердикт
+
+Approved for Phase 2 with reduced scope only.
 
 Use `docs/glm_exchange/PHASE2_COMMAND.md` as the implementation command.
