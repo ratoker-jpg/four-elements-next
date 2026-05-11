@@ -1478,6 +1478,13 @@
         : damageUnit(target, stats.damage);
       unit.attackCooldown = stats.cooldown;
 
+      // BOT-COMBAT-AWARENESS-01: enemy tank combat contact updates intel.
+      if (isEnemyUnit(unit) && isPlayerUnit(target)) {
+        try {
+          FE_INTEL01UpdateFromCombatContact(unit, target, game ? (game.time || 0) : 0);
+        } catch (_ca01cErr) { /* non-fatal intel update */ }
+      }
+
       if (killed && !isBuildingTarget) {
         tryRetargetAfterKill(unit, target.id);
       } else if (killed && isBuildingTarget) {
@@ -3694,6 +3701,109 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // lastScoutSweepDoneAt: handled separately at sweep_done transition.
 
     return sawAnything;
+  }
+
+  // BOT-COMBAT-AWARENESS-01: update enemy force intel from tank vision.
+  // Uses PATCH-10B enemy knowledge (visibleUnitIds / knownUnitsById) to update
+  // game.enemyIntel.knownPlayerUnitsByType. Called after 10B refresh each bot tick.
+  // Uses Math.max semantics — never reduces known counts.
+  function FE_INTEL01UpdateFromTankVision(now) {
+    var intel = game && game.enemyIntel;
+    if (!intel) return false;
+    var knowledge = game && game._enemyKnowledge;
+    if (!knowledge) return false;
+
+    var updated = false;
+    var seenTypes = { harvester: 0, builder: 0, light_tank: 0, scout: 0, other: 0 };
+
+    // Count visible player units by type from 10B knowledge.
+    var visibleIds = knowledge.visibleUnitIds || [];
+    for (var _vi = 0; _vi < visibleIds.length; _vi++) {
+      var _vid = visibleIds[_vi];
+      var _entry = knowledge.knownUnitsById && knowledge.knownUnitsById[_vid];
+      if (!_entry) continue;
+      var _vtype = _entry.type || 'other';
+      if (seenTypes[_vtype] !== undefined) {
+        seenTypes[_vtype]++;
+      } else {
+        seenTypes.other++;
+      }
+    }
+
+    // Merge into intel using Math.max.
+    var _vtypes = Object.keys(seenTypes);
+    for (var _vk = 0; _vk < _vtypes.length; _vk++) {
+      if (seenTypes[_vtypes[_vk]] <= 0) continue;
+      var _prev = intel.knownPlayerUnitsByType[_vtypes[_vk]] || 0;
+      var _next = Math.max(_prev, seenTypes[_vtypes[_vk]]);
+      if (_next > _prev) {
+        intel.knownPlayerUnitsByType[_vtypes[_vk]] = _next;
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      intel.lastUsefulIntelAt = now;
+      // Always update source — tank_vision is more recent than scout.
+      intel.intelSource = 'tank_vision';
+    }
+
+    // Telemetry.
+    if (game) {
+      if (!game._botCombatAwareness) {
+        game._botCombatAwareness = {
+          lastTankVisionUpdateAt: 0,
+          lastCombatContactUpdateAt: 0,
+          tankVisionUpdateCount: 0,
+          combatContactUpdateCount: 0,
+          lastSource: '',
+          lastUpdatedType: ''
+        };
+      }
+      if (updated) {
+        game._botCombatAwareness.lastTankVisionUpdateAt = now;
+        game._botCombatAwareness.tankVisionUpdateCount = (game._botCombatAwareness.tankVisionUpdateCount || 0) + 1;
+        game._botCombatAwareness.lastSource = 'tank_vision';
+        game._botCombatAwareness.lastUpdatedType = _vtypes.filter(function(t) { return seenTypes[t] > 0; }).join(',') || '';
+      }
+    }
+
+    return updated;
+  }
+
+  // BOT-COMBAT-AWARENESS-01: update enemy force intel from combat contact.
+  // Called when an enemy light_tank successfully damages a player unit.
+  // Uses Math.max semantics — never reduces known counts.
+  function FE_INTEL01UpdateFromCombatContact(enemyUnit, target, now) {
+    var intel = game && game.enemyIntel;
+    if (!intel) return;
+    if (!target || (target.hp || 0) <= 0) return;
+
+    var targetType = target.type || 'other';
+    var prev = intel.knownPlayerUnitsByType[targetType] || 0;
+    // We know at least 1 player unit of this type exists — use Math.max(prev, 1).
+    intel.knownPlayerUnitsByType[targetType] = Math.max(prev, 1);
+    intel.lastUsefulIntelAt = now;
+    // Always update source — combat_contact is more recent/direct.
+    intel.intelSource = 'combat_contact';
+
+    // Telemetry.
+    if (game) {
+      if (!game._botCombatAwareness) {
+        game._botCombatAwareness = {
+          lastTankVisionUpdateAt: 0,
+          lastCombatContactUpdateAt: 0,
+          tankVisionUpdateCount: 0,
+          combatContactUpdateCount: 0,
+          lastSource: '',
+          lastUpdatedType: ''
+        };
+      }
+      game._botCombatAwareness.lastCombatContactUpdateAt = now;
+      game._botCombatAwareness.combatContactUpdateCount = (game._botCombatAwareness.combatContactUpdateCount || 0) + 1;
+      game._botCombatAwareness.lastSource = 'combat_contact';
+      game._botCombatAwareness.lastUpdatedType = targetType;
+    }
   }
 
   // BOT-ATTACK-11: choose attack target point from scout intel.
@@ -7132,6 +7242,11 @@ function updateEnemyBot(dt) {
     // PATCH-10B: refresh enemy knowledge before combat-unit early returns.
     // 10B only observes/remembers; current phase-bot decisions stay unchanged.
     FE_PATCH_10BRefreshEnemyKnowledge(now);
+
+    // BOT-COMBAT-AWARENESS-01: feed 10B visible player units into enemyIntel.
+    try {
+      FE_INTEL01UpdateFromTankVision(now);
+    } catch (_ca01vErr) { /* non-fatal intel update */ }
 
     const enemyTanks = FE_PATCH_08BEnemyCombatUnits();
     if (!enemyTanks.length) return;
