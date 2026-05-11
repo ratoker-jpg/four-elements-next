@@ -98,6 +98,12 @@ window.FE_LIGHT_TANK_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 // rawDir 0→3, 1→2, 2→1, 3→0, 4→7, 5→6, 6→5, 7→4.
 window.FE_SCOUT_DIR_MAP = [3, 2, 1, 0, 7, 6, 5, 4];
 window.FE_UNIT_CONTROLLER_ENABLED = false;
+
+// ARCH-AI-01: Tank Decider — Priority Stack decision layer for enemy light_tank.
+// When true, enemy light_tank decisions go through tank_decider.js instead of
+// legacy updateEnemyBot cascade. Default false — legacy behavior is 1:1 preserved.
+// Runtime toggle: window.FE_TANK_DECIDER_ENABLED = true/false in browser console.
+window.FE_TANK_DECIDER_ENABLED = false;
 window.FE_BUILDER_FORCE_DIR = null;
 window.FE_HARVESTER_FORCE_DIR = null;
 window.FE_LIGHT_TANK_FORCE_DIR = null;
