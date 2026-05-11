@@ -186,6 +186,7 @@
       messages:[],
       clickMarkers:[],
       dustParticles:[],
+      combatFxParticles:[],
       _sepTimer:0,
       _reactTimer:0,
       _saveTimer:0,
@@ -1477,6 +1478,15 @@
         ? FE_PATCH_06BDamageBuilding(target, stats.damage)
         : damageUnit(target, stats.damage);
       unit.attackCooldown = stats.cooldown;
+
+      // VISUAL-COMBAT-FX-01: spawn shot and hit visual effects
+      try {
+        var _fxTargetCenter = isBuildingTarget
+          ? FE_PATCH_06BTargetCenter(target)
+          : { x: target.x, y: target.y };
+        spawnShotFx(unit, _fxTargetCenter);
+        spawnHitFx(target, isBuildingTarget);
+      } catch (_fxErr) { /* non-fatal visual FX */ }
 
       // BOT-COMBAT-AWARENESS-01: enemy tank combat contact updates intel.
       if (isEnemyUnit(unit) && isPlayerUnit(target)) {
@@ -12335,6 +12345,254 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
   }
   // FE_BUILDER_DUST_PATCH_END
 
+  // VISUAL-COMBAT-FX-01_START
+  window.FE_COMBAT_FX_MAX_PARTICLES = window.FE_COMBAT_FX_MAX_PARTICLES || 60;
+  window.FE_COMBAT_FX_SHOT_LIFE = window.FE_COMBAT_FX_SHOT_LIFE || 0.15;
+  window.FE_COMBAT_FX_HIT_LIFE = window.FE_COMBAT_FX_HIT_LIFE || 0.22;
+  window.FE_COMBAT_FX_SHOT_COLOR_PLAYER = window.FE_COMBAT_FX_SHOT_COLOR_PLAYER || '#ffe060';
+  window.FE_COMBAT_FX_SHOT_COLOR_ENEMY = window.FE_COMBAT_FX_SHOT_COLOR_ENEMY || '#ff6630';
+  window.FE_COMBAT_FX_HIT_COLOR = window.FE_COMBAT_FX_HIT_COLOR || '#ff8c30';
+
+  function combatFxEnabled() {
+    return window.FE_COMBAT_FX_ENABLED !== false;
+  }
+
+  function spawnShotFx(attacker, targetCenter) {
+    if (!game || !combatFxEnabled() || !attacker || !targetCenter) return;
+    if (!game.combatFxParticles) game.combatFxParticles = [];
+
+    var isPlayer = isPlayerUnit(attacker);
+    var color = isPlayer
+      ? (window.FE_COMBAT_FX_SHOT_COLOR_PLAYER || '#ffe060')
+      : (window.FE_COMBAT_FX_SHOT_COLOR_ENEMY || '#ff6630');
+
+    // Visibility check: only spawn FX if at least attacker or target area is visible to player
+    var attackerVisible = isVisible(Math.round(attacker.x), Math.round(attacker.y));
+    var targetVisible = isVisible(Math.round(targetCenter.x), Math.round(targetCenter.y));
+    if (!isPlayer && !attackerVisible && !targetVisible) return;
+
+    // Get attacker's sprite anchor for muzzle flash position
+    var profile = spriteProfile('units', attacker.type, {
+      size:[42,42], groundFactor:1.05, groundOffset:0, hpOffset:-10, alphaCutoff:135
+    });
+    var baseOffsetX = (profile.screenOffsetX || 0) + (attacker._visualOffsetX || 0);
+    var baseOffsetY = TILE_H * (profile.groundFactor ?? 1.0) +
+      (profile.groundOffset || 0) +
+      (profile.screenOffsetY || 0) +
+      (attacker._visualOffsetY || 0);
+
+    var life = Number.isFinite(window.FE_COMBAT_FX_SHOT_LIFE) ? window.FE_COMBAT_FX_SHOT_LIFE : 0.15;
+
+    // Muzzle flash: bright expanding circle at attacker position
+    game.combatFxParticles.push({
+      fxType: 'shot',
+      x: attacker.x,
+      y: attacker.y,
+      baseOffsetX: baseOffsetX,
+      baseOffsetY: baseOffsetY,
+      ox: 0,
+      oy: -28,
+      vx: 0,
+      vy: 0,
+      r: 3.0,
+      rGrow: 18,
+      life: life,
+      maxLife: life,
+      alpha: 0.85,
+      color: color,
+      width: 2.5
+    });
+
+    // Tracer line: short bright line from attacker toward target
+    var attackerScreen = tileToScreen(attacker.x, attacker.y);
+    var targetScreen = tileToScreen(targetCenter.x, targetCenter.y);
+    var dx = targetScreen.x - attackerScreen.x;
+    var dy = targetScreen.y - attackerScreen.y;
+    var dist = Math.hypot(dx, dy) || 1;
+    // Normalize and scale to ~40% of distance for short tracer
+    var tracerLen = dist * 0.38;
+    var ndx = (dx / dist) * tracerLen;
+    var ndy = (dy / dist) * tracerLen;
+
+    game.combatFxParticles.push({
+      fxType: 'tracer',
+      x: attacker.x,
+      y: attacker.y,
+      baseOffsetX: baseOffsetX,
+      baseOffsetY: baseOffsetY,
+      ox: 0,
+      oy: -28,
+      dx: ndx,
+      dy: ndy,
+      life: life * 0.8,
+      maxLife: life * 0.8,
+      alpha: 0.72,
+      color: color,
+      width: 2.2
+    });
+
+    // Particle cap
+    var maxFx = window.FE_COMBAT_FX_MAX_PARTICLES || 60;
+    if (game.combatFxParticles.length > maxFx) {
+      game.combatFxParticles.splice(0, game.combatFxParticles.length - maxFx);
+    }
+
+    // Telemetry
+    if (!game._combatFx01) game._combatFx01 = { shotCount:0, hitCount:0, activeParticles:0 };
+    game._combatFx01.shotCount++;
+  }
+
+  function spawnHitFx(target, isBuilding) {
+    if (!game || !combatFxEnabled() || !target) return;
+    if (!game.combatFxParticles) game.combatFxParticles = [];
+
+    // Get target center
+    var tc;
+    if (isBuilding) {
+      tc = FE_PATCH_06BTargetCenter(target);
+    } else {
+      tc = { x: target.x, y: target.y };
+    }
+    if (!tc) return;
+
+    // Visibility check
+    if (!isVisible(Math.round(tc.x), Math.round(tc.y))) return;
+
+    var color = window.FE_COMBAT_FX_HIT_COLOR || '#ff8c30';
+    var life = Number.isFinite(window.FE_COMBAT_FX_HIT_LIFE) ? window.FE_COMBAT_FX_HIT_LIFE : 0.22;
+
+    // Hit burst: several small expanding particles at impact
+    var count = 4;
+    for (var i = 0; i < count; i++) {
+      var angle = (Math.PI * 2 / count) * i + (Math.random() - 0.5) * 0.8;
+      var speed = 12 + Math.random() * 18;
+      var baseRadius = 2.5 + Math.random() * 2.0;
+      var baseAlpha = 0.55 + Math.random() * 0.25;
+
+      game.combatFxParticles.push({
+        fxType: 'hit',
+        x: tc.x,
+        y: tc.y,
+        baseOffsetX: 0,
+        baseOffsetY: isBuilding ? -10 : -28,
+        ox: (Math.random() - 0.5) * 4,
+        oy: (Math.random() - 0.5) * 4,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed * 0.5 - 8,
+        r: baseRadius,
+        rGrow: 10,
+        life: life * (0.7 + Math.random() * 0.3),
+        maxLife: life,
+        alpha: baseAlpha,
+        color: color
+      });
+    }
+
+    // Central bright flash
+    game.combatFxParticles.push({
+      fxType: 'hit',
+      x: tc.x,
+      y: tc.y,
+      baseOffsetX: 0,
+      baseOffsetY: isBuilding ? -10 : -28,
+      ox: 0,
+      oy: 0,
+      vx: 0,
+      vy: 0,
+      r: 4.0,
+      rGrow: 16,
+      life: life * 0.5,
+      maxLife: life * 0.5,
+      alpha: 0.9,
+      color: '#fff8e0'
+    });
+
+    // Particle cap
+    var maxFx = window.FE_COMBAT_FX_MAX_PARTICLES || 60;
+    if (game.combatFxParticles.length > maxFx) {
+      game.combatFxParticles.splice(0, game.combatFxParticles.length - maxFx);
+    }
+
+    // Telemetry
+    if (!game._combatFx01) game._combatFx01 = { shotCount:0, hitCount:0, activeParticles:0 };
+    game._combatFx01.hitCount++;
+  }
+
+  function updateCombatFxParticles(dt) {
+    if (!game?.combatFxParticles?.length) return;
+
+    for (var i = 0; i < game.combatFxParticles.length; i++) {
+      var p = game.combatFxParticles[i];
+      p.life -= dt;
+      p.ox += (p.vx || 0) * dt;
+      p.oy += (p.vy || 0) * dt;
+      if (p.vx) p.vx *= Math.pow(0.08, dt);
+      if (p.vy) p.vy += 15 * dt;
+      p.r += (p.rGrow || 0) * dt;
+    }
+
+    game.combatFxParticles = game.combatFxParticles.filter(function(p) { return p.life > 0; });
+
+    // Telemetry update
+    if (game._combatFx01) {
+      game._combatFx01.activeParticles = game.combatFxParticles.length;
+    }
+  }
+
+  function drawCombatFxParticles() {
+    if (!game?.combatFxParticles?.length) return;
+
+    var z = game.camera.zoom;
+    ctx.save();
+    for (var i = 0; i < game.combatFxParticles.length; i++) {
+      var p = game.combatFxParticles[i];
+      var pos = tileToScreen(p.x, p.y);
+      var t = clamp(p.life / p.maxLife, 0, 1);
+      ctx.globalAlpha = (p.alpha || 0.7) * t;
+
+      if (p.fxType === 'shot') {
+        // Muzzle flash: bright expanding circle at attacker position
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(
+          pos.x + ((p.baseOffsetX || 0) + (p.ox || 0)) * z,
+          pos.y + ((p.baseOffsetY || 0) + (p.oy || 0)) * z,
+          p.r * z,
+          p.r * 0.55 * z,
+          0, 0, Math.PI * 2
+        );
+        ctx.fill();
+      } else if (p.fxType === 'tracer') {
+        // Short bright line from attacker toward target
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = Math.max(1.0, (p.width || 2) * z * t);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        var sx = pos.x + ((p.baseOffsetX || 0) + (p.ox || 0)) * z;
+        var sy = pos.y + ((p.baseOffsetY || 0) + (p.oy || 0)) * z;
+        var ex = sx + (p.dx || 0) * t;
+        var ey = sy + (p.dy || 0) * t;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      } else if (p.fxType === 'hit') {
+        // Expanding burst at target position
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(
+          pos.x + ((p.baseOffsetX || 0) + (p.ox || 0)) * z,
+          pos.y + ((p.baseOffsetY || 0) + (p.oy || 0)) * z,
+          p.r * z,
+          p.r * 0.6 * z,
+          0, 0, Math.PI * 2
+        );
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  // VISUAL-COMBAT-FX-01_END
+
   function drawClickMarkers() {
     if (!game.clickMarkers?.length) return;
 
@@ -12412,6 +12670,7 @@ if (window.FE_EXTERNAL_RENDER_DEBUG_ENABLED) {
     }
 
     drawDustParticles();
+    drawCombatFxParticles();
     drawClickMarkers();
 
     const objects = [];
@@ -14345,6 +14604,7 @@ window.addEventListener('keydown', e=>{
     }
 
     updateDustParticles(dt);
+    updateCombatFxParticles(dt);
 
     // Remove exhausted finite mines visually.
     cleanupDepletedMinerals();
