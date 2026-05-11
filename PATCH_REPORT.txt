@@ -3534,3 +3534,110 @@ Telemetry показывала активный sweep при state='returning'.
 - BOT-SCOUT-02C thresholds не тронуты
 - BOT-SCOUT-02B2 return fallback не тронут
 - Google Drive sync тронут: нет
+
+---
+
+Задача: BOT-SCOUT-02E — fix scout outbound target selection
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02e-outbound-target (от sandbox/main)
+
+Проблема:
+Scout outbound target выбирался как {x:40,y:40} (пустой угол) вместо направления
+к базе игрока (player HQ at {x:9,y:40}). Причина: обе точки выбора цели (call site A —
+lifecycle dispatch через FE_SCOUT01ChooseScoutTarget; call site B — enemyScoutingMVP)
+использовали цепочку knowledge → map_probe, которая не учитывает player HQ напрямую.
+Если knowledge пуст (ранняя игра), fallback выбирал opposite-corner-guess или центр карты,
+что могло быть далеко от реальной позиции игрока. Scout никогда не достигал базы игрока,
+и BOT-SCOUT-02D sweeping никогда не запускался.
+
+Цель:
+Создать единую функцию выбора outbound target с приоритетом:
+1. Player HQ rally point — ближайшая достижимая клетка вокруг HQ (radius 3..7)
+2. Knowledge target — переиспользование FE_10G1_chooseKnowledgeScoutTarget
+3. Map_probe fallback — переиспользование FE_10C1_chooseScoutTargets
+
+Что сделано:
+
+1. Константы BOT-SCOUT-02E (L3504-3507):
+   - FE_SCOUT02E_HQ_RALLY_MIN_RADIUS = 3
+   - FE_SCOUT02E_HQ_RALLY_MAX_RADIUS = 7
+   - FE_SCOUT02E_RALLY_DIR_COUNT = 8
+
+2. Новая функция FE_SCOUT02EChooseOutboundTarget(scout, scoutState) (L3789-3923):
+   - Priority 1: findBaseBuilding('player') → HQ center (x+w/2, y+h/2)
+     — Ищет rally point на расстояниях 3..7 вокруг HQ center
+     — Для каждого кандидата: in-bounds check → dry-run findPath без мутации scout
+     — Первый кандидат с валидным путём становится целью
+     — source='player_hq_rally', confidence=0.9
+     — Записывает oldKnowledgeTargetX/Y если knowledge target был перекрыт
+   - Priority 2: FE_10G1_chooseKnowledgeScoutTarget(scout)
+     — Если knowledge target существует, используется
+   - Priority 3: FE_10C1_chooseScoutTargets() map_probe fallback
+     — Старая логика rotation по targetIndex
+   - Каждый результат включает метаданные: playerHqX/Y, playerHqCenterX/Y,
+     targetDistToPlayerHq, oldKnowledgeTargetX/Y, fallbackUsed
+
+3. Call site A: FE_SCOUT01ChooseScoutTarget (L3938-3963):
+   - Для scout-type юнитов: делегирует FE_SCOUT02EChooseOutboundTarget
+   - Для tank-based scouts: старая цепочка knowledge → map_probe (legacy)
+
+4. Call site B: FE_10C1_updateEnemyScoutingMvp (L5043-5063):
+   - Для scout-type юнитов: FE_SCOUT02EChooseOutboundTarget
+   - Для tank-based scouts: старая цепочка knowledge → map_probe (legacy)
+   - Post-target telemetry: 12 новых полей на scoutState (L5073-5085)
+   - Новый счётчик hqRallyScoutIssuedCount (L5093-5094)
+
+5. FE_10C1_trySetScoutMove: propagate 02E metadata (L4850-4858):
+   - _fe10c1ScoutTarget теперь включает 8 полей: playerHqX/Y, playerHqCenterX/Y,
+     targetDistToPlayerHq, oldKnowledgeTargetX/Y, fallbackUsed
+
+6. Telemetry game._botScout02B: 12 новых полей (L6279-6291, L6320-6332):
+   - outboundTargetSource, outboundTargetReason, outboundTargetX/Y
+   - playerHqX/Y, playerHqCenterX/Y
+   - targetDistToPlayerHq
+   - oldKnowledgeTargetX/Y, fallbackUsed
+   - Читается из _fe10c1ScoutTarget на scout (если есть) и из enemyScoutingMvp (fallback)
+
+Не менялись:
+- BOT-SCOUT-02B2 return fallback
+- BOT-SCOUT-02C threat thresholds
+- BOT-SCOUT-02D sweep behavior
+- ATTACK-08/09/10
+- enemy light_tank attack-chain
+- findPath/passable/combat/map/render/save/load
+- scout production/cap
+- tank attack decision logic
+
+Изменённые файлы:
+- src/main.js — 02E constants, FE_SCOUT02EChooseOutboundTarget, 2 call sites,
+  trySetScoutMove metadata, telemetry
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- BOT-SCOUT-02B2 return fallback не тронут
+- BOT-SCOUT-02C thresholds не тронуты
+- BOT-SCOUT-02D sweep не тронут
+- ATTACK-08/09/10 не тронуты
+- findPath/passable internals не изменены
+- combat/map/render/save/load не затронуты
+- scout production/cap не затронуты
+- tank attack decision logic не затронута
+- Google Drive sync тронут: нет
+
+Как тестировать вручную:
+1. Запустить игру, дождаться scout production
+2. Проверить telemetry: game._botScout02B.outboundTargetSource
+   Должен быть 'player_hq_rally' (если player HQ жив и reachable)
+3. Проверить game._botScout02B.outboundTargetX/Y — должен быть рядом с player HQ
+4. Проверить game._botScout02B.playerHqCenterX/Y — позиция центра player HQ
+5. Проверить game._botScout02B.targetDistToPlayerHq — расстояние 3..7
+6. Scout должен двигаться к базе игрока, НЕ к пустому углу карты
+7. После прибытия scout должен перейти в observing, затем sweeping (02D)
+8. Если player HQ уничтожен: должен упасть в knowledge или map_probe fallback
+   (outboundTargetSource = 'knowledge'/'last_seen'/'map_probe')
+9. Если HQ найден но нет reachable rally: knowledge fallback
+   (outboundTargetReason = 'hq_found_no_rally')
