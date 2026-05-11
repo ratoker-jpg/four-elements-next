@@ -56,3 +56,5 @@
 | BOT-ATTACK-12 | 2026-05-11 | #49 | Intel-based attack/no-attack decision gate |
 | BOT-ATTACK-12A | 2026-05-11 | #50 | Align ready tank counting with assignable tank eligibility |
 | DOCS-ARCH-00 | 2026-05-12 | TBD | Architecture Migration Workflow — переход от patch accumulation к системной разработке |
+| ARCH-LAB-00 | 2026-05-12 | #68 | Большой архитектурный roadmap-аудит — hybrid lab strategy, 7-step roadmap |
+| ARCH-LAB-00B | 2026-05-12 | TBD | Roadmap corrections: LAB-05 split, E2E smoke baseline, unit_controller decision, line count tracking, wiring budget |
