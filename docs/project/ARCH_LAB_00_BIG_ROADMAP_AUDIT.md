@@ -1,9 +1,12 @@
 # ARCH-LAB-00 — Большой архитектурный roadmap-аудит
 
 **Дата:** 2026-05-12
+**Обновлено:** 2026-05-12 (ARCH-LAB-00B corrections)
 **Тип:** Architecture roadmap audit / docs-only
 **Статус:** Активный
 **Назначение:** Провести аудит текущей архитектуры, сравнить стратегии перехода от patch/main.js-хаоса к нормальной модульной архитектуре, построить roadmap из крупных архитектурных шагов и рекомендовать режим разработки.
+
+**ARCH-LAB-00B corrections:** LAB-05 split на 05A–05D, добавлен Playwright E2E smoke baseline, решение по unit_controller.js, таблица line count tracking, wiring/bridge budget, обновлён dependency graph и next recommended arch.
 
 ---
 
@@ -46,18 +49,19 @@ Four Elements Remake v0.4 — browser RTS, работающий как один 
 
 **Hybrid lab strategy** (Стратегия C) — sandbox/main остаётся стабильным baseline, где игра всегда запускается, а крупная архитектурная работа ведётся в отдельной lab-ветке, где игра может временно не запускаться. Это позволяет делать крупные перестройки без review fatigue и без риска сломать baseline, при этом сохраняя возможность быстрого sync-back.
 
-Примерно 7 крупных architecture-lab шагов (ARCH-LAB-01–07), каждый — большой блок работы в lab-ветке с checkpoint-коммитами, но с обязательными merge-back milestones, когда игра снова playable.
+Примерно 10 architecture-lab шагов (ARCH-LAB-01–07, где LAB-05 разделён на 05A–05D), каждый — большой блок работы в lab-ветке с checkpoint-коммитами, но с обязательными merge-back milestones, когда игра снова playable. Перед LAB-01 создаётся Playwright E2E smoke baseline для автоматической верификации merge-back.
 
 ### Что будет считаться успехом
 
-1. main.js сокращён до ~8 000 строк или меньше (composition/wiring layer + boot + game loop).
+1. main.js сокращён до 5 000–8 000 строк (composition/wiring layer + boot + game loop). Из них 2 000–3 000 строк — постоянный orchestration/wiring budget, остальное — временные bridges, которые LAB-07 удалит.
 2. Все AI-подсистемы вынесены в src/ai/ (brain, decider, targeting, intel, scout, economy).
 3. Все systems вынесены в src/systems/ (movement, combat, economy, production, construction, territory, command).
 4. Все render-подсистемы вынесены в src/render/.
 5. Все input-подсистемы вынесены в src/input/.
 6. FE_PATCH_-ссылки сокращены с 650 до <100 (только bridges, которые ещё не заменены).
-7. Игра playable на каждом merge-back milestone.
+7. Игра playable на каждом merge-back milestone — верифицируется Playwright E2E smoke baseline.
 8. Каждый модуль имеет чёткий contract (API) и может быть протестирован изолированно.
+9. unit_controller.js решён (deprecate/archive) до LAB-04, движение не зависит от мёртвого альтернативного controller.
 
 ---
 
@@ -378,19 +382,87 @@ DOCS-ARCH-00C устанавливал правило контролируемо
 
 ### Обзор roadmap
 
-Вместо 30 микрошагов — 7 крупных архитектурных блоков. Каждый блок — это lab-подветка с checkpoint-коммитами и merge-back milestone.
+Вместо 30 микрошагов — 7 крупных архитектурных блоков (LAB-05 разделён на 4 подшага 05A–05D, итого 10 merge-back milestones). Каждый блок — это lab-подветка с checkpoint-коммитами и merge-back milestone.
 
-### ARCH-LAB-01 — Main breakout skeleton / project structure
+### Line count tracking
+
+| Date | SHA / PR | main.js lines | Change | Reason |
+|------|----------|-------------:|-------:|--------|
+| 2026-05-10 | REF-MAIN-GLM-07 | 11 358 | — | После refactor sprint/checkpoint (проверено REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md) |
+| 2026-05-12 | ARCH-MAP-01 | 15 379 | +4 021 | Merged gameplay/bot/economy/FX/power patches после refactor sprint (BOT-SCOUT-*, BOT-ATTACK-*, BOT-INTEL-01, POWER-SYSTEM-01A и др.) |
+| 2026-05-12 | ARCH-AI-01 | 15 611 | +232 | Wiring: контекст, вызов decider, execution, guards, телеметрия для tank_decider |
+
+Рост между 11 358 и 15 379 строк пришёл от merged gameplay/bot/economy/FX/power patches после refactor sprint. ARCH-AI-01 добавил wiring (+232 строки), не уменьшив main.js.
+
+### Wiring/bridge budget
+
+Цель main.js: 5 000–8 000 строк. Почему не 1 600 строк? Потому что main.js остаётся composition root / orchestration layer даже после выноса всех систем.
+
+| Metric | Current | Target |
+|--------|--------:|-------:|
+| main.js total lines | 15 611 | 5 000–8 000 |
+| FE_PATCH references | ~650 | <100 |
+| Owner systems (explicit) | low | explicit для каждой зоны |
+| Permanent orchestration/wiring budget | uncontrolled | 2 000–3 000 |
+| Temporary bridge debt | high | explicitly tracked, removed in LAB-07 |
+| Playwright E2E smoke coverage | partial (590 lines in 5 specs) | boot→menu→faction→game→enemy baseline |
+
+Объяснение бюджета:
+- **Permanent wiring (~2 000–3 000 строк):** bootstrap, game loop calls, FE_CORE bridge, DOM/canvas/input wiring, module initialization. Этот код остаётся навсегда.
+- **Temporary bridges (~1 000–2 000 строк):** compatibility wrappers, feature flag checks, legacy guards. Этот код удаляется в LAB-07.
+- **Progress metric:** не только line count, но и responsibility count — сколько зон main.js имеют явного owner system.
+
+### Playwright E2E smoke baseline
+
+Проект уже имеет Playwright infrastructure:
+- `playwright.config.js` — конфигурация с baseURL http://127.0.0.1:8010
+- `tests/` — 5 spec files, 590 строк: smoke.spec.js, menu_flow.spec.js, new_game_standard_flow.spec.js, bot-ai-smoke.spec.js, bot-ai-behavior-scenario.spec.js
+- Существующий smoke.spec.js: загружает страницу, ждёт canvas, проверяет console errors
+- Существующий new_game_standard_flow.spec.js: boot → main menu → new game → standard map click → проверка console errors
+
+Но текущие тесты не покрывают полный merge-back baseline: faction select → game starts → enemy bot starts. Нужно добавить минимальный E2E smoke, который верифицирует playable baseline для каждого merge-back.
+
+### unit_controller.js decision (до LAB-04)
+
+`src/core/unit_controller.js` — 878 строк, выключен через `FE_UNIT_CONTROLLER_ENABLED = false`. Дублирует движение builder и harvester из main.js. Вызывается из main.js только когда `FE_UNIT_CONTROLLER_ENABLED === true`.
+
+**Рекомендация: вариант C — archive/deprecate before movement extraction.**
+
+Обоснование:
+- unit_controller выключен по умолчанию и не используется как source-of-truth для движения. Вся активная gameplay-логика движения живёт в main.js.
+- Использовать его как basis для movement_system (вариант B) рискованно — он реализует альтернативную модель движения (свою stuck detection, свою speed logic, свои state transitions), которая может конфликтовать с основной.
+- Удалить полностью (вариант A) тоже рискованно — есть скрытые зависимости через `u._feUnitController` свойства на юнитах.
+- Лучший вариант: archive/deprecate — переместить в `src/core/_archived/unit_controller.js`, добавить WARNING-заголовок, установить `FE_UNIT_CONTROLLER_ENABLED = false` как permanent, документировать, что movement extraction (LAB-04) не зависит от unit_controller.
+
+Acceptance criteria:
+- Нет hidden dependency: grep по `_feUnitController` и `FE_UNIT_CONTROLLER` показывает только deprecated references
+- `FE_UNIT_CONTROLLER_ENABLED = false` documented как permanent
+- movement extraction (LAB-04) не зависит от мёртвого альтернативного controller
+
+### ARCH-LAB-01A — Playwright E2E smoke baseline
 
 | Поле | Значение |
 |------|----------|
-| Goal | Создать скелет модульной структуры: директории, script tag order, bootstrap/wiring pattern, FE_CORE bridge. Вынести безопасные pure-data и pure-function модули. |
-| Expected files/modules | src/core/coordinates.js, src/core/game_constants.js; обновлённый index.html с новым script order; src/main.js сокращён на ~400 строк (geometry/coords + constants) |
+| Goal | Создать минимальный Playwright E2E smoke test для верификации playable baseline при каждом merge-back: boot → main menu → new game → faction select → game starts → enemy bot starts. |
+| Expected files/modules | tests/e2e/merge_back_smoke.spec.js (new, ~80 lines); обновлённый playwright.config.js если нужно |
+| Can be broken? | Нет — только добавление теста. Не влияет на gameplay. |
+| Risk | Low — dev-only, не влияет на game code |
+| Dependencies | Нет — может быть создан до любого LAB шага |
+| Acceptance criteria | `npx playwright test tests/e2e/merge_back_smoke.spec.js` PASS; тест покрывает boot → menu → new game → faction select → game starts → enemy bot starts; нет красных console errors; test занимает < 30 секунд |
+| Merge-back criteria | Каждый merge-back PR должен PASS этот smoke. Без него merge-back = high-risk. |
+| Smoke/Checks | Сам тест и есть smoke. Не заменяет manual QA. |
+
+### ARCH-LAB-01 — Main breakout skeleton / project structure + smoke baseline
+
+| Поле | Значение |
+|------|----------|
+| Goal | Создать скелет модульной структуры: директории, script tag order, bootstrap/wiring pattern, FE_CORE bridge. Вынести безопасные pure-data и pure-function модули. Archive/deprecate unit_controller.js. |
+| Expected files/modules | src/core/coordinates.js, src/core/game_constants.js; src/core/_archived/unit_controller.js (moved); обновлённый index.html с новым script order; src/main.js сокращён на ~400 строк (geometry/coords + constants) |
 | Can be broken? | Нет — только safe extractions. Игра должна запускаться после каждого шага. |
 | Risk | Low — чистые функции и константы, минимальная связанность |
-| Dependencies | Нет — первый шаг |
-| Acceptance criteria | main.js сокращён; все coordinate helpers работают через FE_CORE; node--check PASS; browser smoke PASS |
-| Smoke/Checks | node--check, browser: map renders, units move, camera works, clicks accurate |
+| Dependencies | ARCH-LAB-01A (E2E smoke baseline создан для верификации) |
+| Acceptance criteria | main.js сокращён; все coordinate helpers работают через FE_CORE; unit_controller.js archived; FE_UNIT_CONTROLLER_ENABLED=false documented as permanent; node--check PASS; E2E smoke PASS |
+| Smoke/Checks | node--check, E2E merge_back_smoke, browser: map renders, units move, camera works, clicks accurate |
 
 ### ARCH-LAB-02 — Game state + bootstrap + loop
 
@@ -428,17 +500,53 @@ DOCS-ARCH-00C устанавливал правило контролируемо
 | Acceptance criteria | Player tanks двигаются и атакуют, enemy tanks двигаются, attack-approach работает, selection работает, drag-select работает |
 | Smoke/Checks | Browser: right-click move, A-click attack, drag select, attack-approach state machine, combat damage, death handling |
 
-### ARCH-LAB-05 — Enemy AI package: brain / tank_decider / targeting / intel / scout / economy
+### ARCH-LAB-05A — Scout + enemy_intel extraction
 
 | Поле | Значение |
 |------|----------|
-| Goal | Вынести весь Z13 (5 255 строк) в src/ai/: enemy_brain.js, tank_decider.js (расширен), enemy_targeting.js, enemy_intel.js, scout_decider.js, enemy_economy.js. Вынести Z17 enemy portion в src/ai/enemy_economy.js + src/systems/production_system.js + src/systems/construction_system.js. |
-| Expected files/modules | src/ai/enemy_brain.js, src/ai/tank_decider.js (expanded), src/ai/enemy_targeting.js, src/ai/enemy_intel.js, src/ai/scout_decider.js, src/ai/enemy_economy.js, src/systems/production_system.js, src/systems/construction_system.js; src/main.js сокращён на ~6 000 строк |
-| Can be broken? | Лаб может быть broken (AI restructure — самая сложная часть), merge-back = playable |
-| Risk | Very High — самая большая и связанная зона, все AI подсистемы зависят друг от друга |
-| Dependencies | ARCH-LAB-03 (pathfinding, shared helpers), ARCH-LAB-04 (command/movement/combat для execution layer) |
-| Acceptance criteria | Enemy bot стартует, строит, добывает, атакует, скауты работают, экономика работает, tank_decider арбитражит решения, нет oscillation |
-| Smoke/Checks | Browser: full game session, enemy bot complete cycle, attack waves, retreat, defend, scout lifecycle, economy loop, production |
+| Goal | Вынести scout lifecycle (Z13g, ~1 475 строк) и intel system (Z13h, ~283 строки) и scouting coordinator (Z13i, ~459 строк) в src/ai/scout_decider.js и src/ai/enemy_intel.js. Это самый изолированный блок AI — scout и intel имеют чёткую границу с остальным AI. |
+| Expected files/modules | src/ai/scout_decider.js, src/ai/enemy_intel.js; src/main.js сокращён на ~2 000 строк |
+| Can be broken? | Лаб может быть broken (scout/intel restructure), merge-back = playable |
+| Risk | High — scout lifecycle имеет ~30 _scout* свойств и сложный state machine, но чётко ограниченная зона |
+| Dependencies | ARCH-LAB-04 (command/movement для scout movement) |
+| Acceptance criteria | Scout lifecycle работает (outbound, observe, return, cooldown); intel обновляется из scout и tank vision; enemy bot стартует; E2E smoke PASS |
+| Smoke/Checks | E2E merge_back_smoke, browser: scout outbound/observe/return, intel updates, bot starts |
+
+### ARCH-LAB-05B — Enemy_targeting extraction
+
+| Поле | Значение |
+|------|----------|
+| Goal | Вынести attack intelligence (Z13d, ~259 строк), attack-12 intel gate (Z13f, ~710 строк) и attack-08 invariant repair (Z13e, ~49 строк) в src/ai/enemy_targeting.js. Это целевой выбор и intel-based attack decision — чётко ограниченная ответственность. |
+| Expected files/modules | src/ai/enemy_targeting.js; src/main.js сокращён на ~1 000 строк |
+| Can be broken? | Лаб может быть broken (targeting restructure), merge-back = playable |
+| Risk | High — targeting затрагивает attack dispatch и wave composition |
+| Dependencies | ARCH-LAB-05A (intel system вынесен — targeting зависит от intel data) |
+| Acceptance criteria | Attack waves dispatch корректно; intel-based gate работает; ATTACK-08 repair может быть упрощён; E2E smoke PASS |
+| Smoke/Checks | E2E merge_back_smoke, browser: attack waves, intel gate, no oscillation |
+
+### ARCH-LAB-05C — Tank decision / attack-retreat-defense Priority Stack migration
+
+| Поле | Значение |
+|------|----------|
+| Goal | Расширить tank_decider.js (ARCH-AI-01 MVP) полным Priority Stack: добавить правила priority 70 (pick_next_target), 60 (regroup), 50 (intel_target), 40 (rally), 20 (patrol). Перевести 10H1 defend/retreat, 10D1 autopilot, 10E1 strength gate на decider output. Удалить ATTACK-08 invariant repair для decider-managed танков. |
+| Expected files/modules | src/ai/tank_decider.js (expanded с 276 до ~500 строк), src/ai/enemy_brain.js (new, bot tick orchestration); src/main.js сокращён на ~1 500 строк (10H1/10D1/10E1 wiring replaced) |
+| Can be broken? | Лаб может быть broken (decision restructure — самая сложная часть), merge-back = playable |
+| Risk | Very High — 10H1/10D1/10E1 — основные источники oscillation, любое изменение требует careful testing |
+| Dependencies | ARCH-LAB-05A (intel), ARCH-LAB-05B (targeting — decider использует targeting для pick_next_target) |
+| Acceptance criteria | FE_TANK_DECIDER_ENABLED=true: defend/retreat/attack без oscillation; FE_TANK_DECIDER_ENABLED=false: legacy 1:1; ATTACK-08 repair не нужен для managed танков; E2E smoke PASS |
+| Smoke/Checks | E2E merge_back_smoke, browser: defend, retreat, attack, regroup, no oscillation, toggle flag on/off |
+
+### ARCH-LAB-05D — Enemy_brain cleanup / old guard-chain cleanup / enemy economy
+
+| Поле | Значение |
+|------|----------|
+| Goal | Завершить AI breakout: вынести bot knobs/state (Z13a), bot movement helpers (Z13c), enemy_brain (Z13l, ~748 строк) в src/ai/enemy_brain.js. Вынести Z17 enemy portion (separator, factory, power) в src/ai/enemy_economy.js + src/systems/production_system.js + src/systems/construction_system.js. Удалить/деактивировать старые guard-chains, которые decider заменил. |
+| Expected files/modules | src/ai/enemy_brain.js (expanded), src/ai/enemy_economy.js, src/systems/production_system.js, src/systems/construction_system.js; src/main.js сокращён на ~1 500 строк |
+| Can be broken? | Лаб может быть broken (economy/brain restructure), merge-back = playable |
+| Risk | High — enemy economy и BRAIN-01 тесно связаны через IIFE scope |
+| Dependencies | ARCH-LAB-05C (decider мигрирован, guards удалены) |
+| Acceptance criteria | Enemy bot полный цикл: строит, добывает, атакует; экономика работает; BRAIN-01 production работает; старые FE_10H1/10D1/10E1 guards удалены; E2E smoke PASS |
+| Smoke/Checks | E2E merge_back_smoke, browser: full bot session, economy loop, production, no dead guards |
 
 ### ARCH-LAB-06 — Render / UI / input split + economy/player systems
 
@@ -468,13 +576,17 @@ DOCS-ARCH-00C устанавливал правило контролируемо
 
 | Arch | Goal | Expected reduction | Can be broken? | Risk | Dependencies | Acceptance criteria | Smoke/Checks |
 |------|------|-------------------:|----------------|------|--------------|---------------------|--------------|
-| ARCH-LAB-01 | Skeleton + safe extractions | ~400 строк | Нет | Low | Нет | node--check, coords work | Browser: map, camera, clicks |
+| ARCH-LAB-01A | E2E smoke baseline | +80 строк теста | Нет | Low | Нет | Playwright PASS | Playwright merge_back_smoke |
+| ARCH-LAB-01 | Skeleton + safe extractions + unit_controller archive | ~400 строк | Нет | Low | LAB-01A | coords + archive + smoke | E2E + browser: map, camera, clicks |
 | ARCH-LAB-02 | Bootstrap + game loop | ~350 строк | Lab может | Medium | LAB-01 | Boot, loop run | Browser: boot, menu, game start |
 | ARCH-LAB-03 | Pathfinding + territory + helpers | ~700 строк | Lab может | Med-High | LAB-01, 02 | Path, territory, fog | Browser: movement, territory |
 | ARCH-LAB-04 | Command + movement + combat + input | ~3 000 строк | Lab может | High | LAB-03 | All unit actions work | Browser: move, attack, select |
-| ARCH-LAB-05 | Enemy AI package (6 modules) + economy | ~6 000 строк | Lab может | Very High | LAB-03, 04 | Full bot cycle | Browser: full bot session |
-| ARCH-LAB-06 | Render + UI + player economy | ~3 500 строк | Lab может | Medium | LAB-04, 05 | Visual parity | Browser: full visual QA |
-| ARCH-LAB-07 | Cleanup + merge-back readiness | Cleanup only | Нет | Low-Med | LAB-01–06 | main.js < 8K | Full session QA |
+| ARCH-LAB-05A | Scout + enemy_intel extraction | ~2 000 строк | Lab может | High | LAB-04 | Scout lifecycle + intel | E2E + browser: scout lifecycle |
+| ARCH-LAB-05B | Enemy_targeting extraction | ~1 000 строк | Lab может | High | LAB-05A | Attack dispatch + intel gate | E2E + browser: attack waves |
+| ARCH-LAB-05C | Tank decider Priority Stack migration | ~1 500 строк | Lab может | Very High | LAB-05A, 05B | No oscillation, flag toggle | E2E + browser: defend/retreat/attack |
+| ARCH-LAB-05D | Enemy_brain + economy + guard cleanup | ~1 500 строк | Lab может | High | LAB-05C | Full bot cycle, no dead guards | E2E + browser: full bot session |
+| ARCH-LAB-06 | Render + UI + player economy | ~3 500 строк | Lab может | Medium | LAB-04, 05D | Visual parity | Browser: full visual QA |
+| ARCH-LAB-07 | Cleanup + merge-back readiness | Cleanup only | Нет | Low-Med | LAB-01–06 | main.js 5K–8K, FE_PATCH_ <100 | Full session QA |
 
 ---
 
@@ -483,19 +595,25 @@ DOCS-ARCH-00C устанавливал правило контролируемо
 ### Линейные зависимости
 
 ```text
-ARCH-LAB-01 skeleton
-  → ARCH-LAB-02 bootstrap/loop
-    → ARCH-LAB-03 pathfinding/territory/helpers
-      → ARCH-LAB-04 command/movement/combat/input
-        → ARCH-LAB-05 enemy AI package + economy
-          → ARCH-LAB-06 render/UI/player economy
-            → ARCH-LAB-07 cleanup/merge-back
+ARCH-LAB-01A E2E smoke baseline
+  → ARCH-LAB-01 skeleton + unit_controller archive
+    → ARCH-LAB-02 bootstrap/loop
+      → ARCH-LAB-03 pathfinding/territory/helpers
+        → ARCH-LAB-04 command/movement/combat/input
+          → ARCH-LAB-05A scout + enemy_intel
+            → ARCH-LAB-05B enemy_targeting
+              → ARCH-LAB-05C tank decider Priority Stack migration
+                → ARCH-LAB-05D enemy_brain + economy + guard cleanup
+                  → ARCH-LAB-06 render/UI/player economy
+                    → ARCH-LAB-07 cleanup/merge-back
 ```
 
 ### Параллелизм
 
 ```text
-                    ARCH-LAB-01
+                    ARCH-LAB-01A (E2E smoke)
+                          |
+                    ARCH-LAB-01 (skeleton)
                    /            \
           ARCH-LAB-02          (docs/exchange
               |                  parallel work)
@@ -503,29 +621,35 @@ ARCH-LAB-01 skeleton
            /        \
     ARCH-LAB-04    (LAB-05 prep:
         |            AI design docs,
-    ARCH-LAB-05     intel audit,
-        |            targeting spec)
+    ARCH-LAB-05A   intel audit,
+        |           targeting spec)
+    ARCH-LAB-05B
+        |
+    ARCH-LAB-05C
+        |
+    ARCH-LAB-05D
+        |
     ARCH-LAB-06
         |
     ARCH-LAB-07
 
 После ARCH-LAB-04:
-  ARCH-LAB-05 (AI) и ARCH-LAB-06 (render/UI) МОГУТ идти параллельно,
-  но LAB-06 зависит от enemy economy из LAB-05.
-  Рекомендация: LAB-05 сначала, LAB-06 после.
+  ARCH-LAB-05A–05D (AI) строго последовательно.
+  ARCH-LAB-06 может начаться после LAB-05D.
 ```
 
 ### Что можно делать параллельно
 
-- ARCH-LAB-01 + docs/exchange work (аудиты, дизайны, промпты)
+- ARCH-LAB-01A + docs/exchange work (E2E smoke можно создать параллельно с любым другим)
 - ARCH-LAB-03 + AI design docs (targeting spec, intel spec)
-- ARCH-LAB-05 + LAB-06 render/UI (если economy не зависит от render)
+- ARCH-LAB-05A + LAB-05B design (intel spec можно писать параллельно с scout extraction)
 
 ### Что строго последовательно
 
-- LAB-01 → LAB-02 → LAB-03 → LAB-04 (каждый зависит от предыдущего)
-- LAB-04 → LAB-05 (AI execution зависит от command/movement/combat)
-- LAB-05 → LAB-06 (player economy зависит от enemy economy helpers)
+- LAB-01A → LAB-01 → LAB-02 → LAB-03 → LAB-04 (каждый зависит от предыдущего)
+- LAB-04 → LAB-05A (AI execution зависит от command/movement/combat)
+- LAB-05A → LAB-05B → LAB-05C → LAB-05D (AI подшаги строго последовательно)
+- LAB-05D → LAB-06 (player economy зависит от enemy economy helpers)
 - LAB-06 → LAB-07 (cleanup требует все системы на месте)
 
 ---
@@ -773,37 +897,36 @@ Hybrid lab approach (7 lab milestones): 7 merge-back review sessions + 2-3 strat
 ## 13. Recommended next action
 
 ```text
-Next Arch: ARCH-LAB-01 — Main breakout skeleton / project structure
+Next Arch: ARCH-LAB-01A — Playwright E2E smoke baseline
 
 Goal:
-  Создать скелет модульной структуры:
-  1. Вынести src/core/coordinates.js (tileToWorld, worldToTile, isoSort, clamp, dist, inBounds, tileToScreen, screenToTile)
-  2. Вынести src/core/game_constants.js (TILE_W, TILE_H и другие shared constants из standalone_constants.js и main.js)
-  3. Обновить index.html script order (coordinates.js перед main.js)
-  4. Заменить вызовы в main.js на FE_CORE/coordinates bridge
-  5. Проверить node--check и browser smoke
+  Создать минимальный Playwright E2E smoke test для merge-back верификации:
+  boot → main menu → new game → faction select → game starts → enemy bot starts
 
-Branch: arch/lab-01-skeleton-safe-extractions
-  (от sandbox/main, не от lab-main-breakout — первый шаг безопасный)
+Branch: arch/lab-01a-e2e-smoke-baseline
+  (от sandbox/main)
 
 Files expected:
-  src/core/coordinates.js (new, ~120 lines)
-  src/core/game_constants.js (new, ~30 lines)
-  src/main.js (replaced calls, ~400 lines reduction target)
-  index.html (new script tags)
+  tests/e2e/merge_back_smoke.spec.js (new, ~80 lines)
+  playwright.config.js (possibly updated)
 
-Code allowed? Да — safe extractions только
-Can be broken? Нет — игра должна запускаться после каждого шага
+Code allowed? Да — тестовый код только, не влияет на game
+Can be broken? Нет — тест не влияет на gameplay
 
 Checks:
-  node--check на всех изменённых JS
-  Browser smoke: game starts, map renders, units move, camera works, clicks accurate
-  main.js before/after line count
+  npx playwright test tests/e2e/merge_back_smoke.spec.js PASS
+  Тест покрывает: boot → menu → new game → faction select → game starts → enemy bot starts
+  Нет красных console errors
+  Тест занимает < 30 секунд
 
 Stop conditions:
-  main.js не сокращается → остановиться и проанализировать
-  Browser smoke FAIL → откатить и проанализировать
-  > 2 hidden dependencies → остановиться и сделать аудит
+  Тест не PASS → исправить тест или game code
+  Тест > 60 секунд → упростить
+
+Почему LAB-01A перед LAB-01:
+  Каждый merge-back нуждается в автоматической верификации.
+  Без E2E smoke merge-back = high-risk.
+  E2E smoke — это guardrail, а не замена manual QA.
 ```
 
 ---
