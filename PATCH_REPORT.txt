@@ -4273,3 +4273,69 @@ Manual test plan:
    - Gate не вычисляется
 8. Scout / combat / production не изменились
 
+
+---
+
+Задача: BOT-ATTACK-12A — align ready tank counting with assignable tank eligibility
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-12a-assignable-tank-count (от sandbox/main)
+
+Цель:
+Синхронизировать подсчёт танков в ATTACK-12 gate с реальной eligible-логикой ATTACK-11 dispatch.
+FE_ATTACK12EvaluateAttackDecision() считал readyEnemyTanks (alive, не rally, не wave-locked),
+но ATTACK-11 dispatch дополнительно пропускает танки с attackTargetId / attackApproachTargetId.
+Результат: gate мог пропустить атаку, когда assignable танков < MIN_ATTACK_TANKS.
+
+Что сделано:
+
+1. FE_ATTACK12EvaluateAttackDecision() (L3751-3767):
+   Добавлен параллельный подсчёт внутри существующего цикла:
+   - _a12Assignable: subset от ready, дополнительно без attackTargetId и attackApproachTargetId
+   - _a12SkipAssignedAttackTarget: сколько пропущено из-за attackTargetId
+   - _a12SkipAttackApproach: сколько пропущено из-за attackApproachTargetId
+
+   Логика: attackTargetId проверяется первым (прямой attack order — сильнее),
+   attackApproachTargetId вторым. Танк с обоими полями засчитывается в skipAssignedAttackTarget.
+
+2. Decision logic (L3796-3798):
+   Пороговые проверки заменены с readyEnemyTanks на assignableEnemyTanks:
+   - _a12Assignable < FE_ATTACK12_MIN_ATTACK_TANKS -> delay_too_few_tanks
+   - _a12KnownPlayerLT > 0 && _a12Assignable < knownPlayerLT + FE_ATTACK12_FORCE_ADVANTAGE -> delay_enemy_outnumbered
+
+3. Return object (L3810-3813):
+   Добавлены 3 поля:
+   - assignableEnemyTanks: _a12Assignable
+   - skippedAssignedAttackTargetCount: _a12SkipAssignedAttackTarget
+   - skippedAttackApproachCount: _a12SkipAttackApproach
+
+4. Telemetry init game._botAttack12 (L7092-7095):
+   Добавлены 3 поля с дефолтами:
+   - assignableEnemyTanks: 0
+   - skippedAssignedAttackTargetCount: 0
+   - skippedAttackApproachCount: 0
+
+5. 10F1 vision branch (L5081-5083):
+   Добавлены 3 поля с нулевыми значениями (gate не вычисляется при vision target):
+   - assignableEnemyTanks: 0
+   - skippedAssignedAttackTargetCount: 0
+   - skippedAttackApproachCount: 0
+
+Что НЕ тронуто:
+- ATTACK-12 reason logic, кроме замены ready -> assignable в порогах
+- readyEnemyTanks — сохранён как broad count в телеметрии
+- BOT-ATTACK-11 rally mechanics
+- BOT-ATTACK-11C telemetry semantics (только 3 доп. поля в _botAttack12)
+- Combat
+- Pathfinding
+- Scout
+- BOT-INTEL-01
+- Production/caps
+- ATTACK-08/09/10
+
+Изменённые файлы:
+- src/main.js (helper, decision logic, return object, telemetry)
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS

@@ -3749,13 +3749,21 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var _a12Attack11Ds = game && game._botAttack11 ? (game._botAttack11.dispatchSource || '') : '';
 
     // Count ready enemy tanks: alive, not wave-locked, not on intel rally.
+    // BOT-ATTACK-12A: also count assignable (subset without active attack orders).
     var _a12Ready = 0;
+    var _a12Assignable = 0;
+    var _a12SkipAssignedAttackTarget = 0;
+    var _a12SkipAttackApproach = 0;
     for (var _a12i = 0; _a12i < (enemyTanks || []).length; _a12i++) {
       var _a12u = enemyTanks[_a12i];
       if (!_a12u || (_a12u.hp || 0) <= 0) continue;
       if (_a12u._attack11IntelRally) continue;
       if (typeof FE_ATTACK10IsWaveLocked === 'function' && FE_ATTACK10IsWaveLocked(_a12u)) continue;
       _a12Ready++;
+      // BOT-ATTACK-12A: assignable subset — tanks actually eligible for new dispatch.
+      if (_a12u.attackTargetId) { _a12SkipAssignedAttackTarget++; }
+      else if (_a12u.attackApproachTargetId) { _a12SkipAttackApproach++; }
+      else { _a12Assignable++; }
     }
 
     // HQ position intel: confirmed or estimated.
@@ -3785,9 +3793,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       _a12Reason = 'delay_no_intel';
     } else if (!_a12ForceKnown || !_a12ForceFresh) {
       _a12Reason = 'delay_stale_intel';
-    } else if (_a12Ready < FE_ATTACK12_MIN_ATTACK_TANKS) {
+    } else if (_a12Assignable < FE_ATTACK12_MIN_ATTACK_TANKS) {
       _a12Reason = 'delay_too_few_tanks';
-    } else if (_a12KnownPlayerLT > 0 && _a12Ready < _a12KnownPlayerLT + FE_ATTACK12_FORCE_ADVANTAGE) {
+    } else if (_a12KnownPlayerLT > 0 && _a12Assignable < _a12KnownPlayerLT + FE_ATTACK12_FORCE_ADVANTAGE) {
       _a12Reason = 'delay_enemy_outnumbered';
     } else {
       _a12Allowed = true;
@@ -3800,6 +3808,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       decision: _a12Decision,
       reason: _a12Reason,
       readyEnemyTanks: _a12Ready,
+      assignableEnemyTanks: _a12Assignable,
+      skippedAssignedAttackTargetCount: _a12SkipAssignedAttackTarget,
+      skippedAttackApproachCount: _a12SkipAttackApproach,
       knownPlayerLightTanks: _a12KnownPlayerLT,
       knownPlayerHarvesters: _a12KnownPlayerHv,
       playerHqSeen: _a12PlayerHqSeen,
@@ -5067,6 +5078,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         game._botAttack12.attackAllowed = true;
         game._botAttack12.reason = 'skip_existing_attack_active';
         game._botAttack12.skippedBecauseActiveAttack = false;
+        game._botAttack12.assignableEnemyTanks = 0;
+        game._botAttack12.skippedAssignedAttackTargetCount = 0;
+        game._botAttack12.skippedAttackApproachCount = 0;
       }
       if (game && game._botAttack11) {
         game._botAttack11.attack12Allowed = true;
@@ -7076,6 +7090,9 @@ function updateEnemyBot(dt) {
         decision: 'delay',
         reason: 'not_in_attack_dispatch',
         readyEnemyTanks: 0,
+        assignableEnemyTanks: 0,
+        skippedAssignedAttackTargetCount: 0,
+        skippedAttackApproachCount: 0,
         knownPlayerLightTanks: (_a12IntelObj && _a12IntelObj.knownPlayerUnitsByType) ? (_a12IntelObj.knownPlayerUnitsByType.light_tank || 0) : 0,
         knownPlayerHarvesters: (_a12IntelObj && _a12IntelObj.knownPlayerUnitsByType) ? (_a12IntelObj.knownPlayerUnitsByType.harvester || 0) : 0,
         playerHqSeen: !!(_a12IntelObj && _a12IntelObj.playerHqSeen),
