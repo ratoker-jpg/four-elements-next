@@ -3002,3 +3002,89 @@ D1. game._botScout02A — обновляется каждый тик в updateEn
 - ATTACK-08/09/10 логика не тронута
 - Google Drive sync тронут: нет
 - production paths тронуты: нет
+
+---
+
+Задача: BOT-SCOUT-02B — scout observe-return-cooldown lifecycle
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02b-scout-lifecycle (от sandbox/main)
+
+Проблема:
+Enemy scout доезжает до player base / scouting area и стоит там бесконечно.
+Нет lifecycle — scout не наблюдает, не возвращается, не уходит на cooldown.
+
+Цель:
+Добавить простой scout lifecycle: outbound -> observing -> returning -> cooldown -> outbound.
+Scout прибывает на место, стоит 4 сек, возвращается домой, ждёт 30 сек cooldown, затем повторяет.
+Минимальная threat-react: если scout получил урон или рядом player light_tank — retreat.
+
+Что сделано:
+
+1. Lifecycle константы (main.js, после FE_SCOUT01_ENEMY_SCOUT_CAP):
+   - FE_SCOUT02B_OBSERVE_SEC = 4
+   - FE_SCOUT02B_COOLDOWN_SEC = 30
+   - FE_SCOUT02B_ARRIVE_DIST = 2 (tiles to target = "arrived")
+   - FE_SCOUT02B_HOME_ARRIVE_DIST = 3 (tiles to home = "home")
+   - FE_SCOUT02B_THREAT_RADIUS = 5 (tiles: player light_tank triggers retreat)
+
+2. Helper функции (main.js):
+   - FE_SCOUT02BGetEnemyHomeAnchor() — reuse FE_PATCH_08BResolveEnemyHomeBase + FE_PATCH_08BHomeAnchorFromBase, fallback {4,4}
+   - FE_SCOUT02BIsLifecycleBusy(u) — true если _scout02BState = observing/returning/cooldown
+
+3. Lifecycle fields на scout-юните (инициализация в FE_10C1_trySetScoutMove):
+   - _scout02BState: 'outbound' | 'observing' | 'returning' | 'cooldown'
+   - _scout02BObserveUntil: timestamp
+   - _scout02BCooldownUntil: timestamp
+   - _scout02BHomeX, _scout02BHomeY: enemy HQ anchor
+   - _scout02BLastHp: для threat detection (не maxHp)
+
+4. Lifecycle wrapper в FE_SCOUT01UpdateEnemyScoutBehavior:
+   - НЕ переписана полностью — минимальный wrapper поверх существующей логики
+   - Scouts без _scout02BState: fallback к существующей BOT-SCOUT-01B/01C логике
+   - outbound: если dist <= ARRIVE_DIST или path consumed + idle → observing (path=[], state='idle', command='')
+   - observing: ждёт OBSERVE_SEC → returning (FE_10C1_trySetScoutMove к home)
+   - returning: если dist <= HOME_ARRIVE_DIST или idle без path → cooldown (path=[], state='idle', command='')
+   - cooldown: ждёт COOLDOWN_SEC → outbound (clear metadata, следующий tick назначит новый target)
+
+5. Threat detection (MVP, только для outbound/observing):
+   - Если scout.hp < _scout02BLastHp → returning (reason='damaged_return')
+   - Если рядом player light_tank в радиусе THREAT_RADIUS → returning
+   - _scout02BLastHp обновляется каждый tick
+
+6. Защита FE_10C1_updateEnemyScoutingMvp:
+   - freeScout.find() добавлено условие !FE_SCOUT02BIsLifecycleBusy(u)
+   - Scouts в observing/returning/cooldown НЕ считаются свободными для новой разведцели
+
+7. Telemetry: game._botScout02B
+   - scoutId, state, targetX/Y, homeX/Y, observeUntil, cooldownUntil, pathLen, reason, at
+
+Изменённые файлы:
+- src/main.js — lifecycle constants, helpers, FE_10C1_trySetScoutMove init, FE_SCOUT01UpdateEnemyScoutBehavior wrapper, FE_10C1_updateEnemyScoutingMvp protection, telemetry
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Что НЕ тронуто:
+- BOT-SCOUT-02A targetability (FE_SCOUT02AIsEnemyScoutTarget)
+- BOT-SCOUT-02A production policy (early second scout gate)
+- ATTACK-08/09/10
+- enemy light_tank attack-chain
+- findPath internals
+- passable
+- combat damage/range/cooldown
+- economy formulas
+- map generation
+- render / fog
+- save / load
+- full bot brain / attack readiness
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production policy изменена: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
