@@ -962,10 +962,10 @@
   }
 
   function FE_PATCH_06BIsAttackableEnemyBuilding(target) {
+    // PATCH-COMBAT-TARGETS-01: any enemy building with HP is attackable, not just hq_base.
     return !!(
       target &&
       target.kind === 'building' &&
-      target.type === 'hq_base' &&
       isEnemyBuilding(target) &&
       (target.hp || 0) > 0
     );
@@ -1373,18 +1373,14 @@
   function FE_PATCH_07BGetHostileLightTankTargetKind(attacker, target) {
     if (!isLightTank(attacker) || !target) return null;
 
-    if (isLightTank(target) && unitOwner(target) !== unitOwner(attacker)) {
+    // PATCH-COMBAT-TARGETS-01: any enemy unit with HP is a valid target.
+    if (target.kind === 'unit' && unitOwner(target) !== unitOwner(attacker) && (target.hp || 0) > 0) {
       return 'unit';
     }
 
-    // BOT-SCOUT-02A: enemy scout is a valid 'unit' target for light_tank.
-    if (FE_SCOUT02AIsEnemyScoutTarget(attacker, target)) {
-      return 'unit';
-    }
-
+    // PATCH-COMBAT-TARGETS-01: any enemy building with HP is a valid target.
     if (
       target.kind === 'building' &&
-      target.type === 'hq_base' &&
       buildingOwner(target) !== unitOwner(attacker) &&
       (target.hp || 0) > 0
     ) {
@@ -13297,11 +13293,10 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
     );
 
     if (!group.length) return false;
-    const isEnemyTankTarget = isLightTank(target) && isEnemyUnit(target);
-    const isEnemyBuildingTarget = FE_PATCH_06BIsAttackableEnemyBuilding(target);
-    // BOT-SCOUT-02A: enemy scout is also a valid approach target.
-    const isEnemyScoutTarget = group.length > 0 && FE_SCOUT02AIsEnemyScoutTarget(group[0], target);
-    if (!isEnemyTankTarget && !isEnemyBuildingTarget && !isEnemyScoutTarget) return false;
+    // PATCH-COMBAT-TARGETS-01: any enemy unit/building with HP is a valid group attack target.
+    const isEnemyUnitTarget = target?.kind === 'unit' && isEnemyUnit(target) && (target.hp || 0) > 0;
+    const isEnemyBuildingTarget = target?.kind === 'building' && isEnemyBuilding(target) && (target.hp || 0) > 0;
+    if (!isEnemyUnitTarget && !isEnemyBuildingTarget) return false;
 
     let direct = 0;
     let approaching = 0;
@@ -13352,11 +13347,12 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
 
     const stats = getLightTankCombatStats(unit);
 
+    // PATCH-COMBAT-TARGETS-01: aggro on any enemy unit with HP, not just light_tank.
     const candidates = game.units
       .filter(u =>
         u &&
-        isLightTank(u) &&
         isEnemyUnit(u) &&
+        (u.hp || 0) > 0 &&
         unitDistanceCells(unit, u) <= stats.range
       )
       .sort((a, b) => unitDistanceCells(unit, a) - unitDistanceCells(unit, b));
@@ -13556,9 +13552,9 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
       return;
     }
 
-    // BOT-SCOUT-02A: player light_tank can also target enemy scouts via click.
-    var _scout02aClickableTarget = (isLightTank(obj) && isEnemyUnit(obj)) || FE_SCOUT02AIsEnemyScoutTarget(selected, obj);
-    if (isLightTank(selected) && isPlayerUnit(selected) && _scout02aClickableTarget) {
+    // PATCH-COMBAT-TARGETS-01: player light_tank can target any enemy unit with HP via click.
+    var _isEnemyUnitTarget = obj?.kind === 'unit' && isEnemyUnit(obj) && (obj.hp || 0) > 0;
+    if (isLightTank(selected) && isPlayerUnit(selected) && _isEnemyUnitTarget) {
       attackMoveArmed = false;
       const group = selectedPlayerLightTanks();
       if (group.length > 1) {
