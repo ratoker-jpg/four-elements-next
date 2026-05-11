@@ -3497,9 +3497,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   // BOT-SCOUT-02D: base perimeter sweep constants.
   var FE_SCOUT02D_SWEEP_RADIUS = 7;         // tiles: distance from base center for sweep points
   var FE_SCOUT02D_SWEEP_MAX_POINTS = 3;     // max sweep points to visit before returning
-  var FE_SCOUT02D_SWEEP_OBSERVE_SEC = 2;    // seconds to observe at each sweep point
-  var FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 22;   // seconds: hard timeout for entire sweep phase
-  var FE_SCOUT02D_SWEEP_ARRIVE_DIST = 2;    // tiles: distance to count as arrived at sweep point
+  var FE_SCOUT02D_SWEEP_OBSERVE_SEC = 1.5;  // seconds to observe at each sweep point
+  var FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 30;   // seconds: hard timeout for entire sweep phase
+  var FE_SCOUT02D_SWEEP_ARRIVE_DIST = 3;    // tiles: distance to count as arrived at sweep point
 
   // BOT-SCOUT-02D3: edge-aware perimeter sweep constants.
   var FE_SCOUT02D3_DIR_COUNT = 24;           // angular samples around base center

@@ -3741,3 +3741,73 @@ Manual test plan:
 11. BOT-SCOUT-02E target остаётся player_hq_rally
 12. Enemy tank attack-chain работает
 13. Telemetry: sweepCandidateMode='02d3_angular_spread', sweepSelectedCandidatesCount >= 1
+
+---
+
+Задача: BOT-SCOUT-02D4 — sweep timing completion tuning
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02d4-sweep-timing-tuning (от sandbox/main)
+
+Проблема:
+После BOT-SCOUT-02D3 (edge-aware sweep) scout достигает базы игрока и начинает
+sweep, но возвращается с reason='sweep_timeout' вместо reason='sweep_done'.
+Наблюдение: sweeping с gameTime ~144 до ~166 (~22 сек = текущий timeout),
+не хватает времени на 3 точки с movement + observe.
+
+Причина:
+FE_SCOUT02D_SWEEP_TIMEOUT_SEC=22 слишком тесный для 3 sweep points:
+3 × (movement ~4-5 sec + observe 2 sec) ≈ 18-21 sec, почти нет запаса.
+Дополнительно: ARRIVE_DIST=2 требует подойти очень близко (лишние секунды),
+OBSERVE_SEC=2 даёт 6 sec чистого observe на 3 точки.
+
+Что изменено:
+
+1. FE_SCOUT02D_SWEEP_TIMEOUT_SEC: 22 → 30
+   - Запас 8 сек на movement между точками + unpredicted pathfinding
+   - 3 точки × (4-5 сек move + 1.5 сек observe) ≈ 16.5-19.5 сек — укладывается с запасом
+
+2. FE_SCOUT02D_SWEEP_OBSERVE_SEC: 2 → 1.5
+   - 1.5 сек достаточно для scan области view=7
+   - Экономия 0.5 сек × 3 точки = 1.5 сек суммарно
+
+3. FE_SCOUT02D_SWEEP_ARRIVE_DIST: 2 → 3
+   - Считать «прибыл» на 1 тайл раньше — меньше микроменёвров у точки
+   - При view=7 наблюдение с расстояния 3 тайла от целевой клетки всё равно
+     покрывает нужную область (7-3=4 тайла от позиции scout до края view)
+
+Итого: budget = 30 сек, расход ~16.5-19.5 сек → запас ~10-13 сек.
+
+Изменённые файлы:
+- src/main.js — 3 константы (L3500-3502)
+- PATCH_REPORT.txt — добавлена эта запись
+
+Что НЕ менялось (подтверждение):
+- BOT-SCOUT-02D3 candidate generation / angular spread — не тронуты
+- BOT-SCOUT-02E outbound target selection — не тронут
+- BOT-SCOUT-02B2 return fallback — не тронут
+- BOT-SCOUT-02C threat thresholds — не тронуты
+- sweeping lifecycle / abort logic — не тронуты
+- ATTACK-08/09/10 — не тронуты
+- tank attack-chain — не тронут
+- findPath/passable/combat/map/render/save/load — не тронуты
+- scout production/cap — не тронуты
+- telemetry structure — не тронута
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+Метод тестирования:
+1. Запустить игру, наблюдать bot scout до sweeping фазы
+2. Проверить: scout завершает sweep с reason='sweep_done' (не 'sweep_timeout')
+3. Проверить telemetry: sweepPointsVisited достигает sweepSelectedCandidatesCount
+4. Проверить: при danger/immediate-return старая логика работает (не затронута)
