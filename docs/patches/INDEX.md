@@ -55,3 +55,4 @@
 | BOT-ATTACK-11C | 2026-05-11 | #48 | Honest dispatch telemetry and skip reasons |
 | BOT-ATTACK-12 | 2026-05-11 | #49 | Intel-based attack/no-attack decision gate |
 | BOT-ATTACK-12A | 2026-05-11 | #50 | Align ready tank counting with assignable tank eligibility |
+| DOCS-ARCH-00 | 2026-05-12 | TBD | Architecture Migration Workflow — переход от patch accumulation к системной разработке |
