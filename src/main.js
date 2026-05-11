@@ -4882,11 +4882,15 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var target = FE_PATCH_08BAttackTarget(state, enemyUnits);
     var attackOrderType = 'attack';
 
-    // ATTACK-01 / BOT-ATTACK-11: fallback when 10F1 vision finds no target.
+    // ATTACK-01 / BOT-ATTACK-11C: fallback when 10F1 vision finds no target.
     // Priority: intel rally point → legacy findBaseBuilding fallback.
     var _a11Intel = null;
     var _a11AssignedCount = 0;
     var _a11LastFailureReason = '';
+    // BOT-ATTACK-11C: skip reason counters for telemetry.
+    var _a11SkipHasAttackOrder = 0, _a11SkipAlreadyRally = 0, _a11SkipWaveLocked = 0;
+    var _a11SkipPathFailed = 0, _a11SkipDead = 0;
+    var _a11SkipReason = '';
     if (!target) {
       // BOT-ATTACK-11: use scout intel as rally point for coordinate move.
       _a11Intel = FE_ATTACK11ChooseIntelTarget();
@@ -4897,10 +4901,12 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         var _a11WaveSlice = enemyUnits.slice(0, _a11WaveSize);
         for (var _a11i = 0; _a11i < _a11WaveSlice.length; _a11i++) {
           var _a11u = _a11WaveSlice[_a11i];
-          if (!_a11u || (_a11u.hp || 0) <= 0) continue;
+          if (!_a11u) continue;
+          if ((_a11u.hp || 0) <= 0) { _a11SkipDead++; continue; }
           // Skip tanks already on an attack order or intel rally.
-          if (_a11u.attackTargetId || _a11u.attackApproachTargetId || _a11u._attack11IntelRally) continue;
-          if (FE_ATTACK10IsWaveLocked(_a11u)) continue;
+          if (_a11u.attackTargetId || _a11u.attackApproachTargetId) { _a11SkipHasAttackOrder++; continue; }
+          if (_a11u._attack11IntelRally) { _a11SkipAlreadyRally++; continue; }
+          if (FE_ATTACK10IsWaveLocked(_a11u)) { _a11SkipWaveLocked++; continue; }
           if (FE_PATCH_08BSilentMoveTo(_a11u, _a11Intel.targetX, _a11Intel.targetY)) {
             _a11u._attack11IntelRally = {
               x: _a11Intel.targetX,
@@ -4910,6 +4916,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
               assignedAt: game ? (game.time || 0) : 0
             };
             _a11AssignedCount++;
+          } else {
+            _a11SkipPathFailed++;
           }
         }
       }
@@ -4917,17 +4925,31 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (_a11AssignedCount > 0) {
         // Intel rally dispatched — tanks are moving to intel point.
         // Do not set target/attackOrderType — attack chain proceeds differently for rally.
+        _a11SkipReason = 'intel_rally_assigned';
       } else {
         // No intel or no tanks assigned via intel — legacy fallback.
-        if (_a11Intel) {
+        if (!_a11Intel) {
+          _a11SkipReason = 'no_intel';
+        } else {
+          // Intel available but no tanks assigned.
+          var _a11EligibleSkipped = _a11SkipHasAttackOrder + _a11SkipAlreadyRally + _a11SkipWaveLocked + _a11SkipPathFailed;
+          if (_a11EligibleSkipped > 0 || _a11SkipDead > 0) {
+            _a11SkipReason = 'no_eligible_tanks';
+          } else {
+            _a11SkipReason = 'path_failed';
+          }
           _a11LastFailureReason = 'intel_path_failed_or_no_eligible_tanks';
         }
         var playerHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
         if (playerHQ && (playerHQ.hp || 0) > 0) {
           target = playerHQ;
           attackOrderType = 'hq_push';
+          _a11SkipReason = 'legacy_fallback_used';
         }
       }
+    } else {
+      // 10F1 vision found a target — intel rally not needed.
+      _a11SkipReason = 'vision_target_available';
     }
 
     // ATTACK-01 telemetry: record whether vision, intel rally, or fallback was used.
@@ -4945,8 +4967,18 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         waveSize: Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length))),
         at: game.time || 0
       };
-      // BOT-ATTACK-11: update lastFailureReason after dispatch decision is known.
+      // BOT-ATTACK-11C: update telemetry with actual dispatch result and skip reasons.
       if (game._botAttack11) {
+        game._botAttack11.dispatchSource = _a01Source;
+        game._botAttack11.usesIntelPoint = _a01Source === 'intel_rally' && _a11AssignedCount > 0;
+        game._botAttack11.assignedCount = _a11AssignedCount;
+        game._botAttack11.fallbackUsed = attackOrderType === 'hq_push';
+        game._botAttack11.skipReason = _a11SkipReason;
+        game._botAttack11.skipHasAttackOrder = _a11SkipHasAttackOrder;
+        game._botAttack11.skipAlreadyRally = _a11SkipAlreadyRally;
+        game._botAttack11.skipWaveLocked = _a11SkipWaveLocked;
+        game._botAttack11.skipPathFailed = _a11SkipPathFailed;
+        game._botAttack11.skipDead = _a11SkipDead;
         game._botAttack11.lastFailureReason = _a11LastFailureReason || '';
       }
     }
@@ -6852,9 +6884,9 @@ function updateEnemyBot(dt) {
       if (game) game._botIntel01Error = String(_intel01Err && _intel01Err.message ? _intel01Err.message : _intel01Err);
     }
 
-    // BOT-ATTACK-11: debug telemetry for intel rally attack target selection.
-    // Initial snapshot — rallyArrivedCount/rallyConvertedCount/rallyClearedCount are updated
-    // after the intel rally arrival detection block runs (in attack phase).
+    // BOT-ATTACK-11C: debug telemetry for intel rally attack target selection.
+    // Initial snapshot — dispatch/rally/skip fields are updated after
+    // FE_PATCH_08BPrepareAttack dispatch and arrival detection block.
     try {
       var _a11IntelObj = game && game.enemyIntel;
       var _a11Tanks = (game && game.units) ? game.units : [];
@@ -6866,19 +6898,39 @@ function updateEnemyBot(dt) {
       var _a11TIntel = FE_ATTACK11ChooseIntelTarget();
       var _a11LastDispatch = game ? (game._attack01LastDispatch || null) : null;
       var _a11LastFail = game && game._botAttack11 ? (game._botAttack11.lastFailureReason || '') : '';
+      var _a11IntelSrc = _a11TIntel ? _a11TIntel.targetSource : 'none';
+      var _a11IntelX = _a11TIntel ? _a11TIntel.targetX : null;
+      var _a11IntelY = _a11TIntel ? _a11TIntel.targetY : null;
       game._botAttack11 = {
-        targetSource: _a11TIntel ? _a11TIntel.targetSource : (_a11LastDispatch ? _a11LastDispatch.source : 'none'),
-        targetX: _a11TIntel ? _a11TIntel.targetX : null,
-        targetY: _a11TIntel ? _a11TIntel.targetY : null,
-        usesIntelPoint: !!(_a11TIntel),
-        assignedCount: _a11LastDispatch ? (_a11LastDispatch.intelRallyAssignedCount || 0) : 0,
+        // Intel availability (independent of dispatch)
+        intelAvailable: !!(_a11TIntel),
+        intelTargetSource: _a11IntelSrc,
+        intelTargetX: _a11IntelX,
+        intelTargetY: _a11IntelY,
+        // Legacy aliases (mirror intelTarget* for backward compat)
+        targetSource: _a11IntelSrc,
+        targetX: _a11IntelX,
+        targetY: _a11IntelY,
+        // Actual dispatch result (updated after FE_PATCH_08BPrepareAttack)
+        dispatchSource: 'none',
+        usesIntelPoint: false,
+        assignedCount: 0,
+        fallbackUsed: false,
+        // Skip/failure reasons (updated after dispatch)
+        skipReason: 'not_in_attack_dispatch',
+        skipHasAttackOrder: 0,
+        skipAlreadyRally: 0,
+        skipWaveLocked: 0,
+        skipPathFailed: 0,
+        skipDead: 0,
+        lastFailureReason: _a11LastFail,
+        // Rally state
         rallyActiveCount: _a11RallyActive,
         rallyArrivedCount: 0,
         rallyConvertedCount: 0,
         rallyClearedCount: 0,
-        fallbackUsed: _a11LastDispatch ? (_a11LastDispatch.source === 'hq_fallback') : false,
-        lastFailureReason: _a11LastFail,
         h1RecallGuardedCount: 0,
+        // Intel metadata
         playerHqSeen: !!(_a11IntelObj && _a11IntelObj.playerHqSeen),
         playerHqEstimateAvailable: !!(_a11IntelObj && _a11IntelObj.playerHqEstimateCenterX != null),
         intelFreshnessSec: _a11TIntel ? _a11TIntel.intelFreshnessSec : -1,
