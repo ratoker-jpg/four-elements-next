@@ -9567,9 +9567,10 @@ function debugLog(event, payload={}) {
   const FE_PATCH_09E_FACTORY_MAX_QUEUE = 1;
 
   // ATTACK-09: experimental enemy light_tank production cap.
-  // Set window.FE_ENEMY_LIGHT_TANK_CAP = 3 (default) to limit enemy tank count.
+  // BOT-PROGRESSION-01: cap disabled (was 3). Natural economy limits (1 factory,
+  // queue depth 1, element cost, build time, ATTACK-12 gate) provide self-regulation.
   // null / undefined / <=0 disables the cap.
-  window.FE_ENEMY_LIGHT_TANK_CAP = 3;
+  window.FE_ENEMY_LIGHT_TANK_CAP = 0;
 
   function FE_ATTACK09GetEnemyLightTankCountIncludingQueue() {
     if (!game) return 0;
@@ -9864,19 +9865,18 @@ function debugLog(event, payload={}) {
   }
 
   function FE_PATCH_BASELINE_01_ChooseFactoryUnitType() {
-    // ATTACK-09 helper: if light_tank cap is reached, return null regardless of early-exit path.
-    var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
-    var _a09CapEnabled = _a09Cap != null && _a09Cap > 0;
-    var _a09CapBlocked = false;
-    if (_a09CapEnabled) {
-      var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
-      _a09CapBlocked = _a09Count >= _a09Cap;
-    }
-
-    if (!game) return _a09CapBlocked ? null : 'light_tank';
+    // BOT-PROGRESSION-01: worker/scout checks happen FIRST, before any cap check.
+    // Previously, cap check early-exit could skip worker replenishment.
+    if (!game) return 'light_tank';
     var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (now - (game._baseline01LastWorkerCheck || 0) < FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS) {
-      return _a09CapBlocked ? null : 'light_tank';
+      // During cooldown, skip worker check but still allow tank production if cap allows.
+      var _a09CapFast = window.FE_ENEMY_LIGHT_TANK_CAP;
+      if (_a09CapFast != null && _a09CapFast > 0) {
+        var _a09CountFast = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
+        if (_a09CountFast >= _a09CapFast) return null;
+      }
+      return 'light_tank';
     }
     game._baseline01LastWorkerCheck = now;
 
@@ -9912,6 +9912,8 @@ function debugLog(event, payload={}) {
     }
 
     // ATTACK-09: if light_tank cap is reached, return null (factory waits, no builder spam).
+    // BOT-PROGRESSION-01: cap check happens AFTER worker/scout checks so workers
+    // are always replenished even when tank cap is active.
     var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
     if (_a09Cap != null && _a09Cap > 0) {
       var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
