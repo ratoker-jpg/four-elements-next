@@ -3524,6 +3524,13 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       playerHqY: null,
       playerHqCenterX: null,
       playerHqCenterY: null,
+      // BOT-INTEL-01B: estimate fields from scout target metadata (not confirmed visual).
+      playerHqEstimateX: null,
+      playerHqEstimateY: null,
+      playerHqEstimateCenterX: null,
+      playerHqEstimateCenterY: null,
+      playerHqEstimateSource: '',
+      lastPlayerHqEstimateAt: 0,
       lastScoutSweepDoneAt: 0,
       lastUsefulIntelAt: 0,
       seenPlayerUnitsCount: 0,
@@ -3626,13 +3633,16 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       }
     }
 
-    // Also try to get HQ center from scout target metadata if not seen in this scan.
+    // BOT-INTEL-01B: estimate HQ from scout target metadata if not visually confirmed.
+    // These go into estimate fields only — NOT into playerHqSeen / confirmed coords.
     if (!hqSeenThisScan && scout._fe10c1ScoutTarget) {
       if (scout._fe10c1ScoutTarget.playerHqCenterX != null && scout._fe10c1ScoutTarget.playerHqCenterY != null) {
-        hqCX = scout._fe10c1ScoutTarget.playerHqCenterX;
-        hqCY = scout._fe10c1ScoutTarget.playerHqCenterY;
-        hqX = scout._fe10c1ScoutTarget.playerHqX ?? hqX;
-        hqY = scout._fe10c1ScoutTarget.playerHqY ?? hqY;
+        intel.playerHqEstimateX = scout._fe10c1ScoutTarget.playerHqX ?? intel.playerHqEstimateX ?? null;
+        intel.playerHqEstimateY = scout._fe10c1ScoutTarget.playerHqY ?? intel.playerHqEstimateY ?? null;
+        intel.playerHqEstimateCenterX = scout._fe10c1ScoutTarget.playerHqCenterX;
+        intel.playerHqEstimateCenterY = scout._fe10c1ScoutTarget.playerHqCenterY;
+        intel.playerHqEstimateSource = 'scout_target_metadata';
+        intel.lastPlayerHqEstimateAt = now;
       }
     }
 
@@ -6709,6 +6719,13 @@ function updateEnemyBot(dt) {
           playerHqY: _intel01Obj.playerHqY,
           playerHqCenterX: _intel01Obj.playerHqCenterX,
           playerHqCenterY: _intel01Obj.playerHqCenterY,
+          // BOT-INTEL-01B: estimate fields.
+          playerHqEstimateX: _intel01Obj.playerHqEstimateX,
+          playerHqEstimateY: _intel01Obj.playerHqEstimateY,
+          playerHqEstimateCenterX: _intel01Obj.playerHqEstimateCenterX,
+          playerHqEstimateCenterY: _intel01Obj.playerHqEstimateCenterY,
+          playerHqEstimateSource: _intel01Obj.playerHqEstimateSource,
+          lastPlayerHqEstimateAt: _intel01Obj.lastPlayerHqEstimateAt,
           lastScoutIntelAt: _intel01Obj.lastUsefulIntelAt,
           lastScoutSweepDoneAt: _intel01Obj.lastScoutSweepDoneAt,
           seenPlayerUnitsCount: _intel01Obj.seenPlayerUnitsCount,
@@ -6725,6 +6742,9 @@ function updateEnemyBot(dt) {
           playerHqSeen: false,
           playerHqX: null, playerHqY: null,
           playerHqCenterX: null, playerHqCenterY: null,
+          playerHqEstimateX: null, playerHqEstimateY: null,
+          playerHqEstimateCenterX: null, playerHqEstimateCenterY: null,
+          playerHqEstimateSource: '', lastPlayerHqEstimateAt: 0,
           lastScoutIntelAt: 0, lastScoutSweepDoneAt: 0,
           seenPlayerUnitsCount: 0, seenPlayerBuildingsCount: 0,
           knownPlayerUnitsByType: {}, knownPlayerBuildingsByType: {},
