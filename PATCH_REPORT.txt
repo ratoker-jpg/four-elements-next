@@ -2866,3 +2866,139 @@ FE_SCOUT01IsScoutEnRoute возвращал true, если скаут имеет
 3. Визуально: scout едет от вражеской базы к цели
 4. FE_SCOUT01B_WriteMoveTelemetry вызывается при каждой попытке —
    телеметрия всегда существует после первой попытки движения
+
+---
+
+Задача: BOT-SCOUT-02A — scout combat targetability + early scout production policy
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02a-scout-targetability-early-policy (от sandbox/main)
+
+Цель:
+1. Enemy scout становится валидной целью для player light_tank (targetability).
+   canAttack:false в units.js означает что scout НЕ может атаковать,
+   но НЕ означает что scout нельзя атаковать.
+2. Scout исключается из боевых единиц (combat exclusion) — не входит в attack wave,
+   не получает waveId / _attack10WaveLocked, не считается combat strength.
+3. Enemy scout production policy — hard cap 2, soft target 1, второй scout
+   разрешён только при game.time >= 600 || game.mapSize === 'large'.
+4. Telemetry game._botScout02A.
+5. Не трогать: ATTACK-08/09/10, findPath, passable, scout movement, map gen,
+   render/fog, save/load, full lifecycle (BOT-SCOUT-02B).
+
+Что сделано:
+
+A. Scout targetability (4 правки):
+
+A1. Helper FE_SCOUT02AIsEnemyScoutTarget(attacker, target)
+   - Новая функция рядом с FE_PATCH_07BGetHostileLightTankTargetKind
+   - Robust check: target && target.type === 'scout' && unitOwner(target) !== unitOwner(attacker)
+   - Без обязательного target.kind === 'unit' — только тип + владелец
+
+A2. FE_PATCH_07BGetHostileLightTankTargetKind расширена
+   - Добавлен блок: if (FE_SCOUT02AIsEnemyScoutTarget(attacker, target)) return 'unit';
+   - Это покрывает все атакующие цепочки, которые проходят через GetHostileLightTankTargetKind:
+     updateLightTankCombat, setLightTankAttackGeneric, updateLightTankAttackApproach,
+     FE_PATCH_08BCommandEnemyTankAttack, ATTACK-03 re-issue, ATTACK-07 sync, ATTACK-06 re-path
+
+A3. onCanvasClick расширен
+   - Старый: if (isLightTank(selected) && isPlayerUnit(selected) && isLightTank(obj) && isEnemyUnit(obj))
+   - Новый: добавлено || FE_SCOUT02AIsEnemyScoutTarget(selected, obj)
+   - Player light_tank может кликнуть на enemy scout → attack/approach
+
+A4. setGroupLightTankAttack + setGroupLightTankAttackApproach расширены
+   - Обе функции теперь распознают enemy scout как валидную цель группы
+   - Используют FE_SCOUT02AIsEnemyScoutTarget(group[0], target) для owner check
+
+B. Scout combat exclusion (1 правка):
+
+B1. FE_PATCH_08BEnemyCombatUnits
+   - Добавлен фильтр u.type !== 'scout'
+   - Скауты не попадают в enemy combat units → не входят в attack waves,
+     не получают waveId / _attack10WaveLocked, не считаются combat strength
+   - Defense in depth: type 'scout' уже исключается isLightTank(), но фильтр
+     защищает от будущих ролей (light_tank с _fe10c1Role='scout')
+
+C. Enemy scout production policy (1 правка):
+
+C1. FE_PATCH_BASELINE_01_ChooseFactoryUnitType
+   - Старая логика BOT-SCOUT-01:
+     if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_MIN) return 'scout';
+     if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_CAP && tankCount >= 2) return 'scout';
+   - Новая логика BOT-SCOUT-02A:
+     if (scoutCount < 1) return 'scout';
+     if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_CAP && (game.time >= 600 || game.mapSize === 'large')) return 'scout';
+   - Первый scout — всегда (scoutCount < 1)
+   - Второй scout — только при mature game (time >= 600) или large map
+   - Смерть первого scout покрывается scoutCount < 1 → respawn как первого
+   - Hard cap остаётся FE_SCOUT01_ENEMY_SCOUT_CAP = 2
+   - stable economy НЕ добавлен — нет готового helper
+
+D. Telemetry (1 правка):
+
+D1. game._botScout02A — обновляется каждый тик в updateEnemyBot
+   - enemyScoutCount: количество живых enemy scout
+   - enemyScoutSoftTarget: 1
+   - enemyScoutHardCap: 2
+   - secondScoutAllowed: boolean
+   - secondScoutReason: 'first_not_yet' | 'cap_reached' | 'time_mature' | 'large_map' | 'conditions_not_met'
+   - scoutTargetableCheck: typeof FE_SCOUT02AIsEnemyScoutTarget === 'function'
+   - lastScoutAttackedId: id атакуемого enemy scout (если есть)
+   - at: game.time
+
+Не тронуто:
+- ATTACK-08/09/10 — без изменений
+- findPath / passable — без изменений
+- Scout movement (manual_move, direction cache) — без изменений
+- Map generation — без изменений
+- Render / fog — без изменений
+- Save / load — без изменений
+- BOT-SCOUT-02B lifecycle (observe / return / cooldown) — отдельный патч
+- FE_SCOUT01_ENEMY_SCOUT_MIN / FE_SCOUT01_ENEMY_SCOUT_CAP — константы не изменены
+- FE_10H1_isScout — без изменений, скауты уже пропускаются при retreat/defense
+- FE_10E1_isTank — скауты уже не проходят (type !== 'light_tank' && !type.includes('tank'))
+
+Как проверить:
+1. Scout стал валидной целью:
+   - FE_SCOUT02AIsEnemyScoutTarget(attacker, target) → true для enemy scout
+   - FE_PATCH_07BGetHostileLightTankTargetKind(playerTank, enemyScout) → 'unit'
+   - onCanvasClick: клик player tank → enemy scout → attack/approach
+   - setGroupLightTankAttack: группа танков → enemy scout → attack
+   - setGroupLightTankAttackApproach: группа танков → enemy scout → approach
+
+2. Второй early scout ограничен:
+   - game._botScout02A.secondScoutAllowed === false при time < 600 && mapSize !== 'large'
+   - game._botScout02A.secondScoutAllowed === true при time >= 600 || mapSize === 'large'
+   - game._botScout02A.secondScoutReason показывает причину
+
+3. Scout получает урон и умирает:
+   - updateLightTankCombat вызывает damageUnit(target, stats.damage)
+   - damageUnit снижает hp, при hp <= 0 вызывает destroyUnit
+   - Проверить: console.log(game._botScout02A.lastScoutAttackedId) при атаке scout
+
+4. Scout НЕ получает waveId / _attack10WaveLocked:
+   - FE_PATCH_08BEnemyCombatUnits фильтрует u.type !== 'scout'
+   - FE_ATTACK10CreateWave получает только enemyTanks из EnemyCombatUnits
+   - Скауты физически не попадают в wave.unitIds
+
+Изменённые файлы:
+- src/main.js (6 правок: helper, GetHostileLightTankTargetKind, onCanvasClick,
+  setGroupLightTankAttack, setGroupLightTankAttackApproach, EnemyCombatUnits,
+  ChooseFactoryUnitType, telemetry)
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- index.html изменён: нет
+- новые JS-файлы созданы: нет
+- pathfinding изменён: нет
+- save/load изменён: нет
+- map generation изменён: нет
+- render / fog изменены: нет
+- scout movement изменён: нет
+- ATTACK-08/09/10 логика не тронута
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
