@@ -1,44 +1,48 @@
 # GPT_REVIEW
 
-Task: BOT-DEFENSE-RETREAT-01 — fix enemy retreat/defense oscillation near base
+Task: BOT-PROGRESSION-01 — audit why enemy economy/production stalls around ~3 tanks
 
 Verdict: APPROVED_FOR_PHASE_2
 
 ## 1. Что в аудите ок
 
-- Root cause выглядит правдоподобно: oscillation возникает не из damage/combat, а из 10H1 retreat/defense overwrite активных attack orders.
-- Правильно найден ключевой риск: `FE_10H1_startRetreat()` очищает attack orders через `FE_10H1_clearAttackOrder()`, даже когда tank уже near home и retreat бесполезен.
-- Правильно найден второй риск: `FE_10H1_defendHqWithAvailableTanks()` может перекидывать tank с текущей валидной цели на primaryThreat, создавая дерготню.
-- Хороший минимальный принцип: не переписывать retreat, а добавить stand-and-fight guard у точек overwrite.
-- Нормальный риск: Medium-Low.
+- Root cause найден: enemy light_tank production hard-capped by `FE_ENEMY_LIGHT_TANK_CAP = 3`.
+- Аудит объясняет, почему игрок видит stall около 3 танков: factory stops producing, elements stop being consumed, storage fills, separator pauses.
+- Второй найденный баг тоже важен: cap check can short-circuit `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` before worker replenishment checks.
+- Scope можно держать маленьким: only production cap + worker-priority ordering.
+- Не нужно трогать economy expansion, new buildings, pathfinding, combat, scout, BOT-ATTACK-11/12.
 
 ## 2. Что вызывает сомнения
 
-- Нельзя делать новую state machine.
-- Нельзя переписывать 10H1 целиком.
-- Нельзя лезть в pathfinding / findPath / passable.
-- Нельзя менять damage/range/cooldown.
-- Нельзя менять BOT-ATTACK-11/12, scout, economy, production.
-- Signature change `FE_10H1_startRetreat()` допустим только если функция реально вызывается из одного места и diff остаётся маленьким.
-- Guard должен быть узким: near home + valid current target + in/almost in range + player pressure near base.
+- Не надо в этом патче строить дополнительные separators/storages/factories.
+- Не надо менять build order / BRAIN-01 action list.
+- Не надо добавлять time-based tank cap scaling сейчас.
+- Не надо добавлять новую telemetry, если существующих `game._attack09EnemyTankCap` и `game._enemyFactoryProductionStatus` достаточно.
+- Disabling the cap can allow more tanks over time, but current natural limits still constrain production: one factory, queue depth 1, element cost, build time, ATTACK-12 gate.
 
 ## 3. Как сделать лучше
 
 Approved implementation should:
 
-1. Add a small helper, e.g. `FE_DEFENSE_RETREAT01ShouldStandAndFight(unit, state, threats, now)`.
-2. Use this helper in:
-   - `FE_10H1_startRetreat()` before `FE_10H1_clearAttackOrder(unit)`;
-   - `FE_10H1_defendHqWithAvailableTanks()` before reassigning a tank away from its current valid target.
-3. Keep helper read-only except telemetry when guard fires.
-4. Avoid new movement commands unless existing defend logic already issues them.
-5. Add minimal telemetry only when guard fires:
-   - `game._botDefenseRetreat01.standAndFightGuardCount`
-   - `lastStandAndFightAt`
-   - `lastGuardUnitId`
-   - `lastGuardTargetDist`
-   - `lastGuardDistToHome`
-6. Keep targeted smoke only. Full manual match QA deferred to BATCH QA.
+1. Disable the experimental enemy light_tank cap:
+   - change `window.FE_ENEMY_LIGHT_TANK_CAP = 3` to `0`, or the existing disabled-cap value used by the code.
+   - Do not introduce dynamic cap scaling in this patch.
+
+2. Fix `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` ordering:
+   - worker/scout replacement checks must happen before any tank cap early-return;
+   - if cap is enabled again later, it must block only tank production, not worker replenishment.
+
+3. Keep all other systems unchanged:
+   - no economy expansion;
+   - no storage/factory/separator construction changes;
+   - no combat changes;
+   - no attack gate changes;
+   - no pathfinding changes.
+
+4. Prefer no new telemetry.
+   Existing telemetry should be enough:
+   - `game._attack09EnemyTankCap`
+   - `game._enemyFactoryProductionStatus`
 
 ## 4. Вердикт
 
