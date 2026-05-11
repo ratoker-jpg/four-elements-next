@@ -3424,3 +3424,64 @@ Safety:
 - BOT-SCOUT-02B2 return fallback internals untouched
 - BOT-SCOUT-02C threat thresholds untouched
 - Google Drive sync touched: no
+
+---
+
+Задача: BOT-SCOUT-02D1 — исправления BOT-SCOUT-02D (sweep center, usable move)
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02d-base-perimeter-sweep (amend к BOT-SCOUT-02D)
+
+Проблемы в BOT-SCOUT-02D:
+1. sweepCenterX/sweepCenterY всегда null — GenerateSweepCandidates не выставляла center metadata
+2. Центр sweep выбирался из game.buildings вслепую (HQ любой, не только увиденный)
+3. Sweep point считался usable при ok от trySetScoutMove, но без проверки state и path
+4. sweep_repath не проверял usable move после re-assignment
+
+Что исправлено:
+
+1. FE_SCOUT02DGenerateSweepCandidates — центр sweep теперь строго на основе увиденного скаутом:
+   - Если scout._scout02CSeenPlayerHq === true → использовать player HQ из game.buildings
+   - Иначе если scout._scout02CSeenPlayerBuildingsCount > 0 → ближайшее player building
+     внутри scout view radius
+   - Иначе → return [] (нет основы для sweep)
+   - Выставляет scout._scout02DSweepCenterX/Y на выбранный центр
+
+2. Добавлен helper FE_SCOUT02DHasUsableMoveAssignment(scout):
+   - Проверяет: scout.state === 'manual_move' AND scout.path is array AND scout.path.length > 0
+   - Sweep point usable только если trySetScoutMove вернул true И HasUsableMoveAssignment true
+
+3. FE_SCOUT02DAssignNextSweepPoint:
+   - Условие успеха: ok && FE_SCOUT02DHasUsableMoveAssignment(scout)
+   - Если trySetScoutMove=true но move не usable — кандидат пропускается
+
+4. sweep_repath блок:
+   - Условие: !(_reSweepOk && FE_SCOUT02DHasUsableMoveAssignment(s))
+   - Если repath не дал usable move — точка пропускается, пробуется следующая
+
+5. Observing→sweeping transition:
+   - Убрана установка _scout02DSweepCenterX/Y = null (теперь выставляется внутри GenerateSweepCandidates)
+
+Что НЕ тронуто:
+- BOT-SCOUT-02B2 return fallback internals
+- BOT-SCOUT-02C threat thresholds (DANGER_RADIUS=2, AWARE_RADIUS=5)
+- Outbound target selection
+- Tank attack logic
+- ATTACK-08/09/10
+- findPath / passable / combat / map / render / save / load
+
+Изменённые файлы:
+- src/main.js
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- BOT-SCOUT-02B2 return fallback internals не тронуты
+- BOT-SCOUT-02C threat thresholds не тронуты
+- Google Drive sync тронут: нет

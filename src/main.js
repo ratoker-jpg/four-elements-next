@@ -3660,39 +3660,63 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return true;
   }
 
+  // BOT-SCOUT-02D: verify that a sweep movement assignment actually produced a usable move.
+  // A sweep point is usable only if trySetScoutMove succeeded AND the scout has
+  // state='manual_move' with a non-empty path — confirming pathfinding found a real route.
+  function FE_SCOUT02DHasUsableMoveAssignment(scout) {
+    return scout
+      && scout.state === 'manual_move'
+      && Array.isArray(scout.path)
+      && scout.path.length > 0;
+  }
+
   // BOT-SCOUT-02D: generate candidate sweep points around observed player base center.
   // Returns array of { x, y } objects (valid, in-bounds, safe at generation time).
+  // Sets scout._scout02DSweepCenterX/Y to the chosen center for telemetry.
+  // Center selection uses ONLY what the scout has actually seen:
+  //   1. If scout._scout02CSeenPlayerHq === true → use player HQ from game.buildings;
+  //   2. Else if scout._scout02CSeenPlayerBuildingsCount > 0 → nearest player building within scout view;
+  //   3. Else → return [] (no basis for sweep).
   function FE_SCOUT02DGenerateSweepCandidates(scout) {
     var candidates = [];
-    // Find base center: player HQ if visible, else first visible player building.
     var centerX = null, centerY = null;
     var buildings = game.buildings || [];
-    // Prefer HQ.
-    for (var i = 0; i < buildings.length; i++) {
-      var b = buildings[i];
-      if (!b || (b.hp || 0) <= 0 || !isPlayerBuilding(b)) continue;
-      if (b.type === 'hq_base' || b.type === 'hq') {
-        centerX = Math.round(b.x + (b.w || 1) / 2);
-        centerY = Math.round(b.y + (b.h || 1) / 2);
-        break;
-      }
-    }
-    // Fallback: first visible player building.
-    if (centerX === null || centerY === null) {
-      // Use scout's view radius to find nearest player building.
-      var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
-      for (var j = 0; j < buildings.length; j++) {
-        var pb = buildings[j];
-        if (!pb || (pb.hp || 0) <= 0 || !isPlayerBuilding(pb)) continue;
-        var _bd = FE_10C1_distTiles(scout, pb);
-        if (_bd <= _sViewR) {
-          centerX = Math.round(pb.x + (pb.w || 1) / 2);
-          centerY = Math.round(pb.y + (pb.h || 1) / 2);
+    var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+
+    // Strategy 1: scout has seen player HQ — use its position as center.
+    if (scout._scout02CSeenPlayerHq === true) {
+      for (var i = 0; i < buildings.length; i++) {
+        var b = buildings[i];
+        if (!b || (b.hp || 0) <= 0 || !isPlayerBuilding(b)) continue;
+        if (b.type === 'hq_base' || b.type === 'hq') {
+          centerX = Math.round(b.x + (b.w || 1) / 2);
+          centerY = Math.round(b.y + (b.h || 1) / 2);
           break;
         }
       }
     }
+
+    // Strategy 2: scout has seen player buildings but NOT HQ — use nearest visible building as center.
+    if (centerX === null && (scout._scout02CSeenPlayerBuildingsCount || 0) > 0) {
+      var _bestDist = Infinity;
+      for (var j = 0; j < buildings.length; j++) {
+        var pb = buildings[j];
+        if (!pb || (pb.hp || 0) <= 0 || !isPlayerBuilding(pb)) continue;
+        var _bd = FE_10C1_distTiles(scout, pb);
+        if (_bd <= _sViewR && _bd < _bestDist) {
+          _bestDist = _bd;
+          centerX = Math.round(pb.x + (pb.w || 1) / 2);
+          centerY = Math.round(pb.y + (pb.h || 1) / 2);
+        }
+      }
+    }
+
+    // Strategy 3: no seen buildings at all — cannot sweep.
     if (centerX === null || centerY === null) return candidates;
+
+    // Store center metadata on scout for telemetry.
+    scout._scout02DSweepCenterX = centerX;
+    scout._scout02DSweepCenterY = centerY;
 
     // Generate 8 directional ring points around center.
     var mapSize = FE_10C1_getMapSize();
@@ -3716,7 +3740,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
   // BOT-SCOUT-02D: assign next sweep point from candidate list to scout.
   // Re-checks danger radius before each assignment (tank may have moved).
-  // Sets scout metadata + calls FE_10C1_trySetScoutMove; returns true if assignment succeeded.
+  // Sets scout metadata + calls FE_10C1_trySetScoutMove; returns true only if
+  // move assignment succeeded AND produced a usable move (state='manual_move' + non-empty path).
   function FE_SCOUT02DAssignNextSweepPoint(scout, now) {
     if (!scout || !Array.isArray(scout._scout02DSweepCandidates)) return false;
     while (scout._scout02DSweepIndex < scout._scout02DSweepCandidates.length) {
@@ -3727,15 +3752,15 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         scout._scout02DSweepIndex++;
         continue;
       }
-      // Try to assign move — point is usable only if path assignment succeeds.
+      // Try to assign move — point is usable only if path assignment succeeds AND yields usable state.
       var ok = FE_10C1_trySetScoutMove(scout, { x: candidate.x, y: candidate.y, reason: 'sweep_point' });
-      if (ok) {
+      if (ok && FE_SCOUT02DHasUsableMoveAssignment(scout)) {
         scout._scout02DSweepTargetX = candidate.x;
         scout._scout02DSweepTargetY = candidate.y;
         scout._scout02DSweepObserveUntil = 0;  // not observing yet, moving first
         return true;
       }
-      // Path assignment failed — skip this candidate.
+      // Path assignment failed or move not usable — skip this candidate.
       scout._scout02DSweepIndex++;
     }
     // No more usable candidates.
@@ -3979,8 +4004,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
             s._scout02BReason = 'sweeping';
             s._scout02DSweepActive = true;
             s._scout02DSweepCandidates = _sweepCandidates;
-            s._scout02DSweepCenterX = null;  // will be set by first AssignNextSweepPoint target
-            s._scout02DSweepCenterY = null;
+            // Note: _scout02DSweepCenterX/Y are already set by FE_SCOUT02DGenerateSweepCandidates.
             s._scout02DSweepIndex = 0;
             s._scout02DSweepCompletedCount = 0;
             s._scout02DSweepSkippedDangerCount = 0;
@@ -4072,8 +4096,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
           var _reSweepOk = FE_10C1_trySetScoutMove(s, {
             x: s._scout02DSweepTargetX, y: s._scout02DSweepTargetY, reason: 'sweep_repath'
           });
-          if (!_reSweepOk) {
-            // Path failed for this point — skip it, try next.
+          if (!(_reSweepOk && FE_SCOUT02DHasUsableMoveAssignment(s))) {
+            // Path failed or move not usable for this point — skip it, try next.
             s._scout02DSweepIndex++;
             var _retryOk = FE_SCOUT02DAssignNextSweepPoint(s, now);
             if (!_retryOk) {
