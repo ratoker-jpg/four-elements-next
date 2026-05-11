@@ -3641,3 +3641,103 @@ lifecycle dispatch через FE_SCOUT01ChooseScoutTarget; call site B — enemy
    (outboundTargetSource = 'knowledge'/'last_seen'/'map_probe')
 9. Если HQ найден но нет reachable rally: knowledge fallback
    (outboundTargetReason = 'hq_found_no_rally')
+
+---
+
+Задача: BOT-SCOUT-02D3 — edge-aware base perimeter sweep
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02d3-edge-aware-sweep (от sandbox/main после merge PR #43)
+
+Проблема:
+BOT-SCOUT-02D генерировал 8 фиксированных компасных точек на единственном радиусе 7.
+Для базы игрока у нижнего края карты (HQ ~x:7,y:38, center~9,40 на карте 48x48)
+нижние и нижне-диагональные точки out-of-bounds, остаются только верхние/правые.
+Scout объезжает одну сторону вместо дуги по доступному периметру.
+
+Root cause:
+1. Только 8 направлений (N,NE,E,SE,S,SW,W,NW) — мало углового разрешения
+2. Единственный радиус 7 — нет гибкости, нет вариантов ближе/дальше от базы
+3. Нет проверки edge margin — точки на y=46 (1 от края) проходят in-bounds, но pathability проблемна
+4. Нет проверки достижимости (reachability) на этапе генерации — кандидат проходит фильтры, но недостижим; выявляется только при AssignNextSweepPoint
+5. Селекция — первые N валидных кандидатов в порядке N→NE→E→... → кластеризуются на одной стороне
+
+Что сделано:
+
+1. Новые константы 02D3 (после существующих 02D):
+   - FE_SCOUT02D3_DIR_COUNT = 24 — угловых сэмплов вокруг центра базы
+   - FE_SCOUT02D3_MIN_RADIUS = 5 — минимальное расстояние sweep-точки от центра
+   - FE_SCOUT02D3_MAX_RADIUS = 9 — максимальное расстояние sweep-точки от центра
+   - FE_SCOUT02D3_EDGE_MARGIN = 2 — минимальное расстояние от края карты
+   - FE_SCOUT02D3_MAX_SELECTED = 3 — макс. точек после angular spread selection
+   - FE_SCOUT02D3_MIN_ANGLE_DEG = 45 — минимальное угловое разделение между выбранными точками
+
+2. Переработка FE_SCOUT02DGenerateSweepCandidates:
+   - 24 угловых направления (0..360 с шагом 15) вместо 8 компасных
+   - Для каждого направления — радиусы 5,7,9 (ближний приоритет)
+   - Фильтрация: in-bounds → edge margin → danger radius → dry-run findPath reachability
+   - Сухой прогон findPath без мутации scout (паттерн из 02E)
+   - Первым принимается ближайший достижимый кандидат в каждом направлении
+   - Angular spread selection из всех валидных кандидатов:
+     * Старт с ближайшего к scout кандидата
+     * Жадное добавление с максимальным угловым разделением >=45
+     * До 3 точек
+   - Сортировка выбранных по углу для детерминированного порядка обхода
+
+3. Telemetry 02D3 (новые поля, существующее sweepCandidatesCount не тронуто):
+   - sweepRawCandidatesCount — всего сырых кандидатов проверено
+   - sweepSelectedCandidatesCount — выбрано после angular spread
+   - sweepSkippedOutOfBoundsCount — отсеяно: out-of-bounds или edge margin
+   - sweepSkippedDangerAtGenCount — отсеяно: danger radius при генерации
+   - sweepSkippedUnreachableCount — отсеяно: dry-run findPath не нашёл путь
+   - sweepCandidateMode — '02d3_angular_spread'
+   - sweepSelectionReason — 'selected_N' / 'no_valid' / 'no_center'
+
+4. AssignNextSweepPoint: логика unchanged — по-прежнему re-check danger, trySetScoutMove + HasUsableMoveAssignment
+
+5. Sweeping lifecycle / abort behavior: unchanged
+
+Изменённые файлы:
+- src/main.js — константы 02D3, FE_SCOUT02DGenerateSweepCandidates, telemetry _botScout02B
+- PATCH_REPORT.txt
+
+Что НЕ тронуто:
+- BOT-SCOUT-02E outbound target selection
+- BOT-SCOUT-02B2 return fallback internals
+- BOT-SCOUT-02C threat thresholds (DANGER_RADIUS=2, THREAT_AWARE_RADIUS=5)
+- Sweeping lifecycle flow (observing→sweeping→returning transitions)
+- Abort behaviors (damage, danger radius, timeout, 3 completed, no valid points)
+- ATTACK-08/09/10
+- enemy light_tank attack-chain
+- findPath internals
+- passable internals
+- combat damage
+- map generation
+- render/fog
+- save/load
+- scout production/cap
+- tank attack decision logic
+- FE_10C1_trySetScoutMove
+- FE_SCOUT02DHasUsableMoveAssignment
+- FE_SCOUT02DIsSweepPointSafe
+- FE_SCOUT02DAssignNextSweepPoint
+- FE_SCOUT02BIsLifecycleBusy
+- Существующие поля telemetry (sweepCandidatesCount и др.)
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Manual test plan:
+1. Старт игры (standard map 48x48)
+2. Enemy scout идёт outbound → player HQ rally target (02E)
+3. Scout достигает зоны базы игрока
+4. Scout входит в sweeping
+5. Для базы у нижнего края: scout НЕ двигается только вдоль одной стороны
+6. Scout посещает до 3 распределённых точек вокруг доступного периметра
+7. Если нижние точки out-of-bounds — они пропускаются
+8. Если точка в danger radius игр. light_tank — она пропускается
+9. После 3 точек или timeout — scout возвращается домой
+10. Damage и danger radius по-прежнему вызывают immediate return
+11. BOT-SCOUT-02E target остаётся player_hq_rally
+12. Enemy tank attack-chain работает
+13. Telemetry: sweepCandidateMode='02d3_angular_spread', sweepSelectedCandidatesCount >= 1
