@@ -32,15 +32,26 @@ Core rules:
 14. **After implementation**, GLM outputs CODE_SUMMARY in chat (5 fields: Branch, PR, SHA, Files, Checks). Full details go into PR description, not into chat.
 15. **GLM Exchange**: for GPT/GLM handoff, use fixed files in `docs/glm_exchange/`. Do not create per-task subfolders. Current exchange files are fully overwritten for each task; only `SESSION_LOG.md` keeps the latest 5 handoffs.
 
+**Architecture Migration Mode** (DOCS-ARCH-00):
+
+Architecture Migration Mode is now the default for non-trivial gameplay/AI/refactor work. Patch mode is allowed only for emergency/small fixes or thin bridge/wiring changes.
+
+1. Новая крупная логика не должна добавляться напрямую в `src/main.js`. Если задача требует новой логики — сначала определить систему/модуль, куда она должна лечь. См. `docs/project/ARCHITECTURE_TARGET.md`.
+2. `src/main.js` должен постепенно становиться composition/wiring layer. Допустимо: bootstrap, game loop calls, thin compatibility wrappers, временные bridge/adaptor-вызовы. Недопустимо: новая gameplay-логика, новый AI-decision layer, большие patch-prefixed helper chains.
+3. Если GLM предлагает добавить новый guard/flag/if в `updateEnemyBot`, он обязан объяснить, почему это не увеличивает архитектурный долг, или остановиться и предложить системное решение.
+4. После 2 неудачных фиксов одного симптома — только architecture audit, не третий patch. Определить систему, владеющую поведением, и исправить root cause.
+5. Для Architecture Migration задач использовать branch + PR, даже если часть изменений docs-only и затрагивает правила проекта.
+
 Working expectations:
 
 1. Prefer infrastructure, tooling, docs, and guardrail changes over broad refactors.
 2. Avoid touching `src/main.js` unless the task explicitly requires it.
-3. If `src/main.js` must be touched, explain why first and keep the edit as small as possible.
+3. If `src/main.js` must be touched, explain why first and keep the edit as small as possible. If the addition is non-trivial, indicate which system it should eventually migrate to.
 4. Always list changed files and checks that were run (in PR description and CODE_SUMMARY).
 5. Prefer reversible renames, guards, or isolated config updates over deletions.
 6. Before implementation, read and follow `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` for patch size selection, two-phase workflow, and audit requirements.
 7. When using `docs/glm_exchange/`, write results to the exact requested file and stop after the requested phase. Do not continue from Phase 1 to Phase 2 without explicit user command.
+8. Before any gameplay/AI/refactor task, answer the Architecture Migration Gate questions from `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` section "Architecture Migration Gate".
 
 GLM / GPT responsibility split:
 

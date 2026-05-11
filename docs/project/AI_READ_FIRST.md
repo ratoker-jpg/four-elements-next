@@ -1,7 +1,7 @@
 # AI_READ_FIRST — Four Elements / GLM sandbox
 
 **Дата создания:** 2026-05-10
-**Задача:** DOCS-CLEANUP-01
+**Обновлено:** 2026-05-12 (DOCS-ARCH-00)
 **Назначение:** Точка входа для новой AI-сессии. Прочитай этот файл первым.
 
 ---
@@ -12,14 +12,14 @@
 
 | Приоритет | Файл | Зачем читать |
 |-----------|------|-------------|
-| 1 | `AGENTS.md` | Правила sandbox: Fast/Review lane, запрещённые действия, обязательства |
-| 2 | `README_GLM_SANDBOX.md` | Описание sandbox, workflow, GLM разрешения/запреты |
-| 3 | `PATCH_REPORT.txt` | Хронология всех патчей — текущее состояние проекта |
-| 4 | `docs/project/REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md` | Текущее состояние рефакторинга main.js (11 358 строк) |
-| 5 | `docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md` | Классификация всех документов по актуальности |
-| 6 | `docs/project/GLM_ROADMAP_20260510.md` | Перспективный план развития (Phase 0-4) |
-| 7 | `docs/project/scout_unit_roadmap_20260509.md` | Статус scout unit (player done, bot pending) |
-| 8 | `docs/project/four_elements_bot_roadmap_merged_glm.md` | Актуальный роадмап бота (10D1-10I1) |
+| 1 | `AGENTS.md` | Правила sandbox: Fast/Review lane, Architecture Migration Mode, запрещённые действия |
+| 2 | `docs/project/ARCHITECTURE_TARGET.md` | **Целевая архитектура и Architecture Migration Mode** — обязательное чтение перед любой gameplay/AI задачей |
+| 3 | `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` | Patch workflow (legacy) + Architecture Migration Gate |
+| 4 | `README_GLM_SANDBOX.md` | Описание sandbox, workflow, GLM разрешения/запреты |
+| 5 | `docs/project/REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md` | История рефакторинга main.js |
+| 6 | `docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md` | Классификация всех документов по актуальности |
+| 7 | `docs/project/GLM_ROADMAP_20260510.md` | Перспективный план развития (Phase 0-4) |
+| 8 | `docs/project/four_elements_bot_roadmap_merged_glm.md` | Актуальный роадмап бота |
 | 9 | `docs/prompts/PROMPT_NEW_CHAT_GLM_FOUR_ELEMENTS_SANDBOX.txt` | Промпт для новой GLM-сессии |
 
 ---
@@ -64,19 +64,38 @@
 
 Если не уверены — default Review lane.
 
+**Architecture Migration Gate**: для non-trivial gameplay/AI/refactor задач — Architecture Migration Mode. Patch mode = только emergency/small fixes или thin bridge/wiring.
+
 ### Принципы
 
+- **Architecture Migration First** — для нетривиальных gameplay/AI/refactor задач сначала определить целевую систему, не добавлять очередную patch-chain в main.js. См. `docs/project/ARCHITECTURE_TARGET.md`
 - **GLM-first** — GLM является основным AI-ассистентом для sandbox
 - **Self-review gate** — перед выполнением задачи оценить риски промпта
 - **Module-first** — новые сущности выносить в отдельные модули (window.FE_*), не раздувать main.js
+- **Patch workflow = legacy/small-fix** — patch accumulation больше не основной режим для non-trivial работы
 - **Отчёты на русском** — все пользовательские отчёты, PATCH_REPORT-записи, audit-документы писать на русском
 - **Не удалять файлы** — перемещать в docs/archive/ с WARNING-заголовком
 - **Codex failed snapshots НЕ source of truth** — только как lessons/reference
 
+### Architecture Migration Gate
+
+Перед любой gameplay/AI/refactor задачей GLM должен ответить:
+
+1. Какая система владеет поведением?
+2. Существует ли эта система?
+3. Нужен ли новый модуль?
+4. Что должно остаться в main.js только как wiring/bridge?
+5. Какой старый код будет заменён?
+6. Какой старый код можно удалить позже?
+7. Не создаёт ли задача новый patch-chain?
+
+Если задача увеличивает main.js, GLM обязан объяснить, почему это временно и какой follow-up перенесёт код в модуль.
+
 ### Ключевые формулы
 
 - Сепаратор: **15 сырых минералов -> 10 энергии + 1 элемент фракции** (НЕ 20->10+1 из архивных документов)
-- main.js: **11 358 строк** после рефактор-спринта
+- main.js: текущий размер брать из `git log` / `wc -l`, не из старых checkpoint-значений (устаревают после каждого патча)
+- Текущий статус Four Elements брать из GitHub docs/checkpoints/PR reports; старые Google skills считать routing/reference, если они противоречат GitHub
 
 ---
 
