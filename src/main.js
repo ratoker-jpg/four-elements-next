@@ -3494,6 +3494,13 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT02C_DANGER_RADIUS = 2;        // tiles: immediate return when tank this close
   var FE_SCOUT02C_THREAT_AWARE_RADIUS = 5;  // tiles: telemetry only, no retreat
 
+  // BOT-SCOUT-02D: base perimeter sweep constants.
+  var FE_SCOUT02D_SWEEP_RADIUS = 7;         // tiles: distance from base center for sweep points
+  var FE_SCOUT02D_SWEEP_MAX_POINTS = 3;     // max sweep points to visit before returning
+  var FE_SCOUT02D_SWEEP_OBSERVE_SEC = 2;    // seconds to observe at each sweep point
+  var FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 22;   // seconds: hard timeout for entire sweep phase
+  var FE_SCOUT02D_SWEEP_ARRIVE_DIST = 2;    // tiles: distance to count as arrived at sweep point
+
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
     try {
@@ -3640,11 +3647,106 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return false;
   }
 
+  // BOT-SCOUT-02D: check if a candidate sweep point is safe from player light_tank danger radius.
+  // Re-evaluates current tank positions every call — tanks may have moved since candidates were generated.
+  function FE_SCOUT02DIsSweepPointSafe(px, py) {
+    var _units = game.units || [];
+    for (var _i = 0; _i < _units.length; _i++) {
+      var _u = _units[_i];
+      if (!_u || !isPlayerUnit(_u) || _u.type !== 'light_tank' || (_u.hp || 0) <= 0) continue;
+      var _d = FE_10C1_distTiles({ x: px, y: py }, _u);
+      if (_d <= FE_SCOUT02C_DANGER_RADIUS) return false;
+    }
+    return true;
+  }
+
+  // BOT-SCOUT-02D: generate candidate sweep points around observed player base center.
+  // Returns array of { x, y } objects (valid, in-bounds, safe at generation time).
+  function FE_SCOUT02DGenerateSweepCandidates(scout) {
+    var candidates = [];
+    // Find base center: player HQ if visible, else first visible player building.
+    var centerX = null, centerY = null;
+    var buildings = game.buildings || [];
+    // Prefer HQ.
+    for (var i = 0; i < buildings.length; i++) {
+      var b = buildings[i];
+      if (!b || (b.hp || 0) <= 0 || !isPlayerBuilding(b)) continue;
+      if (b.type === 'hq_base' || b.type === 'hq') {
+        centerX = Math.round(b.x + (b.w || 1) / 2);
+        centerY = Math.round(b.y + (b.h || 1) / 2);
+        break;
+      }
+    }
+    // Fallback: first visible player building.
+    if (centerX === null || centerY === null) {
+      // Use scout's view radius to find nearest player building.
+      var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+      for (var j = 0; j < buildings.length; j++) {
+        var pb = buildings[j];
+        if (!pb || (pb.hp || 0) <= 0 || !isPlayerBuilding(pb)) continue;
+        var _bd = FE_10C1_distTiles(scout, pb);
+        if (_bd <= _sViewR) {
+          centerX = Math.round(pb.x + (pb.w || 1) / 2);
+          centerY = Math.round(pb.y + (pb.h || 1) / 2);
+          break;
+        }
+      }
+    }
+    if (centerX === null || centerY === null) return candidates;
+
+    // Generate 8 directional ring points around center.
+    var mapSize = FE_10C1_getMapSize();
+    var R = FE_SCOUT02D_SWEEP_RADIUS;
+    // Directions: N, NE, E, SE, S, SW, W, NW (dx, dy offsets).
+    var dirs = [
+      { dx: 0, dy: -R }, { dx: R, dy: -R }, { dx: R, dy: 0 }, { dx: R, dy: R },
+      { dx: 0, dy: R },  { dx: -R, dy: R }, { dx: -R, dy: 0 }, { dx: -R, dy: -R }
+    ];
+    for (var d = 0; d < dirs.length; d++) {
+      var px = centerX + dirs[d].dx;
+      var py = centerY + dirs[d].dy;
+      // In-bounds check.
+      if (px < 1 || py < 1 || px >= mapSize.width - 1 || py >= mapSize.height - 1) continue;
+      // Safe from player tanks at generation time.
+      if (!FE_SCOUT02DIsSweepPointSafe(px, py)) continue;
+      candidates.push({ x: px, y: py });
+    }
+    return candidates;
+  }
+
+  // BOT-SCOUT-02D: assign next sweep point from candidate list to scout.
+  // Re-checks danger radius before each assignment (tank may have moved).
+  // Sets scout metadata + calls FE_10C1_trySetScoutMove; returns true if assignment succeeded.
+  function FE_SCOUT02DAssignNextSweepPoint(scout, now) {
+    if (!scout || !Array.isArray(scout._scout02DSweepCandidates)) return false;
+    while (scout._scout02DSweepIndex < scout._scout02DSweepCandidates.length) {
+      var candidate = scout._scout02DSweepCandidates[scout._scout02DSweepIndex];
+      // Re-check danger radius — tank may have moved since candidate was generated.
+      if (!FE_SCOUT02DIsSweepPointSafe(candidate.x, candidate.y)) {
+        scout._scout02DSweepSkippedDangerCount++;
+        scout._scout02DSweepIndex++;
+        continue;
+      }
+      // Try to assign move — point is usable only if path assignment succeeds.
+      var ok = FE_10C1_trySetScoutMove(scout, { x: candidate.x, y: candidate.y, reason: 'sweep_point' });
+      if (ok) {
+        scout._scout02DSweepTargetX = candidate.x;
+        scout._scout02DSweepTargetY = candidate.y;
+        scout._scout02DSweepObserveUntil = 0;  // not observing yet, moving first
+        return true;
+      }
+      // Path assignment failed — skip this candidate.
+      scout._scout02DSweepIndex++;
+    }
+    // No more usable candidates.
+    return false;
+  }
+
   // BOT-SCOUT-02B: is scout busy with lifecycle (not free for new scouting MVP assignment)?
   function FE_SCOUT02BIsLifecycleBusy(u) {
     if (!u || u.type !== 'scout') return false;
     var st = u._scout02BState;
-    return st === 'observing' || st === 'returning' || st === 'cooldown';
+    return st === 'observing' || st === 'sweeping' || st === 'returning' || st === 'cooldown';
   }
 
   // Get all enemy scout units (alive).
@@ -3726,7 +3828,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (FE_ATTACK10IsWaveLocked(s)) continue;
 
       // --- BOT-SCOUT-02B: threat detection (applies to all lifecycle states) ---
-      if (s._scout02BState && (s._scout02BState === 'outbound' || s._scout02BState === 'observing')) {
+      if (s._scout02BState && (s._scout02BState === 'outbound' || s._scout02BState === 'observing' || s._scout02BState === 'sweeping')) {
         // Check: scout took damage since last check.
         var _prevHp = s._scout02BLastHp || (s.hp || 0);
         var _curHp = s.hp || 0;
@@ -3869,10 +3971,124 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         // Wait until observe period ends.
         if (now < (s._scout02BObserveUntil || 0)) continue;
 
-        // Transition: observing → returning
+        // BOT-SCOUT-02D: if scout sees player base, enter sweeping instead of returning.
+        if (s._scout02CSeenPlayerHq || (s._scout02CSeenPlayerBuildingsCount || 0) > 0) {
+          var _sweepCandidates = FE_SCOUT02DGenerateSweepCandidates(s);
+          if (_sweepCandidates.length > 0) {
+            s._scout02BState = 'sweeping';
+            s._scout02BReason = 'sweeping';
+            s._scout02DSweepActive = true;
+            s._scout02DSweepCandidates = _sweepCandidates;
+            s._scout02DSweepCenterX = null;  // will be set by first AssignNextSweepPoint target
+            s._scout02DSweepCenterY = null;
+            s._scout02DSweepIndex = 0;
+            s._scout02DSweepCompletedCount = 0;
+            s._scout02DSweepSkippedDangerCount = 0;
+            s._scout02DSweepStartedAt = now;
+            s._scout02DSweepObserveUntil = 0;
+            s._scout02DSweepReason = 'base_seen';
+            s._scout02DSweepTargetX = null;
+            s._scout02DSweepTargetY = null;
+            var _sweepOk = FE_SCOUT02DAssignNextSweepPoint(s, now);
+            if (_sweepOk) {
+              continue;
+            }
+            // No valid sweep point — fall through to returning.
+            s._scout02DSweepActive = false;
+            s._scout02DSweepReason = 'sweep_no_valid_points';
+          }
+        }
+        // Transition: observing → returning (no base seen, or no valid sweep points)
         s._scout02BState = 'returning';
         var _returnFromObserve = FE_SCOUT02BResolveReturnMove(s);
         s._scout02BReason = _returnFromObserve ? 'observe_done' : 'return_no_route';
+        continue;
+      }
+
+      // --- sweeping (BOT-SCOUT-02D) ---
+      if (lcState === 'sweeping') {
+        // Hard exit: timeout.
+        if (now - (s._scout02DSweepStartedAt || 0) > FE_SCOUT02D_SWEEP_TIMEOUT_SEC) {
+          s._scout02BState = 'returning';
+          var _retTimeout = FE_SCOUT02BResolveReturnMove(s);
+          s._scout02BReason = _retTimeout ? 'sweep_timeout' : 'return_no_route';
+          s._scout02DSweepReason = 'sweep_timeout';
+          s._scout02DSweepActive = false;
+          continue;
+        }
+
+        // Currently observing at a sweep point — wait until observe time ends.
+        if ((s._scout02DSweepObserveUntil || 0) > 0 && now < s._scout02DSweepObserveUntil) {
+          continue;
+        }
+
+        // If observe-just-expired: mark point completed, advance to next.
+        if ((s._scout02DSweepObserveUntil || 0) > 0 && now >= s._scout02DSweepObserveUntil) {
+          s._scout02DSweepCompletedCount++;
+          s._scout02DSweepObserveUntil = 0;
+          // Hard exit: completed enough points.
+          if (s._scout02DSweepCompletedCount >= FE_SCOUT02D_SWEEP_MAX_POINTS) {
+            s._scout02BState = 'returning';
+            var _retDone = FE_SCOUT02BResolveReturnMove(s);
+            s._scout02BReason = _retDone ? 'sweep_done' : 'return_no_route';
+            s._scout02DSweepReason = 'sweep_done';
+            s._scout02DSweepActive = false;
+            continue;
+          }
+          // Advance index and assign next sweep point.
+          s._scout02DSweepIndex++;
+          var _nextOk = FE_SCOUT02DAssignNextSweepPoint(s, now);
+          if (_nextOk) continue;
+          // No more usable candidates.
+          s._scout02BState = 'returning';
+          var _retNoMore = FE_SCOUT02BResolveReturnMove(s);
+          s._scout02BReason = s._scout02DSweepCompletedCount > 0
+            ? (_retNoMore ? 'sweep_done' : 'return_no_route')
+            : (_retNoMore ? 'sweep_no_valid_points' : 'return_no_route');
+          s._scout02DSweepReason = s._scout02DSweepCompletedCount > 0 ? 'sweep_done' : 'sweep_no_valid_points';
+          s._scout02DSweepActive = false;
+          continue;
+        }
+
+        // Not observing — check if arrived at sweep target.
+        if (Number.isFinite(s._scout02DSweepTargetX) && Number.isFinite(s._scout02DSweepTargetY)) {
+          var _distToSweep = FE_10C1_distTiles(s, { x: s._scout02DSweepTargetX, y: s._scout02DSweepTargetY });
+          if (_distToSweep <= FE_SCOUT02D_SWEEP_ARRIVE_DIST) {
+            // Arrived — start observing at this point.
+            s._scout02DSweepObserveUntil = now + FE_SCOUT02D_SWEEP_OBSERVE_SEC;
+            s.path = [];
+            s.state = 'idle';
+            s.command = '';
+            s._dirTargetKey = null;
+            continue;
+          }
+        }
+
+        // Not arrived yet — check path status.
+        var _hasSweepPath = s.path && s.path.length > 0;
+        var _sweepIdle = !s.state || s.state === 'idle';
+        if (!_hasSweepPath && _sweepIdle) {
+          // Lost path — try to re-assign current sweep target.
+          var _reSweepOk = FE_10C1_trySetScoutMove(s, {
+            x: s._scout02DSweepTargetX, y: s._scout02DSweepTargetY, reason: 'sweep_repath'
+          });
+          if (!_reSweepOk) {
+            // Path failed for this point — skip it, try next.
+            s._scout02DSweepIndex++;
+            var _retryOk = FE_SCOUT02DAssignNextSweepPoint(s, now);
+            if (!_retryOk) {
+              // No more usable candidates.
+              s._scout02BState = 'returning';
+              var _retSkip = FE_SCOUT02BResolveReturnMove(s);
+              s._scout02BReason = s._scout02DSweepCompletedCount > 0
+                ? (_retSkip ? 'sweep_done' : 'return_no_route')
+                : (_retSkip ? 'sweep_no_valid_points' : 'return_no_route');
+              s._scout02DSweepReason = s._scout02DSweepCompletedCount > 0 ? 'sweep_done' : 'sweep_no_valid_points';
+              s._scout02DSweepActive = false;
+            }
+          }
+        }
+        // If path exists or non-idle state, keep moving. No action needed.
         continue;
       }
 
@@ -3954,6 +4170,19 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         s._scout02CSeenPlayerUnitsCount = 0;
         s._scout02CSeenPlayerBuildingsCount = 0;
         s._scout02CSeenPlayerHq = false;
+        // BOT-SCOUT-02D: reset sweep fields for new outbound cycle.
+        s._scout02DSweepActive = false;
+        s._scout02DSweepCenterX = null;
+        s._scout02DSweepCenterY = null;
+        s._scout02DSweepTargetX = null;
+        s._scout02DSweepTargetY = null;
+        s._scout02DSweepIndex = 0;
+        s._scout02DSweepCompletedCount = 0;
+        s._scout02DSweepCandidates = [];
+        s._scout02DSweepSkippedDangerCount = 0;
+        s._scout02DSweepReason = '';
+        s._scout02DSweepStartedAt = 0;
+        s._scout02DSweepObserveUntil = 0;
         // Clear old target so a new one will be chosen.
         s._fe10c1ScoutTarget = null;
         s._fe10c1Role = null;
@@ -4454,6 +4683,19 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       unit._scout02CSeenPlayerUnitsCount = 0;
       unit._scout02CSeenPlayerBuildingsCount = 0;
       unit._scout02CSeenPlayerHq = false;
+      // BOT-SCOUT-02D: base perimeter sweep fields.
+      unit._scout02DSweepActive = false;
+      unit._scout02DSweepCenterX = null;
+      unit._scout02DSweepCenterY = null;
+      unit._scout02DSweepTargetX = null;
+      unit._scout02DSweepTargetY = null;
+      unit._scout02DSweepIndex = 0;
+      unit._scout02DSweepCompletedCount = 0;
+      unit._scout02DSweepCandidates = [];
+      unit._scout02DSweepSkippedDangerCount = 0;
+      unit._scout02DSweepReason = '';
+      unit._scout02DSweepStartedAt = 0;
+      unit._scout02DSweepObserveUntil = 0;
     }
 
     // Sync movement target fields.
@@ -5799,7 +6041,19 @@ function updateEnemyBot(dt) {
           threatReturnReason: _s02b._scout02CThreatReturnReason || '',
           seenPlayerUnitsCount: _s02b._scout02CSeenPlayerUnitsCount ?? 0,
           seenPlayerBuildingsCount: _s02b._scout02CSeenPlayerBuildingsCount ?? 0,
-          seenPlayerHq: !!_s02b._scout02CSeenPlayerHq
+          seenPlayerHq: !!_s02b._scout02CSeenPlayerHq,
+          // BOT-SCOUT-02D: base perimeter sweep telemetry
+          sweepActive: !!_s02b._scout02DSweepActive,
+          sweepCenterX: _s02b._scout02DSweepCenterX ?? null,
+          sweepCenterY: _s02b._scout02DSweepCenterY ?? null,
+          sweepTargetX: _s02b._scout02DSweepTargetX ?? null,
+          sweepTargetY: _s02b._scout02DSweepTargetY ?? null,
+          sweepIndex: _s02b._scout02DSweepIndex ?? 0,
+          sweepCompletedCount: _s02b._scout02DSweepCompletedCount ?? 0,
+          sweepCandidatesCount: Array.isArray(_s02b._scout02DSweepCandidates) ? _s02b._scout02DSweepCandidates.length : 0,
+          sweepSkippedDangerCount: _s02b._scout02DSweepSkippedDangerCount ?? 0,
+          sweepReason: _s02b._scout02DSweepReason || '',
+          sweepStartedAt: _s02b._scout02DSweepStartedAt || 0
         };
       } else {
         game._botScout02B = {
@@ -5829,7 +6083,19 @@ function updateEnemyBot(dt) {
           threatReturnReason: '',
           seenPlayerUnitsCount: 0,
           seenPlayerBuildingsCount: 0,
-          seenPlayerHq: false
+          seenPlayerHq: false,
+          // BOT-SCOUT-02D: base perimeter sweep telemetry defaults
+          sweepActive: false,
+          sweepCenterX: null,
+          sweepCenterY: null,
+          sweepTargetX: null,
+          sweepTargetY: null,
+          sweepIndex: 0,
+          sweepCompletedCount: 0,
+          sweepCandidatesCount: 0,
+          sweepSkippedDangerCount: 0,
+          sweepReason: '',
+          sweepStartedAt: 0
         };
       }
     } catch (err) {

@@ -3321,3 +3321,106 @@ Safety:
 - tiered threat logic untouched
 - BOT-SCOUT-02B2 return fallback untouched
 - Google Drive sync touched: no
+
+---
+
+Задача: BOT-SCOUT-02D — base perimeter sweep for enemy scout
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02d-base-perimeter-sandbox (от sandbox/main)
+
+Проблема:
+Скаут после observing (4 сек) сразу возвращается домой, даже если видит базу игрока.
+В результате вражеский бот получает мало информации о структуре базы.
+Для будущих решений о направлении танков нужна лучшая разведка базы.
+
+Что сделано:
+
+1. Новое lifecycle состояние: sweeping
+   Полный цикл: outbound → observing → sweeping → returning → cooldown → outbound
+   Если база не видна: outbound → observing → returning (без sweeping, как раньше)
+
+2. Триггер для sweep:
+   После завершения observing, если _scout02CSeenPlayerHq или _scout02CSeenPlayerBuildingsCount > 0,
+   скаут входит в sweeping вместо returning.
+
+3. Генерация кандидат-точек (FE_SCOUT02DGenerateSweepCandidates):
+   - Центр базы: HQ (type='hq_base'||'hq') если виден, иначе первое видимое player building
+   - 8 точек по направлениям (N/NE/E/SE/S/SW/W/NW) на расстоянии 7 тайлов от центра
+   - Каждая точка проверяется: in-bounds + безопасна от player light_tank danger radius
+   - Кандидаты генерируются один раз при входе в sweeping
+
+4. Проверка безопасности (FE_SCOUT02DIsSweepPointSafe):
+   - Перепроверяет danger radius вокруг точки ПЕРЕД каждым назначением
+   - Танк мог подъехать после генерации candidates
+
+5. Назначение sweep-точки (FE_SCOUT02DAssignNextSweepPoint):
+   - Перепроверяет danger radius
+   - Вызывает FE_10C1_trySetScoutMove — точка считается usable только если path assignment успешен
+   - Если путь не найден — пропускает точку, пробует следующую
+   - Вынесена в отдельную функцию, не inline
+
+6. Поведение sweeping:
+   - Двигается к sweep-точке, прибыв — стоит 2 сек (sweep observe)
+   - После 2 сек — двигается к следующей точке
+   - После 3 точек или исчерпания кандидатов → returning
+
+7. Hard exits из sweeping:
+   - damage → returning (reason='damaged') — через threat detection guard
+   - danger radius ≤2 → returning (reason='threat_danger') — через threat detection guard
+   - timeout (22 сек) → returning (reason='sweep_timeout')
+   - no valid/pathable sweep point → returning (reason='sweep_no_valid_points')
+   - completed 3 points → returning (reason='sweep_done')
+
+8. Константы:
+   - FE_SCOUT02D_SWEEP_RADIUS = 7
+   - FE_SCOUT02D_SWEEP_MAX_POINTS = 3
+   - FE_SCOUT02D_SWEEP_OBSERVE_SEC = 2
+   - FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 22
+   - FE_SCOUT02D_SWEEP_ARRIVE_DIST = 2
+
+9. Новые поля на unit-объекте:
+   - _scout02DSweepActive, _scout02DSweepCenterX/Y, _scout02DSweepTargetX/Y
+   - _scout02DSweepIndex, _scout02DSweepCompletedCount, _scout02DSweepCandidates
+   - _scout02DSweepSkippedDangerCount, _scout02DSweepReason, _scout02DSweepStartedAt
+   - _scout02DSweepObserveUntil
+
+10. Init: все поля в FE_10C1_trySetScoutMove
+11. Reset: все поля в cooldown → outbound transition
+12. FE_SCOUT02BIsLifecycleBusy: добавлено st === 'sweeping'
+13. Threat detection guard: добавлено s._scout02BState === 'sweeping'
+
+14. Telemetry (game._botScout02B):
+    - sweepActive, sweepCenterX/Y, sweepTargetX/Y
+    - sweepIndex, sweepCompletedCount, sweepCandidatesCount
+    - sweepSkippedDangerCount, sweepReason, sweepStartedAt
+
+Что НЕ тронуто:
+- BOT-SCOUT-02A targetability / production policy
+- BOT-SCOUT-02B2 return fallback internals
+- BOT-SCOUT-02C threat thresholds (DANGER_RADIUS=2, AWARE_RADIUS=5)
+- Outbound target selection
+- ATTACK-08/09/10
+- Enemy light_tank attack-chain
+- findPath / passable internals
+- Combat damage
+- Map generation
+- Render / fog
+- Save / load
+- Scout production/cap
+
+Изменённые файлы:
+- src/main.js
+- PATCH_REPORT.txt (добавлена эта запись)
+
+Verification:
+- node --check src/main.js -> PASS
+
+Safety:
+- assets changed: no
+- economy changed: no
+- combat changed: no
+- pathfinding changed: no
+- BOT-SCOUT-02B2 return fallback internals untouched
+- BOT-SCOUT-02C threat thresholds untouched
+- Google Drive sync touched: no
