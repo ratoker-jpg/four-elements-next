@@ -1,6 +1,6 @@
-# AUDIT_FROM_GLM — VISUAL-COMBAT-FX-01
+# AUDIT_FROM_GLM — BOT-ECONOMY-01
 
-**Task:** VISUAL-COMBAT-FX-01 — minimal procedural light_tank shot and hit effects
+**Task:** BOT-ECONOMY-01 — audit enemy economy scaling and recovery path
 **Lane:** Audit only
 **Date:** 2026-05-12
 
@@ -8,293 +8,257 @@
 
 ## 1. Root cause / цель аудита
 
-Light_tank combat currently has zero visual feedback. When a tank fires, the only observable change is the target's HP bar shrinking. There is no shot/tracer, no muzzle flash, no impact/hit effect. This makes combat feel lifeless and makes it hard for the player to notice that a tank is actually shooting.
+После BOT-PROGRESSION-01 (disable tank cap) вражеская экономика всё ещё не масштабируется и не восстанавливается после harassment. Глубокий аудит выявил **три корневых проблемы**, работающие совместно:
 
-The root cause is that `updateLightTankCombat()` (L1441) applies damage purely logically — it decrements HP via `damageUnit()` / `FE_PATCH_06BDamageBuilding()` and resets the cooldown timer. No visual event is emitted at the point of fire or impact. The rendering pipeline in `render()` (L12390) only draws static sprites, HP bars, dust particles, and click markers — nothing related to combat.
+### Primary: Element storage cap (20) вызывает полный stall сепаратора
 
----
+`BASE_STORAGE.purple = 20` (standalone_constants.js). Один сепаратор производит 1 элемент каждые 6 секунд. Element storage заполняется за ~120 секунд. Когда хранилище элементов заполнено, `FE_PATCH_09C3EnemySeparatorCycleCheck()` (L9258) возвращает `{ok:false, reason:'element_storage_full'}`, и сепаратор **полностью останавливается** — не может конвертировать минералы ни в энергию, ни в элементы.
 
-## 2. Существующая particle/effect система
+Это создаёт каскадный коллапс:
+1. Element storage fills → separator pauses
+2. No energy production → factory can't produce (needs elements)
+3. No element spending → storage stays full → separator stays paused
+4. Вражеская экономика полностью заморожена
 
-The game already has a mature procedural particle system for **builder dust** (FE_BUILDER_DUST_PATCH, L12133–12336). This system provides a proven pattern we can replicate for combat FX:
+**Бот никогда не строит `elements_storage`** — в BRAIN-01 нет такого действия. `BUILDINGS.elements_storage` существует в конфигурации (costEnergy:50, storageBonus: +20 каждого элемента), но нет кода, который бы приказал строителю построить его.
 
-| Компонент | Dust аналог | Combat FX аналог |
-|-----------|-------------|-----------------|
-| Storage | `game.dustParticles[]` | `game.combatFxParticles[]` |
-| Spawn function | `spawnBuilderDust(unit, mode, dx, dy)` (L12163) | `spawnShotFx(attacker, target)` + `spawnHitFx(target)` |
-| Update function | `updateDustParticles(dt)` (L12294) | `updateCombatFxParticles(dt)` |
-| Draw function | `drawDustParticles()` (L12309) | `drawCombatFxParticles()` |
-| Max particles cap | `FE_BUILDER_DUST_MAX_PARTICLES = 80` | `FE_COMBAT_FX_MAX_PARTICLES = 60` |
-| Particle lifetime | 0.32–0.56 sec | Shot tracer: ~0.18 sec, Hit flash: ~0.25 sec |
-| Draw order | After terrain, before z-sorted objects (L12414) | Same — or after units for overlay effect |
+### Secondary: BRAIN-01 не масштабирует экономику
 
-The dust system demonstrates:
-- Position in **tile coordinates** with `tileToScreen()` conversion at draw time
-- `baseOffsetX/baseOffsetY` for screen-space offsets relative to sprite anchor
-- Velocity (`vx/vy`) in screen-space pixels per second
-- Fade via `life/maxLife` ratio
-- `ctx.globalAlpha` for transparency
-- `ctx.ellipse()` for particle shapes
-- Particle cap with splice to prevent memory growth
-
----
-
-## 3. Где в combat pipeline вставлять FX
-
-**Critical point: `updateLightTankCombat()` line 1475**
-
-```javascript
-if (unit.attackCooldown <= 0) {
-  const killed = isBuildingTarget
-    ? FE_PATCH_06BDamageBuilding(target, stats.damage)
-    : damageUnit(target, stats.damage);
-  unit.attackCooldown = stats.cooldown;
-  // << FX SPAWN POINT — right here, after damage application
+BRAIN-01 action list (L9980):
+```
+build_separator  → только если сепаратора НЕТ
+build_factory    → только если фабрики НЕТ
+produce_builder  → builder < 1
+produce_harvester → harvester < 2
+produce_combat   → иначе
+wait
 ```
 
-This is the exact frame where a shot is fired. At this point we know:
-- `unit` — the attacker (has `unit.x`, `unit.y`, `unit.type`, direction via `unit._renderDir`)
-- `target` — the target (has position, kind)
-- `isBuildingTarget` — whether target is a building or unit
+После начального построения (1 сепаратор, 1 фабрика), BRAIN-01 **никогда** не строит дополнительные экономические здания:
+- Нет `build_elements_storage` — элементный сток заполняется, сепаратор стопорится
+- Нет `build_minerals_storage` — минеральный сток (200) заполняется за ~60 секунд
+- Нет `build_energy_storage` — энергетический сток (300) заполняется быстрее
+- Нет `build_second_separator` — `FE_PATCH_09C2EnemySeparatorExistsOrQueued()` возвращает true, если хоть один существует
+- Нет `build_second_factory` — `FE_PATCH_09DCanBuildEnemyFactory()` возвращает `{ok:false, reason:'factory_exists_or_queued'}`
 
-We need to spawn two effects here:
-1. **Shot/tracer**: a short bright line or elongated glow from attacker toward target
-2. **Hit/impact**: a small burst at the target position
+### Tertiary: Death spiral при потере фабрики + строителя
 
----
-
-## 4. Какой эффект нужен
-
-### Effect A: Shot/tracer (дульная вспышка + трассер)
-
-**Visual:** A short bright line from the tank's turret toward the target, lasting ~0.15–0.20 seconds. It should fade quickly. Color: bright yellow/white for player, reddish for enemy.
-
-**Implementation approach:**
-- Spawn 2–3 small elongated particles along the line from attacker to target
-- Each particle: position along the line, velocity toward target, short life
-- Use `ctx.ellipse()` with horizontal stretch for tracer shape
-- Alternative (simpler): a single short-lived particle at the attacker's position that moves toward the target position over ~0.15 sec
-
-**Simpler approach (recommended):** Instead of a true tracer line, spawn a **muzzle flash** at the attacker position — a bright expanding circle that fades in ~0.15 sec. This is visually clear and trivially simple:
-- Position: attacker's tile coordinates
-- Size: starts small (~3px), grows to ~8px over life
-- Alpha: starts at 0.8, fades to 0
-- Color: yellow-white (#ffe060) for player, red-orange (#ff6630) for enemy
-
-### Effect B: Hit/impact (вспышка попадания)
-
-**Visual:** A small bright burst at the target position, lasting ~0.20–0.25 seconds. Expanding then fading.
-
-**Implementation approach:**
-- Spawn 3–5 small particles at the target position
-- Each particle: random offset, slight outward velocity, short life
-- Use `ctx.ellipse()` with decreasing alpha
-- Color: orange/yellow for unit hit, gray/orange for building hit
-
-**Simpler approach (recommended):** A single expanding ring/flash at the target's center:
-- Position: target center (`FE_PATCH_06BTargetCenter()` for buildings, `{x: target.x, y: target.y}` for units)
-- Size: starts at ~4px, expands to ~12px over life
-- Alpha: starts at 0.7, fades to 0
-- Color: bright orange (#ff8c30) fading to dark
-
-### Effect C (optional): Smoke puff at impact
-
-A secondary delayed particle (~2 particles, dark gray, rising slowly) after the hit flash. This adds "weight" to the impact. Can be added in the same system — just different color/velocity/longer life.
+Если игрок уничтожает вражескую фабрику И всех строителей:
+1. BRAIN-01 priority 2 (`build_factory`) → требует строителя → нет строителя → FAIL
+2. BRAIN-01 priority 3 (`produce_builder`) → требует фабрику → нет фабрики → FAIL
+3. Враг **навсегда заблокирован** — не может производить юнитов, не может строить здания
+4. Нет fallback-механизма (например, emergency builder spawn)
 
 ---
 
-## 5. Точные функции/файлы для изменения
+## 2. Функции economy/production
+
+| Функция | Линия | Роль |
+|---------|-------|------|
+| `getStorageLimitsForOwner(owner)` | L1958 | BASE_STORAGE + storageBonus от зданий. Общая для player/enemy. |
+| `ensureEnemyResources()` | L1976 | Lazy-init вражеского ресурсного бакета |
+| `addResourceForOwner(owner, name, amount)` | L2001 | Добавляет ресурс с clamping по storage cap |
+| `changeResourceForOwner(owner, resource, delta)` | L9042 | Расход/пополнение ресурса с cap enforcement |
+| `resourceSpaceForOwner(owner, name)` | L1991 | Свободное место в хранилище |
+| `FE_PATCH_09C3EnemySeparatorCycleCheck()` | L9258 | Проверка: может ли сепаратор работать. 3 условия: минералы≥15, energy space≥10, element space≥1 |
+| `FE_PATCH_09C3UpdateEnemySeparatorProduction(dt)` | L9283 | Основной tick сепаратора. Таймер × количество сепараторов |
+| `FE_PATCH_09C2EnemySeparatorExistsOrQueued()` | L9088 | True если хоть один сепаратор существует/строится |
+| `FE_PATCH_09DCanBuildEnemyFactory()` | L9419 | **Возвращает ok:false если фабрика уже существует** — второй фабрики не бывает |
+| `FE_PATCH_09DEnemyFactoryExistsOrQueued()` | L9352 | True если хоть одна фабрика существует/строится |
+| `FE_PATCH_09EUpdateEnemyFactoryProduction(dt)` | L9749 | Tick производства фабрики |
+| `FE_PATCH_09E_FACTORY_MAX_QUEUE` | L9577 | = 1. Глубина очереди фабрики |
+| `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` | L9877 | Выбирает тип производимого юнита: builder < harvester < scout < light_tank |
+| `FE_PATCH_BASELINE_01_HARVESTER_MIN` | L9865 | = 2 |
+| `FE_PATCH_BASELINE_01_BUILDER_MIN` | L9866 | = 1 |
+| `FE_PATCH_BASELINE_01_HARVESTER_CAP` | L9867 | = 4 |
+| `FE_PATCH_BASELINE_01_BUILDER_CAP` | L9868 | = 2 |
+| `FE_PATCH_BRAIN_01_ChoosePriorityAction(state)` | L9989 | Выбор приоритетного действия. Жёсткий порядок: separator → factory → builder → harvester → combat |
+| `FE_PATCH_BRAIN_01_ExecuteAction(decision, state)` | L10032 | Исполнение решения BRAIN-01 |
+| `FE_PATCH_BRAIN_01_TryProduceWorker(unitType)` | L10059 | Ставит юнита в очередь первой свободной фабрики |
+| `updateHarvester(unit, dt)` | L8685 | State machine сборщика: mining → returning → unloading |
+| `assignNextMine(unit)` | L8634 | Назначение шахты сборщику |
+
+---
+
+## 3. Как economy stall выглядит в игре
+
+Timeline типичного skirmish после BOT-PROGRESSION-01:
+
+1. **0:00–0:30**: Старт. Enemy: HQ, 2 harvesters, 1 builder, 1 tank. Ресурсы: minerals:0, energy:160, elements:0.
+2. **0:30–1:00**: BRAIN-01 строит сепаратор (30 energy). Builder строит. Фабрика производит.
+3. **1:00–2:00**: Сепаратор готов. Минералы → separator → energy + elements. Tank production. Enemy достигает 2–3 танков.
+4. **2:00–3:00**: **Element storage заполняется (20).** Сепаратор останавливается (`element_storage_full`).
+5. **3:00**: Factory продолжает потреблять элементы (tanks cost 2 elements). Как только элементы тратятся, separator кратковременно возобновляется, но быстро снова заполняет.
+6. **3:00+**: **Колебательный режим** — separator включается/выключается по мере расхода элементов на танки. Production throughput ограничен element storage cap. Economy не растёт, а "дышит" вокруг порога.
+7. **При harassment**: Если игрок убивает harvester, mineral income падает, separator совсем останавливается (no minerals), factory не может производить (no elements), economy коллапсирует.
+
+---
+
+## 4. Что нужно исправить минимально
+
+Есть три независимых фикса, каждый решает свою часть проблемы:
+
+### Fix A: Добавить `build_elements_storage` в BRAIN-01
+
+**Проблема:** Element storage cap = 20. Сепаратор stall'ится. Бот не строит `elements_storage`.
+
+**Решение:** Добавить новый action в BRAIN-01, который срабатывает когда element storage заполнен на ≥80% (≥16 из 20).
+
+```javascript
+// В FE_PATCH_BRAIN_01_ACTIONS добавить 'build_elements_storage'
+// В FE_PATCH_BRAIN_01_ChoosePriorityAction добавить проверку:
+var elKey = FE_PATCH_09C3EnemyElementKey();
+var elLimit = getStorageLimitsForOwner('enemy')[elKey] || 20;
+var elCurrent = ensureEnemyResources()[elKey] || 0;
+var elementsNearFull = elCurrent >= elLimit * 0.8;
+if (elementsNearFull && !FE_PATCH_09C2ElementsStorageExistsOrQueued()) {
+  return { action: 'build_elements_storage', reason: 'element_storage_near_full' };
+}
+```
+
+Новая helper-функция `FE_PATCH_09C2ElementsStorageExistsOrQueued()` — проверяет, есть ли `elements_storage` у enemy.
+
+Новая функция `FE_PATCH_09C2OrderEnemyBuilderBuildElementsStorage()` — находит свободного builder, тратит 50 energy, приказывает строить `elements_storage`.
+
+**Приоритет вставки:** После `build_factory` (priority 2.5), перед `produce_builder` (priority 3). Сепаратор и фабрика должны существовать прежде чем строить storage.
+
+**Ожидаемый эффект:** Element storage cap увеличивается с 20 до 40. Сепаратор может работать непрерывно ~4 минуты вместо ~2. Экономика дышит реже, production throughput стабилизируется.
+
+### Fix B: Добавить emergency builder recovery (death spiral fix)
+
+**Проблема:** Нет factory + нет builder = permanent lockout.
+
+**Решение:** В BRAIN-01, перед возвращением `{action:'wait'}`, добавить проверку:
+
+```javascript
+// Death spiral recovery: если нет фабрики И нет builder'а → spawn emergency builder
+var hasFactory = FE_PATCH_09DEnemyFactoryExistsOrQueued();
+var builderCount = FE_PATCH_BASELINE_01_CountEnemyWorkers('builder');
+if (!hasFactory && builderCount === 0) {
+  // Spawn emergency builder at HQ (free, no factory needed)
+  return { action: 'emergency_builder', reason: 'death_spiral_recovery' };
+}
+```
+
+В `FE_PATCH_BRAIN_01_ExecuteAction` добавить `case 'emergency_builder'` — создать builder юнита рядом с HQ, без затрат (или с минимальными). Это safety net, который срабатывает только в экстремальной ситуации.
+
+### Fix C: Увеличить queue depth до 2
+
+**Проблема:** Queue depth = 1. Фабрика может производить только 1 юнита за раз. Если в очереди танк (35с), harvester replacement задерживается на 35+ секунд.
+
+**Решение:**
+```javascript
+window.FE_PATCH_09E_FACTORY_MAX_QUEUE = 2;  // было 1
+```
+
+**Ожидаемый эффект:** Factory может ставить в очередь 2 юнитов. BRAIN-01 может заказать builder/harvester пока танк ещё в производстве. Worker replacement быстрее.
+
+**Риск:** С queue depth 2, если economy стабильна, фабрика может закупить 2 танка подряд. Это не проблема — ATTACK-12 gate уже контролирует волны. Natural economy (1 separator, element cost) ограничивает throughput.
+
+---
+
+## 5. Точные файлы/функции для изменения
 
 **Единственный файл:** `src/main.js`
 
 | # | Функция / блок | Линия | Изменение |
 |---|---------|-------|-----------|
-| 1 | Constants near combat/dust constants | ~L12133 | Add `FE_COMBAT_FX_MAX_PARTICLES`, `FE_COMBAT_FX_SHOT_LIFE`, `FE_COMBAT_FX_HIT_LIFE`, color constants |
-| 2 | New: `spawnShotFx(attacker, targetPos)` | After dust system | Spawn muzzle flash particles at attacker position |
-| 3 | New: `spawnHitFx(target, isBuilding)` | After dust system | Spawn hit burst particles at target position |
-| 4 | New: `updateCombatFxParticles(dt)` | After `updateDustParticles` | Update life, position, velocity of combat FX particles |
-| 5 | New: `drawCombatFxParticles()` | After `drawDustParticles` | Render combat FX particles using canvas 2D |
-| 6 | `updateLightTankCombat()` | L1475–1479 | After damage application, call `spawnShotFx(unit, targetCenter)` and `spawnHitFx(target, isBuildingTarget)` |
-| 7 | `update()` | L14347 (after `updateDustParticles(dt)`) | Add `updateCombatFxParticles(dt)` |
-| 8 | `render()` | L12414 (after `drawDustParticles()`) | Add `drawCombatFxParticles()` |
-| 9 | Game init | L187 (near `clickMarkers:[]`) | Add `combatFxParticles:[]` to game object init |
+| 1 | `FE_PATCH_BRAIN_01_ACTIONS` | L9980 | Добавить `'build_elements_storage'` и `'emergency_builder'` |
+| 2 | `FE_PATCH_BRAIN_01_ChoosePriorityAction(state)` | L9989 | Добавить priority 2.5: `build_elements_storage` (после factory, перед builder). Добавить priority 6: `emergency_builder` (после combat, перед wait) |
+| 3 | `FE_PATCH_BRAIN_01_ExecuteAction(decision, state)` | L10032 | Добавить `case 'build_elements_storage'` и `case 'emergency_builder'` |
+| 4 | New: `FE_PATCH_09C2ElementsStorageExistsOrQueued()` | После L9088 | Проверяет наличие elements_storage у enemy |
+| 5 | New: `FE_PATCH_09C2OrderEnemyBuilderBuildElementsStorage()` | После L9088 | Приказ builder'у строить elements_storage. Аналог `FE_PATCH_09C2OrderEnemyBuilderBuildSeparator()` |
+| 6 | New: `FE_PATCH_BRAIN_01_SpawnEmergencyBuilder()` | После L10057 | Создаёт бесплатного builder'а рядом с enemy HQ |
+| 7 | `FE_PATCH_09E_FACTORY_MAX_QUEUE` | L9577 | Изменить с 1 на 2 |
+| 8 | Constants | Рядом с L9577 | Добавить `FE_ECONOMY_01_ELEMENTS_STORAGE_THRESHOLD = 0.8` |
 
 ---
 
-## 6. Как рисовать трассер без asset dependency
+## 6. Что НЕ трогать
 
-The task requires **no asset dependencies** — no sprite sheets, no images. Everything must be procedural via Canvas 2D API.
-
-### Shot/tracer rendering:
-
-```javascript
-// Short bright line from attacker toward target
-function drawCombatFxParticles() {
-  if (!game?.combatFxParticles?.length) return;
-  const z = game.camera.zoom;
-  ctx.save();
-  for (const p of game.combatFxParticles) {
-    const pos = tileToScreen(p.x, p.y);
-    const t = clamp(p.life / p.maxLife, 0, 1);
-    ctx.globalAlpha = p.alpha * t;
-    if (p.fxType === 'shot') {
-      // Muzzle flash: expanding bright circle at attacker position
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.ellipse(
-        pos.x + (p.baseOffsetX || 0) * z,
-        pos.y + (p.baseOffsetY || 0) * z,
-        p.r * z,
-        p.r * 0.6 * z,
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-    } else if (p.fxType === 'tracer') {
-      // Short line from attacker toward target
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = Math.max(1.5, p.width * z * t);
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      const sx = pos.x + (p.ox || 0) * z;
-      const sy = pos.y + (p.oy || 0) * z;
-      const ex = sx + p.dx * z * t;
-      const ey = sy + p.dy * z * t;
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-    } else if (p.fxType === 'hit') {
-      // Expanding ring/burst at target position
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.ellipse(
-        pos.x + (p.ox || 0) * z,
-        pos.y + (p.oy || 0) * z,
-        p.r * z,
-        p.r * 0.65 * z,
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-}
-```
-
-This uses only `ctx.ellipse()`, `ctx.fillStyle`, `ctx.strokeStyle`, `ctx.beginPath()`, `ctx.moveTo()`, `ctx.lineTo()`, `ctx.stroke()`, `ctx.fill()` — all standard Canvas 2D with no images.
-
----
-
-## 7. Visibility check
-
-Combat FX must respect fog of war. A player should not see enemy-on-enemy combat FX in fog, and enemy-on-player combat FX should only show if the attacker/target is visible.
-
-**Existing helper:** `isVisible(x, y)` (L11534) checks `game.fogVisible[y][x]`.
-
-**Rule:**
-- Player tank shooting: always show FX (player sees their own units)
-- Enemy tank shooting player unit: show if attacker OR target tile is visible to player
-- Enemy-on-enemy: only show if the area is visible to player
-
-Simple implementation: before spawning FX, check if at least one of (attacker position, target position) is `isVisible()`. For player-initiated shots, skip the check entirely.
-
----
-
-## 8. Что НЕ трогать
-
-- Combat damage/range/cooldown values and formulas
-- `damageUnit()` / `FE_PATCH_06BDamageBuilding()` logic
+- Combat damage/range/cooldown
 - Pathfinding / `findPath` / `passable`
 - Scout lifecycle (`FE_SCOUT01*`, `FE_INTEL01*`)
-- BOT-ATTACK-11/12 attack gate logic
+- BOT-ATTACK-11/12 attack gate
 - BOT-COMBAT-AWARENESS-01
 - BOT-DEFENSE-RETREAT-01
 - BOT-PROGRESSION-01
-- ATTACK-04 hq_push protection
-- ATTACK-08 invariant repair
-- ATTACK-10 wave lock
-- Enemy production / economy / BRAIN-01
-- Builder dust system (separate system, do not merge)
+- ATTACK-04/08/10 logic
+- Harvester mining logic (state machine корректна)
+- Separator conversion logic (формула 15→10+1 корректна)
+- Player economy (storage, production, building)
 - Save/load
-- Fog rendering logic
-- Map generation
-- Building construction logic
-- Unit state machine (idle/moving/attacking states)
-- HP bar rendering
-- Unit sprite rendering
+- Render / fog / mapgen
+- Combat FX (VISUAL-COMBAT-FX-01)
+- Building construction logic (FE_PATCH_09C2*, FE_PATCH_09D*)
+- Unit state machine
 
 ---
 
-## 9. Риск
+## 7. Риск
 
-**Low.**
+**Low–Medium.**
 
 Обоснование:
 
-- **Purely additive rendering:** Adding a new particle system that is drawn after existing content. It does not modify any existing draw calls or render state.
-- **No gameplay changes:** Combat FX are visual-only. They do not affect damage, targeting, pathfinding, or any game logic. The `updateLightTankCombat()` change is a single-line call to `spawnShotFx/spawnHitFx` after the existing damage application — it does not change the combat flow.
-- **Proven pattern:** The dust particle system has been stable for multiple patches. Combat FX use the same pattern: `game.combatFxParticles[]`, spawn/update/draw lifecycle, particle cap.
-- **No asset dependency:** All FX are procedural Canvas 2D. No image loading, no sprite sheets.
-- **Visibility-gated:** FX only render when visible to player. No information leak through fog.
-- **Worst case:** Too many particles could cause a minor frame rate dip in large battles. Mitigated by `FE_COMBAT_FX_MAX_PARTICLES` cap (default 60) and short particle lifetimes (~0.2 sec). With cooldown of 0.75 sec per tank, even 10 tanks firing simultaneously produce only ~30 particles per second, decaying quickly.
+- **Fix A (elements_storage):** Additive change. BRAIN-01 получает новый action, который срабатывает только когда element storage ≥80%. Не меняет существующие приоритеты. Строительство использует тот же `findBuildPlan` + builder order механизм, что и separator/factory. Стоимость 50 energy — это значительная сумма, поэтому бот будет строить storage только когда экономика стабильна. Риск: неправильное место для строительства (builder может уйти далеко от базы). Mitigation: `findBuildPlan` уже ищет ближайшее место к builder'у.
+
+- **Fix B (emergency builder):** Safety net. Срабатывает только в death spiral (нет factory + нет builder). Это экстремальная ситуация — без этого фикса бот гарантированно проигрывает. Риск: бесплатные юниты могут быть exploited. Mitigation: это recovery mechanism, не преимущество. Builder появляется только когда economy уже разрушена.
+
+- **Fix C (queue depth 2):** Минимальное изменение одной константы. Natural economy limits (1 separator, element cost, build time) ограничивают throughput. ATTACK-12 gate контролирует волны. Риск: в редких случаях фабрика может заказать 2 танка подряд вместо worker replacement. Mitigation: `ChooseFactoryUnitType` проверяет worker minimum перед tank production.
+
+- **Наихудший сценарий:** Бот строит elements_storage слишком рано (тратит 50 energy, которые нужны для factory production). Mitigation: threshold ≥80% гарантирует, что storage строится только когда element cap реально является bottleneck.
 
 ---
 
-## 10. Telemetry / debug plan
+## 8. Telemetry / debug plan
 
-Minimal telemetry. Existing systems already provide enough debug info. Add one debug object:
+Расширить существующий `game._brain01LastDecision` (уже записывается в L10034):
 
 ```javascript
-game._combatFx01 = {
-  shotCount: 0,        // total shot FX spawned
-  hitCount: 0,         // total hit FX spawned
-  activeParticles: 0   // current live particle count
+game._economy01 = {
+  elementsStorageBuilt: false,       // был ли построен elements_storage
+  elementsStorageBuiltAt: 0,         // game time когда построен
+  emergencyBuilderSpawned: false,     // был ли spawn emergency builder
+  emergencyBuilderSpawnedAt: 0,       // game time
+  separatorStallCount: 0,            // сколько раз сепаратор stall'ился
+  lastSeparatorStallReason: null      // причина последнего stall
 }
 ```
 
-This is populated by the spawn functions and updated by the update function. Accessible via browser console: `game._combatFx01`.
-
-No per-frame noisy telemetry. The debug object is only for development tuning.
+Separator stall counter обновляется в `FE_PATCH_09C3UpdateEnemySeparatorProduction` когда cycle check возвращает `{ok:false}`.
 
 ---
 
-## 11. Targeted smoke test plan
+## 9. Targeted smoke test plan
 
-**Сценарий 1 — Player tank fires at enemy:**
-1. Start skirmish, produce a player light_tank.
-2. Move tank near enemy, observe attack engagement.
-3. Verify: bright yellow muzzle flash appears at player tank position when it fires.
-4. Verify: orange hit burst appears at the enemy target position on impact.
-5. Verify: effects are short-lived (~0.2 sec), do not linger.
-6. Verify: HP bar of target still decreases normally (combat unchanged).
+**Сценарий 1 — Economy progression past 2 minutes:**
+1. Start skirmish, observe enemy economy.
+2. Wait 2+ minutes. Verify: enemy builds `elements_storage` when element storage approaches cap.
+3. Verify: separator continues running after elements_storage built.
+4. Verify: factory production throughput increases (tanks produced faster).
 
-**Сценарий 2 — Enemy tank fires at player:**
-1. Let enemy tanks engage player tanks/buildings.
-2. Verify: red-orange muzzle flash appears at enemy tank position.
-3. Verify: orange hit burst appears at player target position.
-4. Verify: effects only visible when area is not in fog.
+**Сценарий 2 — Emergency builder recovery:**
+1. Start skirmish, let enemy build up.
+2. Destroy enemy factory AND all builders using dev tools or player units.
+3. Verify: enemy spawns emergency builder at HQ within BRAIN-01 tick.
+4. Verify: emergency builder builds new factory → economy recovers.
 
-**Сценарий 3 — Multiple tanks fighting:**
-1. Create a large engagement (3+ tanks per side).
-2. Verify: FX do not cause noticeable frame rate drop.
-3. Verify: FX do not overlap excessively or obscure units.
-4. Verify: particle count stays within cap (`game._combatFx01.activeParticles`).
+**Сценарий 3 — Queue depth 2:**
+1. Start skirmish, observe factory production.
+2. Verify: factory can queue 2 units simultaneously.
+3. Verify: when harvester dies while tank is in production, replacement harvester gets queued.
 
-**Сценарий 4 — Tank attacks building:**
-1. Player tank attacks enemy building.
-2. Verify: hit effect appears at building center (not at corner).
-3. Verify: building HP decreases normally.
+**Сценарий 4 — Regression:**
+1. Normal game flow — bot builds separator, factory, workers in correct order.
+2. BRAIN-01 priority loop works correctly.
+3. Scout lifecycle unchanged.
+4. Attack wave behavior unchanged.
+5. Combat FX still works.
 
-**Сценарий 5 — Fog of war:**
-1. Player has no vision of enemy area.
-2. Enemy tanks fight each other (if possible in current AI).
-3. Verify: no combat FX visible in fogged area.
-4. Verify: when player gains vision, FX appear correctly.
-
-**Сценарий 6 — Regression:**
-1. Normal game flow — bot should build, attack, defend normally.
-2. Combat damage/range/cooldown unchanged.
-3. Dust particles still work normally.
-4. Click markers still work normally.
-5. Save/load works correctly (combatFxParticles are visual-only, no need to persist).
+**Сценарий 5 — Elements storage build timing:**
+1. Verify: elements_storage is NOT built when element storage < 80%.
+2. Verify: elements_storage IS built when element storage ≥ 80%.
+3. Verify: only one elements_storage is built (not multiple).
 
 Жду «Делай».
