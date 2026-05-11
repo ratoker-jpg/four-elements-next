@@ -2173,9 +2173,18 @@
     }
     used += unitPowerUsed;
 
-    // Enemy separator power — pause if insufficient.
+    // Enemy separator power — reserve only for separators that can actually process.
+    // A separator that is resource-stalled (no minerals, or storage full) does not
+    // consume power, so it should not reserve capacity or be marked power-paused.
     const enemySeps = FE_PATCH_09C3CompleteEnemySeparators();
+    const sepCycleOk = FE_PATCH_09C3EnemySeparatorCycleCheck().ok;
     for (const sep of enemySeps) {
+      if (!sepCycleOk) {
+        // Separator cannot process — do not reserve power, do not power-pause.
+        // Resource-stall marking is handled by FE_PATCH_09C3UpdateEnemySeparatorMarks.
+        sep._enemyPowerPaused = false;
+        continue;
+      }
       if (used + cfg.separatorMw <= total) {
         used += cfg.separatorMw;
         sep._enemyPowerPaused = false;
