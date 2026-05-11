@@ -3557,9 +3557,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   // Update game.enemyIntel from a scout's current view scan.
   // Uses max(old, current) for known counts — scout never "forgets" already seen objects.
   // lastUsefulIntelAt only updates when scan actually sees player units/buildings/HQ.
+  // Returns true if useful intel was seen, false if scan was empty.
   function FE_INTEL01UpdateFromScout(scout, now, reason) {
     var intel = FE_INTEL01Init(game);
-    if (!game || !scout) return;
+    if (!game || !scout) return false;
 
     var viewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
 
@@ -3600,7 +3601,12 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     for (var _bi2 = 0; _bi2 < _allB.length; _bi2++) {
       var _ub = _allB[_bi2];
       if (!_ub || (_ub.hp || 0) <= 0) continue;
-      var _bd2 = FE_10C1_distTiles(scout, _ub);
+      // BOT-INTEL-01A: distance from building center, not top-left.
+      var _ubW = _ub.w || (BUILDING_SIZE && BUILDING_SIZE[_ub.type] ? BUILDING_SIZE[_ub.type][0] : 2);
+      var _ubH = _ub.h || (BUILDING_SIZE && BUILDING_SIZE[_ub.type] ? BUILDING_SIZE[_ub.type][1] : 2);
+      var _ubCX = _ub.x + _ubW / 2;
+      var _ubCY = _ub.y + _ubH / 2;
+      var _bd2 = FE_10C1_distTiles(scout, { x: _ubCX, y: _ubCY });
       if (_bd2 > viewR) continue;
       if (!isPlayerBuilding(_ub)) continue;
       curBuildingsTotal++;
@@ -3612,13 +3618,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       }
       if (bt === 'hq_base' || bt === 'hq') {
         hqSeenThisScan = true;
-        // HQ center: building x,y is top-left, size is 3x3.
-        var bw = _ub.w || (_ub.type === 'hq_base' ? 3 : 2);
-        var bh = _ub.h || (_ub.type === 'hq_base' ? 3 : 2);
+        // HQ coords: reuse center already computed above for distance.
         hqX = _ub.x;
         hqY = _ub.y;
-        hqCX = Math.round(_ub.x + bw / 2);
-        hqCY = Math.round(_ub.y + bh / 2);
+        hqCX = Math.round(_ubCX);
+        hqCY = Math.round(_ubCY);
       }
     }
 
@@ -3677,6 +3681,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     }
 
     // lastScoutSweepDoneAt: handled separately at sweep_done transition.
+
+    return sawAnything;
   }
 
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
@@ -4397,10 +4403,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
         // BOT-INTEL-01: update persistent intel from scout observations.
         // Called here because this block runs for outbound/observing/sweeping states.
+        // BOT-INTEL-01A: intelUpdated is true only when scan actually saw player objects.
         try {
-          FE_INTEL01UpdateFromScout(s, now, s._scout02BState || 'unknown');
-          s._scout02IntelUpdated = true;
-          s._scout02IntelUpdateReason = s._scout02BState || 'unknown';
+          var _intelResult = FE_INTEL01UpdateFromScout(s, now, s._scout02BState || 'unknown');
+          s._scout02IntelUpdated = !!_intelResult;
+          s._scout02IntelUpdateReason = _intelResult ? (s._scout02BState || 'unknown') : 'no_visible_player_objects';
         } catch (_intelErr) {
           s._scout02IntelUpdated = false;
           s._scout02IntelUpdateReason = 'error';
