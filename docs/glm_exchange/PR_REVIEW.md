@@ -1,33 +1,46 @@
 # PR_REVIEW
 
-Task: BOT-PROGRESSION-01 — disable tank cap + fix worker priority ordering
-PR: #58
-Verdict: APPROVED_TO_MERGE
+Task: VISUAL-COMBAT-FX-01 — procedural light_tank shot and hit effects
+PR: #59
+Verdict: REQUEST_CHANGES
 Manual QA: UNVERIFIED / BATCH QA
 
 ## Reason
 
-PR fixes the main audited progression blocker: the experimental enemy light_tank cap of 3. It also prevents future cap logic from blocking worker/scout replacement before worker checks run.
+PR scope and implementation direction look acceptable, but the PR is currently not mergeable against `sandbox/main`.
 
 ## What is OK
 
-- Review lane PR against sandbox/main.
-- Changed gameplay file: `src/main.js`.
-- Disables `window.FE_ENEMY_LIGHT_TANK_CAP` by setting it to `0`.
-- Keeps natural limits: one factory, queue depth 1, element cost, build time, ATTACK-12 gate.
-- Reorders `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` so worker/scout checks happen before any tank cap block.
-- Does not touch combat, pathfinding, scout lifecycle, BOT-ATTACK-11/12, economy expansion, factory queue depth, save/load, render/fog, mapgen.
-- No new telemetry added; existing telemetry is enough.
-- `node --check src/main.js` passed.
-- PR is mergeable.
+- Review lane PR.
+- Main gameplay/render file: `src/main.js`.
+- Visual-only procedural combat FX added.
+- No assets introduced.
+- FX spawn after light_tank damage tick.
+- Particle cap exists.
+- Existing combat damage/range/cooldown are not changed.
+- PR description includes root cause, changed systems, not-touched systems, telemetry, checks and smoke plan.
+- `node --check src/main.js` reported as passed.
 
 ## Concerns
 
-- Manual behavior is not verified yet.
-- Disabling the cap may let enemy tanks accumulate over longer games if natural economy limits are not enough, but this is acceptable for Playable Bot MVP and can be tuned later.
-- This does not add new economy expansion buildings; it only removes the hard production stall.
+- PR is not mergeable right now. It likely needs update/rebase from current `sandbox/main` after recent merges.
+- Keep scope exactly the same when updating the branch.
+- Do not add more visual complexity during the rebase/update.
+
+## Required changes
+
+Update PR branch from current `sandbox/main`, resolve conflicts if any, rerun:
+
+```bash
+node --check src/main.js
+```
+
+Constraints:
+- keep VISUAL-COMBAT-FX-01 changes only;
+- do not touch combat damage/range/cooldown;
+- do not touch bot AI, pathfinding, economy, scout, save/load;
+- update `docs/glm_exchange/CODE_SUMMARY.md` if the SHA changes.
 
 ## Next action
 
-Merge PR #58.
-After merge, keep Manual QA as `UNVERIFIED / BATCH QA` and continue sprint.
+Ask GLM to update the PR branch from current `sandbox/main` and return CODE_SUMMARY again.
