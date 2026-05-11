@@ -1364,10 +1364,21 @@
   }
   // FE_PATCH_06B_ATTACK_ENEMY_BUILDINGS_END
 
+  // BOT-SCOUT-02A: helper — is target an enemy scout that attacker can target?
+  // Robust check: no mandatory target.kind === 'unit', just type + owner mismatch.
+  function FE_SCOUT02AIsEnemyScoutTarget(attacker, target) {
+    return !!(target && target.type === 'scout' && unitOwner(target) !== unitOwner(attacker));
+  }
+
   function FE_PATCH_07BGetHostileLightTankTargetKind(attacker, target) {
     if (!isLightTank(attacker) || !target) return null;
 
     if (isLightTank(target) && unitOwner(target) !== unitOwner(attacker)) {
+      return 'unit';
+    }
+
+    // BOT-SCOUT-02A: enemy scout is a valid 'unit' target for light_tank.
+    if (FE_SCOUT02AIsEnemyScoutTarget(attacker, target)) {
       return 'unit';
     }
 
@@ -2443,10 +2454,12 @@
   }
 
   function FE_PATCH_08BEnemyCombatUnits() {
+    // BOT-SCOUT-02A: exclude scout type — scouts are not combat units.
     return (game?.units || []).filter(u =>
       u &&
       isLightTank(u) &&
       isEnemyUnit(u) &&
+      u.type !== 'scout' &&
       (u.hp || 0) > 0
     );
   }
@@ -5284,6 +5297,48 @@ function updateEnemyBot(dt) {
       if (game) game._botScout01VisionError = String(err && err.message ? err.message : err);
     }
 
+    // BOT-SCOUT-02A: scout targetability + early production telemetry.
+    try {
+      var _scout02aEnemyCount = 0;
+      var _scout02aLastAttackedId = null;
+      if (game && game.units) {
+        for (var _si = 0; _si < game.units.length; _si++) {
+          var _su = game.units[_si];
+          if (_su && _su.type === 'scout' && isEnemyUnit(_su) && (_su.hp || 0) > 0) {
+            _scout02aEnemyCount++;
+          }
+        }
+        // Check if any player light_tank is attacking an enemy scout.
+        for (var _si2 = 0; _si2 < game.units.length; _si2++) {
+          var _su2 = game.units[_si2];
+          if (_su2 && isLightTank(_su2) && isPlayerUnit(_su2) && _su2.attackTargetId) {
+            var _sTarget = game.units.find(function(u) { return u && u.id === _su2.attackTargetId; });
+            if (_sTarget && _sTarget.type === 'scout' && isEnemyUnit(_sTarget)) {
+              _scout02aLastAttackedId = _sTarget.id;
+              break;
+            }
+          }
+        }
+      }
+      var _scout02aSecondAllowed = _scout02aEnemyCount >= 1 && _scout02aEnemyCount < 2 &&
+        (game && (game.time >= 600 || game.mapSize === 'large'));
+      game._botScout02A = {
+        enemyScoutCount: _scout02aEnemyCount,
+        enemyScoutSoftTarget: 1,
+        enemyScoutHardCap: 2,
+        secondScoutAllowed: !!_scout02aSecondAllowed,
+        secondScoutReason: _scout02aEnemyCount < 1 ? 'first_not_yet' :
+          (_scout02aEnemyCount >= 2 ? 'cap_reached' :
+            (game && game.time >= 600 ? 'time_mature' :
+              (game && game.mapSize === 'large' ? 'large_map' : 'conditions_not_met'))),
+        scoutTargetableCheck: typeof FE_SCOUT02AIsEnemyScoutTarget === 'function',
+        lastScoutAttackedId: _scout02aLastAttackedId,
+        at: game ? (game.time || 0) : 0
+      };
+    } catch (err) {
+      if (game) game._botScout02AError = String(err && err.message ? err.message : err);
+    }
+
     if (!game || game.screen !== 'game' || game.paused) return;
     if (game.skirmishMode !== true) return;
     if (game.gameResult || game.result || game.gameEnded || game.ended) return;
@@ -7810,15 +7865,15 @@ function debugLog(event, payload={}) {
     if (harvCount < FE_PATCH_BASELINE_01_HARVESTER_MIN && !harvesterQueued && harvCount < FE_PATCH_BASELINE_01_HARVESTER_CAP) return 'harvester';
 
     // BOT-SCOUT-01: produce scouts before light_tank, up to scout cap.
-    // Scout production does not permanently block light_tank — once cap is reached, skip.
+    // BOT-SCOUT-02A: first scout always; second scout only if game is mature or large map.
     if (typeof FE_SCOUT01EnemyCanProduceScout === 'function' && FE_SCOUT01EnemyCanProduceScout() && !scoutQueued) {
       var scoutCount = typeof FE_SCOUT01GetScoutCountIncludingQueue === 'function'
         ? FE_SCOUT01GetScoutCountIncludingQueue('enemy') : 0;
-      if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_MIN) return 'scout';
-      // Produce second scout only if we have enough tanks (don't delay army).
-      var tankCount = typeof FE_ATTACK09GetEnemyLightTankCountIncludingQueue === 'function'
-        ? FE_ATTACK09GetEnemyLightTankCountIncludingQueue() : 0;
-      if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_CAP && tankCount >= 2) return 'scout';
+      // First scout — always produce.
+      if (scoutCount < 1) return 'scout';
+      // Second scout — only when game is mature enough or on large maps.
+      // scoutCount < 1 covers first-scout-dead case (respawn as first).
+      if (scoutCount < FE_SCOUT01_ENEMY_SCOUT_CAP && (game.time >= 600 || game.mapSize === 'large')) return 'scout';
     }
 
     // ATTACK-09: if light_tank cap is reached, return null (factory waits, no builder spam).
@@ -11209,7 +11264,9 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
     );
 
     if (!group.length) return false;
-    if (!isLightTank(target) || !isEnemyUnit(target)) return false;
+    // BOT-SCOUT-02A: also allow enemy scout as valid group attack target.
+    var _scout02aGroupTarget = (isLightTank(target) && isEnemyUnit(target)) || (group.length && FE_SCOUT02AIsEnemyScoutTarget(group[0], target));
+    if (!_scout02aGroupTarget) return false;
 
     let accepted = 0;
     let outOfRange = 0;
@@ -11383,7 +11440,9 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
     if (!group.length) return false;
     const isEnemyTankTarget = isLightTank(target) && isEnemyUnit(target);
     const isEnemyBuildingTarget = FE_PATCH_06BIsAttackableEnemyBuilding(target);
-    if (!isEnemyTankTarget && !isEnemyBuildingTarget) return false;
+    // BOT-SCOUT-02A: enemy scout is also a valid approach target.
+    const isEnemyScoutTarget = group.length > 0 && FE_SCOUT02AIsEnemyScoutTarget(group[0], target);
+    if (!isEnemyTankTarget && !isEnemyBuildingTarget && !isEnemyScoutTarget) return false;
 
     let direct = 0;
     let approaching = 0;
@@ -11638,7 +11697,9 @@ if (Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
       return;
     }
 
-    if (isLightTank(selected) && isPlayerUnit(selected) && isLightTank(obj) && isEnemyUnit(obj)) {
+    // BOT-SCOUT-02A: player light_tank can also target enemy scouts via click.
+    var _scout02aClickableTarget = (isLightTank(obj) && isEnemyUnit(obj)) || FE_SCOUT02AIsEnemyScoutTarget(selected, obj);
+    if (isLightTank(selected) && isPlayerUnit(selected) && _scout02aClickableTarget) {
       attackMoveArmed = false;
       const group = selectedPlayerLightTanks();
       if (group.length > 1) {
