@@ -4945,6 +4945,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         waveSize: Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length))),
         at: game.time || 0
       };
+      // BOT-ATTACK-11: update lastFailureReason after dispatch decision is known.
+      if (game._botAttack11) {
+        game._botAttack11.lastFailureReason = _a11LastFailureReason || '';
+      }
     }
 
     // ATTACK-02: mark state when hq_push is used so retreat/strength layers
@@ -6849,17 +6853,19 @@ function updateEnemyBot(dt) {
     }
 
     // BOT-ATTACK-11: debug telemetry for intel rally attack target selection.
+    // Initial snapshot — rallyArrivedCount/rallyConvertedCount/rallyClearedCount are updated
+    // after the intel rally arrival detection block runs (in attack phase).
     try {
       var _a11IntelObj = game && game.enemyIntel;
-      var _a11TNow = game ? (game.time || 0) : 0;
       var _a11Tanks = (game && game.units) ? game.units : [];
-      var _a11RallyActive = 0, _a11RallyArrivedT = 0, _a11RallyConvertedT = 0;
+      var _a11RallyActive = 0;
       for (var _a11ti = 0; _a11ti < _a11Tanks.length; _a11ti++) {
         var _a11tu = _a11Tanks[_a11ti];
         if (_a11tu && _a11tu._attack11IntelRally) _a11RallyActive++;
       }
       var _a11TIntel = FE_ATTACK11ChooseIntelTarget();
       var _a11LastDispatch = game ? (game._attack01LastDispatch || null) : null;
+      var _a11LastFail = game && game._botAttack11 ? (game._botAttack11.lastFailureReason || '') : '';
       game._botAttack11 = {
         targetSource: _a11TIntel ? _a11TIntel.targetSource : (_a11LastDispatch ? _a11LastDispatch.source : 'none'),
         targetX: _a11TIntel ? _a11TIntel.targetX : null,
@@ -6867,10 +6873,11 @@ function updateEnemyBot(dt) {
         usesIntelPoint: !!(_a11TIntel),
         assignedCount: _a11LastDispatch ? (_a11LastDispatch.intelRallyAssignedCount || 0) : 0,
         rallyActiveCount: _a11RallyActive,
-        rallyArrivedCount: typeof _a11RallyArrived !== 'undefined' ? _a11RallyArrived : 0,
-        rallyConvertedCount: typeof _a11RallyConverted !== 'undefined' ? _a11RallyConverted : 0,
+        rallyArrivedCount: 0,
+        rallyConvertedCount: 0,
+        rallyClearedCount: 0,
         fallbackUsed: _a11LastDispatch ? (_a11LastDispatch.source === 'hq_fallback') : false,
-        lastFailureReason: typeof _a11LastFailureReason !== 'undefined' ? (_a11LastFailureReason || '') : '',
+        lastFailureReason: _a11LastFail,
         playerHqSeen: !!(_a11IntelObj && _a11IntelObj.playerHqSeen),
         playerHqEstimateAvailable: !!(_a11IntelObj && _a11IntelObj.playerHqEstimateCenterX != null),
         intelFreshnessSec: _a11TIntel ? _a11TIntel.intelFreshnessSec : -1,
@@ -7060,6 +7067,18 @@ function updateEnemyBot(dt) {
           _a11RallyCleared++;
         }
         delete _a11ru._attack11IntelRally;
+      }
+
+      // BOT-ATTACK-11: update telemetry with arrival detection results.
+      if (game && game._botAttack11) {
+        var _a11RallyRemaining = 0;
+        for (var _a11txi = 0; _a11txi < enemyTanks.length; _a11txi++) {
+          if (enemyTanks[_a11txi] && enemyTanks[_a11txi]._attack11IntelRally) _a11RallyRemaining++;
+        }
+        game._botAttack11.rallyActiveCount = _a11RallyRemaining;
+        game._botAttack11.rallyArrivedCount = _a11RallyArrived;
+        game._botAttack11.rallyConvertedCount = _a11RallyConverted;
+        game._botAttack11.rallyClearedCount = _a11RallyCleared;
       }
 
       // ATTACK-03: Re-issue attack orders for tanks that lost their targets during attack phase.

@@ -3977,10 +3977,13 @@ Priority:
 5. Telemetry game._botAttack11:
    - targetSource, targetX/Y, usesIntelPoint
    - assignedCount, rallyActiveCount
-   - rallyArrivedCount, rallyConvertedCount
+   - rallyArrivedCount, rallyConvertedCount, rallyClearedCount
    - fallbackUsed, lastFailureReason
    - playerHqSeen, playerHqEstimateAvailable
    - intelFreshnessSec, lastScoutIntelAt, lastScoutSweepDoneAt
+   - Порядок: initial snapshot создаётся до decision logic (rally counters = 0),
+     затем обновляется после arrival detection block с реальными значениями тика.
+     lastFailureReason обновляется после FE_PATCH_08BPrepareAttack dispatch.
 
 6. ATTACK-01 telemetry расширена:
    - source: 'vision' | 'intel_rally' | 'hq_fallback'
