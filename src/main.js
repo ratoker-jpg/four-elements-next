@@ -10123,13 +10123,24 @@ function debugLog(event, payload={}) {
     }
 
     // Priority 2.5 (BOT-ECONOMY-01A): elements_storage — separator stalls when element cap is full.
-    // Only trigger when element storage is near full AND separator/factory baseline exists.
+    // Only trigger when element storage is near full AND the action is actually executable right now.
     if (!FE_PATCH_09C2ElementsStorageExistsOrQueued()) {
       var elKey = FE_PATCH_09C3EnemyElementKey();
       var elLimit = getStorageLimitsForOwner('enemy')[elKey] || 20;
       var elCurrent = ensureEnemyResources()[elKey] || 0;
       if (elCurrent >= elLimit * FE_ECONOMY_01A_ELEMENTS_STORAGE_THRESHOLD) {
-        return { action: 'build_elements_storage', reason: 'element_storage_near_full', elCurrent: elCurrent, elLimit: elLimit };
+        // Preflight: verify the action can execute before committing to it.
+        var _esBuilder = FE_PATCH_09C2FindEnemyBuilderForElementsStorage();
+        var _esCost = getBuildCost('elements_storage');
+        var _esBucket = ensureEnemyResources();
+        var _esCanAfford = true;
+        for (var _esR in _esCost) {
+          if (_esCost[_esR] && (_esBucket[_esR] || 0) < _esCost[_esR]) { _esCanAfford = false; break; }
+        }
+        if (_esBuilder && _esCanAfford) {
+          return { action: 'build_elements_storage', reason: 'element_storage_near_full', elCurrent: elCurrent, elLimit: elLimit };
+        }
+        // Preflight failed — fall through to lower priorities instead of looping on this action.
       }
     }
 
