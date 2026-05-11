@@ -1,34 +1,33 @@
 # PR_REVIEW
 
-Task: BOT-DEFENSE-RETREAT-01 — stand-and-fight guard near enemy base
-PR: #55
+Task: BOT-PROGRESSION-01 — disable tank cap + fix worker priority ordering
+PR: #58
 Verdict: APPROVED_TO_MERGE
 Manual QA: UNVERIFIED / BATCH QA
 
 ## Reason
 
-PR implements the approved narrow guard for enemy tanks near home/base. It does not rewrite retreat, combat, pathfinding, economy, scout lifecycle, or BOT-ATTACK-11/12.
+PR fixes the main audited progression blocker: the experimental enemy light_tank cap of 3. It also prevents future cap logic from blocking worker/scout replacement before worker checks run.
 
 ## What is OK
 
 - Review lane PR against sandbox/main.
-- Changed gameplay file: src/main.js.
-- Added stand-and-fight constants.
-- Added helper `FE_DEFENSE_RETREAT01ShouldStandAndFight()`.
-- Guard added before `FE_10H1_clearAttackOrder()` in retreat path.
-- Guard added before defend target reassignment in HQ defense path.
-- `FE_10H1_startRetreat()` call updated with threats param.
-- Minimal telemetry added only when guard fires.
+- Changed gameplay file: `src/main.js`.
+- Disables `window.FE_ENEMY_LIGHT_TANK_CAP` by setting it to `0`.
+- Keeps natural limits: one factory, queue depth 1, element cost, build time, ATTACK-12 gate.
+- Reorders `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` so worker/scout checks happen before any tank cap block.
+- Does not touch combat, pathfinding, scout lifecycle, BOT-ATTACK-11/12, economy expansion, factory queue depth, save/load, render/fog, mapgen.
+- No new telemetry added; existing telemetry is enough.
 - `node --check src/main.js` passed.
 - PR is mergeable.
 
 ## Concerns
 
 - Manual behavior is not verified yet.
-- Helper uses current attack/approach target and near-home/near-range checks; if values are slightly off, guard may fire too rarely or too often.
-- This is acceptable for sprint mode and will be covered by batch QA.
+- Disabling the cap may let enemy tanks accumulate over longer games if natural economy limits are not enough, but this is acceptable for Playable Bot MVP and can be tuned later.
+- This does not add new economy expansion buildings; it only removes the hard production stall.
 
 ## Next action
 
-Merge PR #55.
-After merge, mark Manual QA as `UNVERIFIED / BATCH QA` and continue sprint.
+Merge PR #58.
+After merge, keep Manual QA as `UNVERIFIED / BATCH QA` and continue sprint.
