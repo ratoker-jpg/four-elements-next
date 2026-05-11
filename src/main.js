@@ -9067,6 +9067,10 @@ function debugLog(event, payload={}) {
   // BOT-BASELINE-01: enemy starting energy must match player (160).
   const FE_PATCH_BASELINE_01_START_ENERGY = 160;
 
+  // BOT-ECONOMY-01A: enemy builds elements_storage when element storage is near full.
+  // Threshold: when current element count >= 80% of storage limit, build elements_storage.
+  const FE_ECONOMY_01A_ELEMENTS_STORAGE_THRESHOLD = 0.8;
+
   function FE_PATCH_09C2EnsureEnemyScenarioEnergyReserve() {
     const bucket = ensureEnemyResources();
     if (bucket._patch09c2ScenarioEnergyReady === true) return bucket;
@@ -9122,6 +9126,124 @@ function debugLog(event, payload={}) {
       u.state !== 'moving_to_build' &&
       u.state !== 'building'
     ) || null;
+  }
+
+  // BOT-ECONOMY-01A: check if enemy already has or is building elements_storage.
+  function FE_PATCH_09C2ElementsStorageExistsOrQueued() {
+    if (!game) return false;
+
+    const hasBuilding = (game.buildings || []).some(b =>
+      b &&
+      b.kind === 'building' &&
+      b.type === 'elements_storage' &&
+      buildingOwner(b) === 'enemy' &&
+      !b.destroyed &&
+      !b.dead
+    );
+    if (hasBuilding) return true;
+
+    return (game.units || []).some(u =>
+      u &&
+      u.kind === 'unit' &&
+      u.type === 'builder' &&
+      unitOwner(u) === 'enemy' &&
+      (
+        u.buildOrder?.type === 'elements_storage' ||
+        (u.currentBuilding && (game.buildings || []).some(b =>
+          b && b.id === u.currentBuilding && b.type === 'elements_storage' && buildingOwner(b) === 'enemy'
+        ))
+      )
+    );
+  }
+
+  // BOT-ECONOMY-01A: find a free enemy builder to build elements_storage.
+  // Reuses the same builder search as separator/factory.
+  function FE_PATCH_09C2FindEnemyBuilderForElementsStorage() {
+    return (game?.units || []).find(u =>
+      u &&
+      u.kind === 'unit' &&
+      u.type === 'builder' &&
+      unitOwner(u) === 'enemy' &&
+      (u.hp ?? 1) > 0 &&
+      u.state !== 'moving_to_build' &&
+      u.state !== 'building'
+    ) || null;
+  }
+
+  // BOT-ECONOMY-01A: order an enemy builder to build elements_storage.
+  function FE_PATCH_09C2OrderEnemyBuilderBuildElementsStorage() {
+    if (!game || game.screen !== 'game' || game.skirmishMode !== true) return false;
+    if (game.gameResult || game.result || game.gameEnded || game.ended) return false;
+
+    if (FE_PATCH_09C2ElementsStorageExistsOrQueued()) return false;
+
+    const builder = FE_PATCH_09C2FindEnemyBuilderForElementsStorage();
+    if (!builder) {
+      debugLog('enemy_elements_storage_build_skipped_no_available_builder_01a', {
+        enemyBuilders:(game.units || []).filter(u => u?.type === 'builder' && unitOwner(u) === 'enemy').map(getBuilderDebugSnapshot)
+      });
+      return false;
+    }
+
+    const plan = findBuildPlan(builder, 'elements_storage');
+    if (!plan || !plan.spot || !Array.isArray(plan.path)) {
+      debugLog('enemy_elements_storage_build_failed_no_plan_01a', {
+        builder:getBuilderDebugSnapshot(builder),
+        plan:safeCloneForLog(plan),
+        enemyBase:safeCloneForLog(FE_PATCH_08BResolveEnemyHomeBase?.() || FE_PATCH_06AExistingEnemyBase?.())
+      });
+      return false;
+    }
+
+    const spent = FE_PATCH_09C2SpendEnemyBuildCost('elements_storage');
+    if (!spent.ok) return false;
+
+    builder._reservedBuildCost = {
+      type: 'elements_storage',
+      owner: 'enemy',
+      cost: spent.cost,
+      createdAt: performance.now(),
+      resourcesAfterSpend: safeCloneForLog(ensureEnemyResources())
+    };
+    builder._buildRefunded = false;
+    builder.buildOrder = {
+      type: 'elements_storage',
+      spot: plan.spot,
+      accessCell: plan.accessCell || null,
+      owner: 'enemy',
+      silent: true,
+      createdAt: performance.now(),
+      sourcePatch: 'ECONOMY-01A'
+    };
+    builder.path = plan.path || [];
+    builder.state = 'moving_to_build';
+    builder._buildMoveTimer = 0;
+    builder._buildStuckTimer = 0;
+    builder._buildNoProgressTimer = 0;
+    builder._buildLastX = builder.x;
+    builder._buildLastY = builder.y;
+    builder._buildLastDist = null;
+    builder._debugStateTimer = 0;
+
+    // BOT-ECONOMY-01A telemetry: update when order is placed.
+    if (!game._economy01) {
+      game._economy01 = {
+        elementsStorageOrderCount: 0,
+        elementsStorageLastOrderAt: 0,
+        elementsStorageLastReason: null
+      };
+    }
+    game._economy01.elementsStorageOrderCount = (game._economy01.elementsStorageOrderCount || 0) + 1;
+    game._economy01.elementsStorageLastOrderAt = game.time || 0;
+    game._economy01.elementsStorageLastReason = 'element_storage_near_full';
+
+    debugLog('enemy_builder_elements_storage_build_order_assigned_01a', {
+      builder:getBuilderDebugSnapshot(builder),
+      plan:safeCloneForLog(plan),
+      reservedBuildCost:safeCloneForLog(builder._reservedBuildCost)
+    });
+
+    return true;
   }
 
   function FE_PATCH_09C2EnemySeparatorBuildCost() {
@@ -9980,6 +10102,7 @@ function debugLog(event, payload={}) {
   var FE_PATCH_BRAIN_01_ACTIONS = [
     'build_separator',      // no separator exists → build it
     'build_factory',        // no factory exists → build it
+    'build_elements_storage', // BOT-ECONOMY-01A: element storage near full → expand capacity
     'produce_builder',      // builder count below minimum → produce
     'produce_harvester',    // harvester count below minimum → produce
     'produce_combat',       // workers ok → produce light_tank / attack
@@ -9997,6 +10120,17 @@ function debugLog(event, payload={}) {
     // Priority 2: factory — without it, no unit production.
     if (!FE_PATCH_09DEnemyFactoryExistsOrQueued()) {
       return { action: 'build_factory', reason: 'no_factory' };
+    }
+
+    // Priority 2.5 (BOT-ECONOMY-01A): elements_storage — separator stalls when element cap is full.
+    // Only trigger when element storage is near full AND separator/factory baseline exists.
+    if (!FE_PATCH_09C2ElementsStorageExistsOrQueued()) {
+      var elKey = FE_PATCH_09C3EnemyElementKey();
+      var elLimit = getStorageLimitsForOwner('enemy')[elKey] || 20;
+      var elCurrent = ensureEnemyResources()[elKey] || 0;
+      if (elCurrent >= elLimit * FE_ECONOMY_01A_ELEMENTS_STORAGE_THRESHOLD) {
+        return { action: 'build_elements_storage', reason: 'element_storage_near_full', elCurrent: elCurrent, elLimit: elLimit };
+      }
     }
 
     // Priority 3: builder — without builder, no buildings can be built.
@@ -10039,6 +10173,9 @@ function debugLog(event, payload={}) {
         break;
       case 'build_factory':
         FE_PATCH_09DOrderEnemyBuilderBuildFactory();
+        break;
+      case 'build_elements_storage':
+        FE_PATCH_09C2OrderEnemyBuilderBuildElementsStorage();
         break;
       case 'produce_builder':
         FE_PATCH_BRAIN_01_TryProduceWorker('builder');
