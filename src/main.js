@@ -3695,6 +3695,46 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return sawAnything;
   }
 
+  // BOT-ATTACK-11: choose attack target point from scout intel.
+  // Returns { targetX, targetY, targetSource, targetReason, intelFreshnessSec,
+  //           playerHqSeen, playerHqEstimateAvailable } or null if no intel.
+  function FE_ATTACK11ChooseIntelTarget() {
+    var intel = game && game.enemyIntel;
+    var now = game ? (game.time || 0) : 0;
+    if (!intel) return null;
+
+    // Priority 1: Confirmed player HQ from scout visual.
+    if (intel.playerHqSeen === true
+        && Number.isFinite(intel.playerHqCenterX)
+        && Number.isFinite(intel.playerHqCenterY)) {
+      return {
+        targetX: intel.playerHqCenterX,
+        targetY: intel.playerHqCenterY,
+        targetSource: 'confirmed_hq',
+        targetReason: 'scout_confirmed_player_hq',
+        intelFreshnessSec: intel.lastUsefulIntelAt > 0 ? (now - intel.lastUsefulIntelAt) : -1,
+        playerHqSeen: true,
+        playerHqEstimateAvailable: !!(intel.playerHqEstimateCenterX != null)
+      };
+    }
+
+    // Priority 2: Estimated player HQ from scout target metadata.
+    if (intel.playerHqEstimateCenterX != null
+        && intel.playerHqEstimateCenterY != null) {
+      return {
+        targetX: intel.playerHqEstimateCenterX,
+        targetY: intel.playerHqEstimateCenterY,
+        targetSource: 'estimated_hq',
+        targetReason: 'scout_estimate_player_hq',
+        intelFreshnessSec: intel.lastPlayerHqEstimateAt > 0 ? (now - intel.lastPlayerHqEstimateAt) : -1,
+        playerHqSeen: false,
+        playerHqEstimateAvailable: true
+      };
+    }
+
+    return null;
+  }
+
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
     try {
@@ -4842,28 +4882,73 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var target = FE_PATCH_08BAttackTarget(state, enemyUnits);
     var attackOrderType = 'attack';
 
-    // ATTACK-01: fallback when 10F1 vision finds no target.
-    // If bot has enough army but no visible/known target, attack player HQ directly.
-    // This prevents tanks from idling at base forever when enemy has no vision.
-    // Uses 'hq_push' orderType so 10F1 vision gate allows the attack on an unseen HQ.
+    // ATTACK-01 / BOT-ATTACK-11: fallback when 10F1 vision finds no target.
+    // Priority: intel rally point → legacy findBaseBuilding fallback.
+    var _a11Intel = null;
+    var _a11AssignedCount = 0;
+    var _a11LastFailureReason = '';
     if (!target) {
-      var playerHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
-      if (playerHQ && (playerHQ.hp || 0) > 0) {
-        target = playerHQ;
-        attackOrderType = 'hq_push';
+      // BOT-ATTACK-11: use scout intel as rally point for coordinate move.
+      _a11Intel = FE_ATTACK11ChooseIntelTarget();
+      if (_a11Intel) {
+        // Move eligible attack tanks to intel rally point via SilentMoveTo.
+        // Only tanks from the current wave slice, not all enemy tanks.
+        var _a11WaveSize = Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length)));
+        var _a11WaveSlice = enemyUnits.slice(0, _a11WaveSize);
+        for (var _a11i = 0; _a11i < _a11WaveSlice.length; _a11i++) {
+          var _a11u = _a11WaveSlice[_a11i];
+          if (!_a11u || (_a11u.hp || 0) <= 0) continue;
+          // Skip tanks already on an attack order or intel rally.
+          if (_a11u.attackTargetId || _a11u.attackApproachTargetId || _a11u._attack11IntelRally) continue;
+          if (FE_ATTACK10IsWaveLocked(_a11u)) continue;
+          if (FE_PATCH_08BSilentMoveTo(_a11u, _a11Intel.targetX, _a11Intel.targetY)) {
+            _a11u._attack11IntelRally = {
+              x: _a11Intel.targetX,
+              y: _a11Intel.targetY,
+              source: _a11Intel.targetSource,
+              reason: _a11Intel.targetReason,
+              assignedAt: game ? (game.time || 0) : 0
+            };
+            _a11AssignedCount++;
+          }
+        }
+      }
+
+      if (_a11AssignedCount > 0) {
+        // Intel rally dispatched — tanks are moving to intel point.
+        // Do not set target/attackOrderType — attack chain proceeds differently for rally.
+      } else {
+        // No intel or no tanks assigned via intel — legacy fallback.
+        if (_a11Intel) {
+          _a11LastFailureReason = 'intel_path_failed_or_no_eligible_tanks';
+        }
+        var playerHQ = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+        if (playerHQ && (playerHQ.hp || 0) > 0) {
+          target = playerHQ;
+          attackOrderType = 'hq_push';
+        }
       }
     }
 
-    // ATTACK-01 telemetry: record whether vision or fallback was used.
+    // ATTACK-01 telemetry: record whether vision, intel rally, or fallback was used.
     if (game) {
+      var _a01Source = 'vision';
+      if (_a11AssignedCount > 0) _a01Source = 'intel_rally';
+      else if (attackOrderType === 'hq_push') _a01Source = 'hq_fallback';
       game._attack01LastDispatch = {
-        source: attackOrderType === 'hq_push' ? 'hq_fallback' : 'vision',
+        source: _a01Source,
         targetId: target ? (target.id || null) : null,
         targetType: target ? (target.type || null) : null,
+        intelRallySource: _a11Intel ? _a11Intel.targetSource : null,
+        intelRallyAssignedCount: _a11AssignedCount,
         armyScore: FE_PATCH_08BArmyScore(enemyUnits),
         waveSize: Math.max(1, Math.min(enemyUnits.length, Number(FE_10I1_knobs().maxAttackWaveSize || enemyUnits.length))),
         at: game.time || 0
       };
+      // BOT-ATTACK-11: update lastFailureReason after dispatch decision is known.
+      if (game._botAttack11) {
+        game._botAttack11.lastFailureReason = _a11LastFailureReason || '';
+      }
     }
 
     // ATTACK-02: mark state when hq_push is used so retreat/strength layers
@@ -4874,6 +4959,15 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     } else {
       state._attack02HqPush = false;
       state._attack02HqPushArmyScore = 0;
+    }
+
+    // BOT-ATTACK-11: intel rally was dispatched — tanks are moving to intel point.
+    // Skip normal target dispatch. Attack phase starts; arrival detection handles the rest.
+    if (_a11AssignedCount > 0) {
+      state.phase = 'attack';
+      state._attack02HqPush = false;
+      state._attack02HqPushArmyScore = 0;
+      return true;
     }
 
     if (!target) {
@@ -6758,6 +6852,43 @@ function updateEnemyBot(dt) {
       if (game) game._botIntel01Error = String(_intel01Err && _intel01Err.message ? _intel01Err.message : _intel01Err);
     }
 
+    // BOT-ATTACK-11: debug telemetry for intel rally attack target selection.
+    // Initial snapshot — rallyArrivedCount/rallyConvertedCount/rallyClearedCount are updated
+    // after the intel rally arrival detection block runs (in attack phase).
+    try {
+      var _a11IntelObj = game && game.enemyIntel;
+      var _a11Tanks = (game && game.units) ? game.units : [];
+      var _a11RallyActive = 0;
+      for (var _a11ti = 0; _a11ti < _a11Tanks.length; _a11ti++) {
+        var _a11tu = _a11Tanks[_a11ti];
+        if (_a11tu && _a11tu._attack11IntelRally) _a11RallyActive++;
+      }
+      var _a11TIntel = FE_ATTACK11ChooseIntelTarget();
+      var _a11LastDispatch = game ? (game._attack01LastDispatch || null) : null;
+      var _a11LastFail = game && game._botAttack11 ? (game._botAttack11.lastFailureReason || '') : '';
+      game._botAttack11 = {
+        targetSource: _a11TIntel ? _a11TIntel.targetSource : (_a11LastDispatch ? _a11LastDispatch.source : 'none'),
+        targetX: _a11TIntel ? _a11TIntel.targetX : null,
+        targetY: _a11TIntel ? _a11TIntel.targetY : null,
+        usesIntelPoint: !!(_a11TIntel),
+        assignedCount: _a11LastDispatch ? (_a11LastDispatch.intelRallyAssignedCount || 0) : 0,
+        rallyActiveCount: _a11RallyActive,
+        rallyArrivedCount: 0,
+        rallyConvertedCount: 0,
+        rallyClearedCount: 0,
+        fallbackUsed: _a11LastDispatch ? (_a11LastDispatch.source === 'hq_fallback') : false,
+        lastFailureReason: _a11LastFail,
+        h1RecallGuardedCount: 0,
+        playerHqSeen: !!(_a11IntelObj && _a11IntelObj.playerHqSeen),
+        playerHqEstimateAvailable: !!(_a11IntelObj && _a11IntelObj.playerHqEstimateCenterX != null),
+        intelFreshnessSec: _a11TIntel ? _a11TIntel.intelFreshnessSec : -1,
+        lastScoutIntelAt: _a11IntelObj ? _a11IntelObj.lastUsefulIntelAt : 0,
+        lastScoutSweepDoneAt: _a11IntelObj ? _a11IntelObj.lastScoutSweepDoneAt : 0
+      };
+    } catch (_a11TErr) {
+      if (game) game._botAttack11Error = String(_a11TErr && _a11TErr.message ? _a11TErr.message : _a11TErr);
+    }
+
     if (!game || game.screen !== 'game' || game.paused) return;
     if (game.skirmishMode !== true) return;
     if (game.gameResult || game.result || game.gameEnded || game.ended) return;
@@ -6806,7 +6937,24 @@ function updateEnemyBot(dt) {
         if (_a04PHQ) _a04TgtId = _a04PHQ.id || null;
         FE_PATCH_08BAttack04Telemetry(state.phase, 'FE_10H1', _a04HqBlock, _a04Reason, _a04TgtId, _a04ArmyN);
       }
-      if (!_a04HqBlock && FE_10H1_updateEnemyRetreatAndDefenseMvp(state, enemyTanks, now)) return;
+      // BOT-ATTACK-11: exclude intel-rally tanks from FE_10H1 defense/retreat pool.
+      // 10H1 can overwrite their manual_move orders or set phase='defend'/'regroup',
+      // which cancels the intel rally attack. Filter rally tanks out, and if 10H1
+      // triggers but rally tanks exist, keep attack phase and don't return.
+      var _a11H1Tanks = enemyTanks.filter(function(u) { return u && !u._attack11IntelRally; });
+      var _a11H1RallyCount = enemyTanks.filter(function(u) { return u && u._attack11IntelRally; }).length;
+      var _a11H1Result = !_a04HqBlock && _a11H1Tanks.length > 0 && FE_10H1_updateEnemyRetreatAndDefenseMvp(state, _a11H1Tanks, now);
+      if (_a11H1Result && _a11H1RallyCount === 0) return;
+      if (_a11H1Result && _a11H1RallyCount > 0) {
+        // 10H1 issued defend/retreat for non-rally tanks, but rally tanks must continue.
+        // Restore attack phase so rally tanks are not abandoned.
+        state.phase = 'attack';
+        // Don't return — let rally tanks proceed through the rest of the bot tick.
+      }
+      // BOT-ATTACK-11 telemetry: record how many rally tanks were guarded from 10H1 recall.
+      if (_a11H1RallyCount > 0 && game && game._botAttack11) {
+        game._botAttack11.h1RecallGuardedCount = _a11H1RallyCount;
+      }
     } catch (err) {
       const g10h1 = FE_10H1_getGameObject && FE_10H1_getGameObject();
       if (g10h1) {
@@ -6835,17 +6983,31 @@ function updateEnemyBot(dt) {
         }
         // Don't return — attack phase continues for wave tanks
       } else {
-        FE_PATCH_08BDefend(enemyTanks, pressureTarget, state);
+        // BOT-ATTACK-11: do not recall tanks on intel rally for base defense.
+        var _a11DefendTanks = enemyTanks.filter(function(u) { return u && !u._attack11IntelRally; });
+        if (_a11DefendTanks.length > 0) {
+          FE_PATCH_08BDefend(_a11DefendTanks, pressureTarget, state);
+        }
+        // If intel rally tanks exist, keep attack phase so they continue moving.
+        var _a11RallyTanks = enemyTanks.filter(function(u) { return u && u._attack11IntelRally; });
+        if (_a11RallyTanks.length > 0) {
+          state.phase = 'attack';
+        }
         return;
       }
     }
 
     // ATTACK-04: During hq_push, OverChasing/AttackStateInvalid should not trigger regroup.
     // Player HQ is intentionally far from base; target may be "invalid" by vision rules but HQ exists.
+    // BOT-ATTACK-11: intel rally tanks are also far from home intentionally — skip regroup.
     var _a04HqValid2 = FE_PATCH_08BIsHqPushValid(state);
+    var _a11RallyActive2 = enemyTanks.some(function(u) { return u && u._attack11IntelRally; });
     if (state.phase === 'attack' && FE_PATCH_08BOverChasing(enemyTanks, state)) {
       if (_a04HqValid2) {
         // hq_push: intentionally far from base — skip over_chase regroup
+        if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.overChaseBlocked = true;
+      } else if (_a11RallyActive2) {
+        // BOT-ATTACK-11: intel rally tanks are moving to enemy base — skip over_chase regroup.
         if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.overChaseBlocked = true;
       } else {
         FE_PATCH_08BStartRegroup(state, 'over_chase');
@@ -6854,6 +7016,9 @@ function updateEnemyBot(dt) {
     if (state.phase === 'attack' && FE_PATCH_08BAttackStateInvalid(enemyTanks, state)) {
       if (_a04HqValid2) {
         // hq_push: target "invalid" by vision rules but HQ exists — skip regroup
+        if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.attackInvalidBlocked = true;
+      } else if (_a11RallyActive2) {
+        // BOT-ATTACK-11: intel rally has no real target id yet — skip target_invalid regroup.
         if (game && game._attack04LastOverrideCheck) game._attack04LastOverrideCheck.attackInvalidBlocked = true;
       } else {
         FE_PATCH_08BStartRegroup(state, 'target_invalid');
@@ -6864,6 +7029,8 @@ function updateEnemyBot(dt) {
       for (const unit of enemyTanks) {
         // ATTACK-10: wave-locked units stay on their attack, not pulled home.
         if (FE_ATTACK10IsWaveLocked(unit)) continue;
+        // BOT-ATTACK-11: clear intel rally flag when regrouping — attack is over.
+        if (unit._attack11IntelRally) delete unit._attack11IntelRally;
         if (FE_PATCH_08BShouldKeepUnitNearHome(unit, state, FE_10I1_knobs().regroupArriveRadiusTiles)) {
           FE_PATCH_08BReturnUnitHome(unit, state);
         }
@@ -6884,6 +7051,54 @@ function updateEnemyBot(dt) {
     }
 
     if (state.phase === 'attack') {
+      // BOT-ATTACK-11: intel rally arrival detection.
+      // When a tank on intel rally arrives near the rally point, try to find
+      // a visible/known target via 10F1. If found → attack command. If not → clear rally.
+      var _a11RallyArrived = 0, _a11RallyConverted = 0, _a11RallyCleared = 0;
+      for (var _a11ri = 0; _a11ri < enemyTanks.length; _a11ri++) {
+        var _a11ru = enemyTanks[_a11ri];
+        if (!_a11ru || !_a11ru._attack11IntelRally) continue;
+        var _a11Rally = _a11ru._attack11IntelRally;
+        var _a11Dist = Math.abs(Math.round(_a11ru.x) - _a11Rally.x) + Math.abs(Math.round(_a11ru.y) - _a11Rally.y);
+        var _a11PathDone = !(_a11ru.path && _a11ru.path.length);
+        var _a11Arrived = false;
+        var _a11ArrivalReason = '';
+        // Primary: tank is near the intel rally point.
+        if (_a11Dist <= 3) {
+          _a11Arrived = true;
+          _a11ArrivalReason = 'dist_le_3';
+        }
+        // Cleanup: path consumed but tank not yet at point — only if reasonably close.
+        if (!_a11Arrived && _a11PathDone && _a11Dist <= 6) {
+          _a11Arrived = true;
+          _a11ArrivalReason = 'path_done_dist_le_6';
+        }
+        if (!_a11Arrived) continue;
+        _a11RallyArrived++;
+        // Try to find a direct attack target from current position (now near enemy base).
+        var _a11Decision = FE_PATCH_10F1SelectAttackDecision(state, [_a11ru]);
+        if (_a11Decision && _a11Decision.canDirectAttack && _a11Decision.target) {
+          FE_PATCH_08BCommandEnemyTankAttack(_a11ru, _a11Decision.target, state, 'attack');
+          _a11RallyConverted++;
+        } else {
+          // No visible target yet — clear rally flag, let normal bot logic decide.
+          _a11RallyCleared++;
+        }
+        delete _a11ru._attack11IntelRally;
+      }
+
+      // BOT-ATTACK-11: update telemetry with arrival detection results.
+      if (game && game._botAttack11) {
+        var _a11RallyRemaining = 0;
+        for (var _a11txi = 0; _a11txi < enemyTanks.length; _a11txi++) {
+          if (enemyTanks[_a11txi] && enemyTanks[_a11txi]._attack11IntelRally) _a11RallyRemaining++;
+        }
+        game._botAttack11.rallyActiveCount = _a11RallyRemaining;
+        game._botAttack11.rallyArrivedCount = _a11RallyArrived;
+        game._botAttack11.rallyConvertedCount = _a11RallyConverted;
+        game._botAttack11.rallyClearedCount = _a11RallyCleared;
+      }
+
       // ATTACK-03: Re-issue attack orders for tanks that lost their targets during attack phase.
       // When a tank's path is consumed/cleared and re-path fails, it goes idle but phase stays 'attack'
       // → updateEnemyBot returns immediately → no re-ordering ever happens. Fix: detect lost-order
