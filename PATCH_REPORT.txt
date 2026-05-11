@@ -3184,3 +3184,11 @@ Manual test plan:
 9. cooldownUntil ≈ game.time + 30 (не 500000+).
 10. Scout по-прежнему killable.
 11. Tank attack-chain работает.
+
+BOT-SCOUT-02B2
+
+- Added a scout return-target resolver in `src/main.js` that tries exact home first, then nearby reachable cells around the enemy base/home anchor within radius 1..4.
+- Validated fallback targets only through the existing scout movement assignment helper; passable/free checks are not treated as sufficient on their own.
+- Returning scouts now keep `_scout02BState='returning'`, store `returnX/returnY`, and only enter cooldown when near home or the selected return target.
+- When return routing fails, the scout no longer cools down far from base and telemetry now reports attempted return targets plus fallback reason details.
+- Kept all changes scoped away from ATTACK-08/09/10, tank attack-chain, combat damage, map generation, render/fog, save/load, and scout production/cap.

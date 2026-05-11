@@ -3510,6 +3510,130 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return { x: 4, y: 4 };
   }
 
+  function FE_SCOUT02BHasUsableMoveAssignment(unit) {
+    return !!(
+      unit &&
+      unit.state === 'manual_move' &&
+      Array.isArray(unit.path) &&
+      unit.path.length > 0
+    );
+  }
+
+  function FE_SCOUT02BRememberReturnAttempt(unit, attempt) {
+    if (!unit || !attempt) return;
+    if (!Array.isArray(unit._scout02BAttemptedReturnTargets)) {
+      unit._scout02BAttemptedReturnTargets = [];
+    }
+    unit._scout02BAttemptedReturnTargets.push({
+      x: Number.isFinite(attempt.x) ? Math.round(attempt.x) : null,
+      y: Number.isFinite(attempt.y) ? Math.round(attempt.y) : null,
+      radius: Number.isFinite(attempt.radius) ? attempt.radius : 0,
+      label: attempt.label || '',
+      ok: !!attempt.ok
+    });
+  }
+
+  function FE_SCOUT02BPushReturnRingCandidates(list, seen, cx, cy, radius) {
+    if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(radius) || radius < 1) return;
+    for (var dx = -radius; dx <= radius; dx++) {
+      for (var dy = -radius; dy <= radius; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        var tx = Math.round(cx + dx);
+        var ty = Math.round(cy + dy);
+        if (!inBounds(tx, ty)) continue;
+        var key = tx + ',' + ty;
+        if (seen[key]) continue;
+        seen[key] = true;
+        list.push({ x: tx, y: ty, radius: radius, label: 'fallback_ring_' + radius });
+      }
+    }
+  }
+
+  function FE_SCOUT02BGetReturnCandidates(unit) {
+    var homeX = Number.isFinite(unit?._scout02BHomeX) ? Math.round(unit._scout02BHomeX) : null;
+    var homeY = Number.isFinite(unit?._scout02BHomeY) ? Math.round(unit._scout02BHomeY) : null;
+    var candidates = [];
+    var seen = Object.create(null);
+    if (homeX != null && homeY != null && inBounds(homeX, homeY)) {
+      seen[homeX + ',' + homeY] = true;
+      candidates.push({ x: homeX, y: homeY, radius: 0, label: 'home_exact' });
+    }
+
+    var base = null;
+    try {
+      if (typeof FE_PATCH_08BResolveEnemyHomeBase === 'function') {
+        base = FE_PATCH_08BResolveEnemyHomeBase();
+      }
+    } catch (_) {}
+
+    if (base && typeof adjacentFreeCellsForRect === 'function') {
+      var edgeCells = adjacentFreeCellsForRect(base.x, base.y, base.w, base.h, unit?.id);
+      for (var i = 0; i < edgeCells.length; i++) {
+        var edge = edgeCells[i];
+        if (!edge || !inBounds(edge.x, edge.y)) continue;
+        var edgeKey = Math.round(edge.x) + ',' + Math.round(edge.y);
+        if (seen[edgeKey]) continue;
+        seen[edgeKey] = true;
+        candidates.push({
+          x: Math.round(edge.x),
+          y: Math.round(edge.y),
+          radius: 1,
+          label: 'hq_edge'
+        });
+      }
+    }
+
+    var ringCenter = FE_SCOUT02BGetEnemyHomeAnchor();
+    if (homeX != null && homeY != null) {
+      ringCenter = { x: homeX, y: homeY };
+    }
+    for (var radius = 1; radius <= 4; radius++) {
+      FE_SCOUT02BPushReturnRingCandidates(candidates, seen, ringCenter.x, ringCenter.y, radius);
+    }
+    return candidates;
+  }
+
+  function FE_SCOUT02BResolveReturnMove(unit) {
+    if (!unit) return false;
+    var candidates = FE_SCOUT02BGetReturnCandidates(unit);
+    unit._scout02BAttemptedReturnTargets = [];
+    unit._scout02BReturnFallbackReason = '';
+
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (!candidate || !inBounds(candidate.x, candidate.y)) continue;
+      var moveTarget = {
+        x: candidate.x,
+        y: candidate.y,
+        label: 'return',
+        source: candidate.label || 'return_candidate',
+        reason: candidate.label || ''
+      };
+      var ok = FE_10C1_trySetScoutMove(unit, moveTarget);
+      ok = ok && FE_SCOUT02BHasUsableMoveAssignment(unit);
+      FE_SCOUT02BRememberReturnAttempt(unit, {
+        x: candidate.x,
+        y: candidate.y,
+        radius: candidate.radius,
+        label: candidate.label,
+        ok: ok
+      });
+      if (!ok) continue;
+
+      unit._scout02BReturnX = Math.round(candidate.x);
+      unit._scout02BReturnY = Math.round(candidate.y);
+      unit._scout02BReturnFallbackReason = candidate.label === 'home_exact'
+        ? ''
+        : 'exact_home_unreachable';
+      return true;
+    }
+
+    unit._scout02BReturnX = null;
+    unit._scout02BReturnY = null;
+    unit._scout02BReturnFallbackReason = candidates.length ? 'no_reachable_return_target' : 'no_return_candidates';
+    return false;
+  }
+
   // BOT-SCOUT-02B: is scout busy with lifecycle (not free for new scouting MVP assignment)?
   function FE_SCOUT02BIsLifecycleBusy(u) {
     if (!u || u.type !== 'scout') return false;
@@ -3602,11 +3726,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         var _curHp = s.hp || 0;
         if (_curHp < _prevHp) {
           s._scout02BState = 'returning';
-          s._scout02BReason = 'damaged';
           s._scout02BLastHp = _curHp;
-          // Stop observing, go home.
-          var _homeTarget = { x: s._scout02BHomeX, y: s._scout02BHomeY };
-          FE_10C1_trySetScoutMove(s, _homeTarget);
+          var _returnFromDamage = FE_SCOUT02BResolveReturnMove(s);
+          s._scout02BReason = _returnFromDamage ? 'damaged' : 'return_no_route';
           continue;
         }
         s._scout02BLastHp = _curHp;
@@ -3624,9 +3746,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         }
         if (_nearbyThreat) {
           s._scout02BState = 'returning';
-          s._scout02BReason = 'threat';
-          var _homeTarget2 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
-          FE_10C1_trySetScoutMove(s, _homeTarget2);
+          var _returnFromThreat = FE_SCOUT02BResolveReturnMove(s);
+          s._scout02BReason = _returnFromThreat ? 'threat' : 'return_no_route';
           continue;
         }
       }
@@ -3700,9 +3821,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
         // Transition: observing → returning
         s._scout02BState = 'returning';
-        s._scout02BReason = 'observe_done';
-        var _homeTarget3 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
-        FE_10C1_trySetScoutMove(s, _homeTarget3);
+        var _returnFromObserve = FE_SCOUT02BResolveReturnMove(s);
+        s._scout02BReason = _returnFromObserve ? 'observe_done' : 'return_no_route';
         continue;
       }
 
@@ -3710,13 +3830,22 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (lcState === 'returning') {
         // Check if scout has arrived near home.
         var _distToHome = FE_10C1_distTiles(s, { x: s._scout02BHomeX, y: s._scout02BHomeY });
+        var _hasReturnTarget = Number.isFinite(s._scout02BReturnX) && Number.isFinite(s._scout02BReturnY);
+        var _distToReturn = _hasReturnTarget
+          ? FE_10C1_distTiles(s, { x: s._scout02BReturnX, y: s._scout02BReturnY })
+          : -1;
         var _hasPathR = s.path && s.path.length > 0;
         var _isIdleR = !s.state || s.state === 'idle';
         // BOT-SCOUT-02B1: cooldown only when near home, not when path is empty far away.
-        if (_distToHome <= FE_SCOUT02B_HOME_ARRIVE_DIST) {
+        if (
+          _distToHome <= FE_SCOUT02B_HOME_ARRIVE_DIST ||
+          (_hasReturnTarget && _distToReturn <= FE_SCOUT02B_HOME_ARRIVE_DIST)
+        ) {
           // Transition: returning → cooldown
           s._scout02BState = 'cooldown';
-          s._scout02BReason = 'at_home';
+          s._scout02BReason = (_hasReturnTarget && _distToReturn <= FE_SCOUT02B_HOME_ARRIVE_DIST && _distToHome > FE_SCOUT02B_HOME_ARRIVE_DIST)
+            ? 'at_return'
+            : 'at_home';
           s._scout02BCooldownUntil = now + FE_SCOUT02B_COOLDOWN_SEC;
           // Stop movement.
           s.path = [];
@@ -3725,20 +3854,30 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
           s._dirTargetKey = null;
           // Clear scout target metadata so a fresh one will be chosen after cooldown.
           s._fe10c1ScoutTarget = null;
+          s._scout02BReturnX = null;
+          s._scout02BReturnY = null;
+          s._scout02BAttemptedReturnTargets = [];
+          s._scout02BReturnFallbackReason = '';
         }
         // If not arrived yet, path continues. If path was lost, try re-pathing home.
         if (!_hasPathR && !_isIdleR) {
           // Unit is stuck in non-idle state without path — force to idle so loop can retry.
           s.state = 'idle';
           s.command = '';
-        } else if (!_hasPathR && _isIdleR && _distToHome > FE_SCOUT02B_HOME_ARRIVE_DIST) {
+        } else if (
+          !_hasPathR &&
+          _isIdleR &&
+          _distToHome > FE_SCOUT02B_HOME_ARRIVE_DIST &&
+          (!_hasReturnTarget || _distToReturn > FE_SCOUT02B_HOME_ARRIVE_DIST)
+        ) {
           // BOT-SCOUT-02B1: Lost path but not home yet — re-path. Never enter cooldown here.
-          var _homeTarget4 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
-          var _repathOk = FE_10C1_trySetScoutMove(s, _homeTarget4);
+          var _repathOk = FE_SCOUT02BResolveReturnMove(s);
           if (_repathOk) {
             s._scout02BReason = '';
           } else {
-            s._scout02BReason = 'return_repath_failed';
+            s._scout02BReason = Array.isArray(s._scout02BAttemptedReturnTargets) && s._scout02BAttemptedReturnTargets.length
+              ? 'return_repath_failed'
+              : 'return_no_route';
           }
         }
         continue;
@@ -3754,6 +3893,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         s._scout02BReason = 'cooldown_done';
         s._scout02BObserveUntil = 0;
         s._scout02BCooldownUntil = 0;
+        s._scout02BReturnX = null;
+        s._scout02BReturnY = null;
+        s._scout02BAttemptedReturnTargets = [];
+        s._scout02BReturnFallbackReason = '';
         // Clear old target so a new one will be chosen.
         s._fe10c1ScoutTarget = null;
         s._fe10c1Role = null;
@@ -4242,6 +4385,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       unit._scout02BCooldownUntil = 0;
       unit._scout02BHomeX = _homeAnchor.x;
       unit._scout02BHomeY = _homeAnchor.y;
+      unit._scout02BReturnX = null;
+      unit._scout02BReturnY = null;
+      unit._scout02BAttemptedReturnTargets = [];
+      unit._scout02BReturnFallbackReason = '';
       unit._scout02BLastHp = unit.hp || 70;
     }
 
@@ -5558,6 +5705,9 @@ function updateEnemyBot(dt) {
         var _s02bDistHome = (_s02b._scout02BHomeX != null && _s02b._scout02BHomeY != null)
           ? FE_10C1_distTiles(_s02b, { x: _s02b._scout02BHomeX, y: _s02b._scout02BHomeY })
           : -1;
+        var _s02bDistReturn = (_s02b._scout02BReturnX != null && _s02b._scout02BReturnY != null)
+          ? FE_10C1_distTiles(_s02b, { x: _s02b._scout02BReturnX, y: _s02b._scout02BReturnY })
+          : -1;
         game._botScout02B = {
           scoutId: _s02b.id || null,
           state: _s02b._scout02BState || 'none',
@@ -5565,11 +5715,16 @@ function updateEnemyBot(dt) {
           timeBase: 'game.time',
           gameTime: game ? (game.time || 0) : 0,
           distToHome: _s02bDistHome,
+          distToReturn: _s02bDistReturn,
           pathLen: (_s02b.path && _s02b.path.length) || 0,
           homeX: _s02b._scout02BHomeX ?? null,
           homeY: _s02b._scout02BHomeY ?? null,
+          returnX: _s02b._scout02BReturnX ?? null,
+          returnY: _s02b._scout02BReturnY ?? null,
           x: FE_10C1_unitTileX(_s02b),
           y: FE_10C1_unitTileY(_s02b),
+          attemptedReturnTargets: Array.isArray(_s02b._scout02BAttemptedReturnTargets) ? _s02b._scout02BAttemptedReturnTargets.slice() : [],
+          returnFallbackReason: _s02b._scout02BReturnFallbackReason || '',
           observeUntil: _s02b._scout02BObserveUntil || 0,
           cooldownUntil: _s02b._scout02BCooldownUntil || 0,
           targetX: _s02b._fe10c1ScoutTarget?.x ?? _s02b.targetX ?? null,
@@ -5583,11 +5738,16 @@ function updateEnemyBot(dt) {
           timeBase: 'game.time',
           gameTime: game ? (game.time || 0) : 0,
           distToHome: -1,
+          distToReturn: -1,
           pathLen: 0,
           homeX: null,
           homeY: null,
+          returnX: null,
+          returnY: null,
           x: null,
           y: null,
+          attemptedReturnTargets: [],
+          returnFallbackReason: '',
           observeUntil: 0,
           cooldownUntil: 0,
           targetX: null,
@@ -12891,4 +13051,3 @@ init();
   }, true);
 })();
 // FE_PATCH_07C2_RESULT_STATE_BLOCKS_PAUSE_END
-
