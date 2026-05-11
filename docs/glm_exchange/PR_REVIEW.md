@@ -1,35 +1,57 @@
 # PR_REVIEW
 
-Task: BOT-ECONOMY-01A — enemy builds elements_storage when element storage near full
-PR: #61
-Verdict: APPROVED_TO_MERGE
+Task: POWER-SYSTEM-01A — shared unit upkeep + enemy power_plant response
+PR: #62
+Verdict: REQUEST_CHANGES
 Manual QA: UNVERIFIED / BATCH QA
 
 ## Reason
 
-REQUEST_CHANGES was addressed. BRAIN-01 now checks that `build_elements_storage` is actually executable before selecting that action, so it should not starve lower-priority builder/harvester/combat actions when storage construction cannot currently start.
+The implementation direction matches the approved reduced scope, but the PR is currently not mergeable against `sandbox/main`.
+
+Do not merge until the branch is updated from current `sandbox/main`, conflicts are resolved if any, and checks are rerun.
 
 ## What is OK
 
-- Review lane PR against `sandbox/main`.
-- Changed gameplay file: `src/main.js`.
-- Scope remains focused on `elements_storage` only.
-- Adds `build_elements_storage` BRAIN-01 action when enemy faction element storage is near full.
-- Adds existing/queued `elements_storage` check.
-- Adds free enemy builder check.
-- Adds energy affordability preflight before choosing the action.
-- Existing order function still keeps safety checks.
-- Does not add emergency builder, factory queue depth changes, power/upkeep, second factory/separator, target chaining, or broader economy scaling.
-- Does not touch combat, pathfinding, scout lifecycle, BOT-ATTACK-11/12, player economy, save/load, render/fog/mapgen.
-- `node --check src/main.js` reported as passed.
-- PR is mergeable.
+- Review lane PR.
+- Implements shared unit upkeep for player and enemy.
+- Adds `FE_POWER_UNIT_MW = 1` and raises HQ power baseline to 15 MW.
+- Extends player power usage with unit upkeep.
+- Adds enemy power evaluation with enemy HQ + power_plant capacity.
+- Enemy separator/factory now respect enemy power pressure.
+- BRAIN-01 can choose `build_power_plant` when enemy power usage is near capacity.
+- Has preflight checks for enemy power_plant order: no duplicate build in progress, free builder, can afford.
+- Allows multiple power_plants over time but prevents duplicate simultaneous build orders.
+- Does not add UI warnings/toasts, emergency builder, factory queue depth changes, target chaining, combat/pathfinding/scout/economy formula changes.
+- `node --check src/main.js` and `node --check src/config/runtime_flags.js` reported as passed.
 
 ## Concerns
 
-- Manual behavior is not verified yet.
-- Codex noted that only one `elements_storage` can be built. This is acceptable for BOT-ECONOMY-01A reduced scope; multi-storage scaling should be a later economy patch, not added here.
+- PR is not mergeable right now.
+- This is a balance-sensitive patch. Manual behavior is not verified yet.
+- PR description says "separator pauses first, then factory", but the code appears to reserve power in order: units → separator → factory, which means factory is the first building to lose power after units/separator consume capacity. This matches the older separator-priority behavior, but the wording should not mislead later QA.
+- `src/config/runtime_flags.js` change is acceptable only because power constants are already defined there; do not add wider config churn.
+
+## Required changes
+
+Update PR branch from current `sandbox/main`, resolve conflicts if any, and rerun:
+
+```bash
+node --check src/main.js
+node --check src/config/runtime_flags.js
+```
+
+Keep scope exactly the same:
+- no new UI/toast work;
+- no save/load changes unless a conflict forces a tiny derived-state fix;
+- no combat/pathfinding/scout/BOT-ATTACK changes;
+- no emergency builder;
+- no factory queue depth changes;
+- no target chaining;
+- no extra economy expansion beyond power_plant response.
+
+If the SHA changes, update `docs/glm_exchange/CODE_SUMMARY.md`.
 
 ## Next action
 
-Merge PR #61.
-After merge, keep Manual QA as `UNVERIFIED / BATCH QA`.
+Ask GLM to update PR #62 branch from current `sandbox/main` and return CODE_SUMMARY again.
