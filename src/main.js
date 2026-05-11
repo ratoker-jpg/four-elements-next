@@ -3481,6 +3481,42 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT01_ENEMY_SCOUT_MIN = 1;
   var FE_SCOUT01_ENEMY_SCOUT_CAP = 2;
 
+  // BOT-SCOUT-02B: lifecycle constants.
+  var FE_SCOUT02B_OBSERVE_SEC = 4;          // fixed 4 sec observing
+  var FE_SCOUT02B_COOLDOWN_SEC = 30;       // fixed 30 sec cooldown
+  var FE_SCOUT02B_ARRIVE_DIST = 2;         // tiles to target to count as "arrived"
+  var FE_SCOUT02B_HOME_ARRIVE_DIST = 3;    // tiles to home to count as "home"
+  var FE_SCOUT02B_THREAT_RADIUS = 5;       // tiles: nearby player light_tank triggers retreat
+
+  // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
+  function FE_SCOUT02BGetEnemyHomeAnchor() {
+    try {
+      if (typeof FE_PATCH_08BResolveEnemyHomeBase === 'function') {
+        var base = FE_PATCH_08BResolveEnemyHomeBase();
+        if (base && typeof FE_PATCH_08BHomeAnchorFromBase === 'function') {
+          var anchor = FE_PATCH_08BHomeAnchorFromBase(base);
+          if (anchor && Number.isFinite(anchor.x) && Number.isFinite(anchor.y)) return anchor;
+        }
+        // Fallback: base center directly.
+        if (base) {
+          return {
+            x: Math.round(base.x + (base.w || 1) / 2),
+            y: Math.round(base.y + (base.h || 1) / 2)
+          };
+        }
+      }
+    } catch (_) {}
+    // Last resort fallback.
+    return { x: 4, y: 4 };
+  }
+
+  // BOT-SCOUT-02B: is scout busy with lifecycle (not free for new scouting MVP assignment)?
+  function FE_SCOUT02BIsLifecycleBusy(u) {
+    if (!u || u.type !== 'scout') return false;
+    var st = u._scout02BState;
+    return st === 'observing' || st === 'returning' || st === 'cooldown';
+  }
+
   // Get all enemy scout units (alive).
   function FE_SCOUT01GetEnemyScouts() {
     return (game?.units || []).filter(u =>
@@ -3542,10 +3578,15 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   // Main enemy scout behavior update loop.
+  // BOT-SCOUT-02B: added lifecycle wrapper — observing/returning/cooldown handled
+  // by new code; outbound and scouts without _scout02BState continue using existing logic.
   function FE_SCOUT01UpdateEnemyScoutBehavior() {
     if (!game || game.screen !== 'game') return;
     var scouts = FE_SCOUT01GetEnemyScouts();
     if (!scouts.length) return;
+
+    var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    var gameTime = Number(game.time || 0);
 
     for (var i = 0; i < scouts.length; i++) {
       var s = scouts[i];
@@ -3554,26 +3595,159 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       // Skip if wave-locked (shouldn't happen, scout is excluded from waves).
       if (FE_ATTACK10IsWaveLocked(s)) continue;
 
-      var hasPath = s.path && s.path.length > 0;
-      var isIdle = !s.state || s.state === 'idle';
+      // --- BOT-SCOUT-02B: threat detection (applies to all lifecycle states) ---
+      if (s._scout02BState && (s._scout02BState === 'outbound' || s._scout02BState === 'observing')) {
+        // Check: scout took damage since last check.
+        var _prevHp = s._scout02BLastHp || (s.hp || 0);
+        var _curHp = s.hp || 0;
+        if (_curHp < _prevHp) {
+          s._scout02BState = 'returning';
+          s._scout02BLastHp = _curHp;
+          // Stop observing, go home.
+          var _homeTarget = { x: s._scout02BHomeX, y: s._scout02BHomeY };
+          FE_10C1_trySetScoutMove(s, _homeTarget);
+          continue;
+        }
+        s._scout02BLastHp = _curHp;
 
-      // BOT-SCOUT-01C: repath if scout has target metadata but no actual path
-      // and is idle — this means the original path assignment failed or was lost.
-      if (s._fe10c1Role === 'scout' && s._fe10c1ScoutTarget && !hasPath && isIdle) {
-        var repathOk = FE_10C1_trySetScoutMove(s, s._fe10c1ScoutTarget);
-        if (repathOk) continue; // repath succeeded, scout is now moving
-        // repath failed — clear stale metadata so a new target can be chosen
-        s._fe10c1ScoutTarget = null;
-        s._fe10c1Role = null;
+        // Check: nearby player light_tank within threat radius.
+        var _sx = FE_10C1_unitTileX(s);
+        var _sy = FE_10C1_unitTileY(s);
+        var _nearbyThreat = false;
+        var _units = game.units || [];
+        for (var _ti = 0; _ti < _units.length; _ti++) {
+          var _tu = _units[_ti];
+          if (!_tu || !isPlayerUnit(_tu) || _tu.type !== 'light_tank' || (_tu.hp || 0) <= 0) continue;
+          var _td = FE_10C1_distTiles(s, _tu);
+          if (_td <= FE_SCOUT02B_THREAT_RADIUS) { _nearbyThreat = true; break; }
+        }
+        if (_nearbyThreat) {
+          s._scout02BState = 'returning';
+          var _homeTarget2 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
+          FE_10C1_trySetScoutMove(s, _homeTarget2);
+          continue;
+        }
+      }
+      // Also update _scout02BLastHp for returning/cooldown scouts so it's fresh on next outbound.
+      if (s._scout02BState) {
+        s._scout02BLastHp = s.hp || 0;
       }
 
-      // Skip if already en route to a scout target with a valid path.
-      if (FE_SCOUT01IsScoutEnRoute(s)) continue;
+      // --- BOT-SCOUT-02B: lifecycle state dispatch ---
+      var lcState = s._scout02BState;
 
-      // Choose a new target and assign path.
-      var target = FE_SCOUT01ChooseScoutTarget(s);
-      if (target) {
-        FE_10C1_trySetScoutMove(s, target);
+      // Scouts without _scout02BState: fall through to existing BOT-SCOUT-01B/01C logic below.
+      if (!lcState) {
+        // Existing logic (unchanged).
+        var hasPath = s.path && s.path.length > 0;
+        var isIdle = !s.state || s.state === 'idle';
+
+        // BOT-SCOUT-01C: repath if scout has target metadata but no actual path
+        // and is idle — this means the original path assignment failed or was lost.
+        if (s._fe10c1Role === 'scout' && s._fe10c1ScoutTarget && !hasPath && isIdle) {
+          var repathOk = FE_10C1_trySetScoutMove(s, s._fe10c1ScoutTarget);
+          if (repathOk) continue;
+          s._fe10c1ScoutTarget = null;
+          s._fe10c1Role = null;
+        }
+
+        // Skip if already en route to a scout target with a valid path.
+        if (FE_SCOUT01IsScoutEnRoute(s)) continue;
+
+        // Choose a new target and assign path.
+        var target = FE_SCOUT01ChooseScoutTarget(s);
+        if (target) {
+          FE_10C1_trySetScoutMove(s, target);
+        }
+        continue;
+      }
+
+      // --- outbound ---
+      if (lcState === 'outbound') {
+        // Check if scout has arrived at or near its scouting target.
+        var _arrived = false;
+        if (s._fe10c1ScoutTarget) {
+          var _distToTarget = FE_10C1_distTiles(s, s._fe10c1ScoutTarget);
+          if (_distToTarget <= FE_SCOUT02B_ARRIVE_DIST) _arrived = true;
+        }
+        // Also arrived if path consumed and unit is idle.
+        var _hasPath = s.path && s.path.length > 0;
+        var _isIdleNow = !s.state || s.state === 'idle';
+        if (!_hasPath && _isIdleNow && s._fe10c1Role === 'scout') _arrived = true;
+
+        if (_arrived) {
+          // Transition: outbound → observing
+          s._scout02BState = 'observing';
+          s._scout02BObserveUntil = now + FE_SCOUT02B_OBSERVE_SEC * 1000;
+          // Stop movement.
+          s.path = [];
+          s.state = 'idle';
+          s.command = '';
+          // Keep targetX/targetY for telemetry; clear direction cache.
+          s._dirTargetKey = null;
+        }
+        // If not arrived, existing path continues moving. No action needed.
+        continue;
+      }
+
+      // --- observing ---
+      if (lcState === 'observing') {
+        // Wait until observe period ends.
+        if (now < (s._scout02BObserveUntil || 0)) continue;
+
+        // Transition: observing → returning
+        s._scout02BState = 'returning';
+        var _homeTarget3 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
+        FE_10C1_trySetScoutMove(s, _homeTarget3);
+        continue;
+      }
+
+      // --- returning ---
+      if (lcState === 'returning') {
+        // Check if scout has arrived near home.
+        var _distToHome = FE_10C1_distTiles(s, { x: s._scout02BHomeX, y: s._scout02BHomeY });
+        var _hasPathR = s.path && s.path.length > 0;
+        var _isIdleR = !s.state || s.state === 'idle';
+        if (_distToHome <= FE_SCOUT02B_HOME_ARRIVE_DIST || (!_hasPathR && _isIdleR)) {
+          // Transition: returning → cooldown
+          s._scout02BState = 'cooldown';
+          s._scout02BCooldownUntil = now + FE_SCOUT02B_COOLDOWN_SEC * 1000;
+          // Stop movement.
+          s.path = [];
+          s.state = 'idle';
+          s.command = '';
+          s._dirTargetKey = null;
+          // Clear scout target metadata so a fresh one will be chosen after cooldown.
+          s._fe10c1ScoutTarget = null;
+        }
+        // If not arrived yet, path continues. If path was lost, try re-pathing home.
+        if (!_hasPathR && !_isIdleR) {
+          // Unit is stuck in non-idle state without path — force to idle so loop can retry.
+          s.state = 'idle';
+          s.command = '';
+        } else if (!_hasPathR && _isIdleR && _distToHome > FE_SCOUT02B_HOME_ARRIVE_DIST) {
+          // Lost path but not home yet — re-path.
+          var _homeTarget4 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
+          FE_10C1_trySetScoutMove(s, _homeTarget4);
+        }
+        continue;
+      }
+
+      // --- cooldown ---
+      if (lcState === 'cooldown') {
+        // Wait until cooldown ends.
+        if (now < (s._scout02BCooldownUntil || 0)) continue;
+
+        // Transition: cooldown → outbound
+        s._scout02BState = 'outbound';
+        s._scout02BObserveUntil = 0;
+        s._scout02BCooldownUntil = 0;
+        // Clear old target so a new one will be chosen.
+        s._fe10c1ScoutTarget = null;
+        s._fe10c1Role = null;
+        // Fall through to existing target selection logic at the top of next tick.
+        // (The next updateEnemyBot call will pick up this free scout.)
+        continue;
       }
     }
   }
@@ -4047,6 +4221,17 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     unit._fe10c1ScoutIssuedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     unit._fe10c1Role = 'scout';
 
+    // BOT-SCOUT-02B: initialize lifecycle fields on first scout move assignment.
+    if (unit.type === 'scout' && !unit._scout02BState) {
+      var _homeAnchor = FE_SCOUT02BGetEnemyHomeAnchor();
+      unit._scout02BState = 'outbound';
+      unit._scout02BObserveUntil = 0;
+      unit._scout02BCooldownUntil = 0;
+      unit._scout02BHomeX = _homeAnchor.x;
+      unit._scout02BHomeY = _homeAnchor.y;
+      unit._scout02BLastHp = unit.hp || 70;
+    }
+
     // Sync movement target fields.
     unit.targetX = tx;
     unit.targetY = ty;
@@ -4191,7 +4376,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     }
 
     // BOT-SCOUT-01: prefer actual scout units for scouting. Only use tanks as fallback.
-    var freeScout = actualScouts.find((u) => !FE_10G1_isUnitBusyForScout(u));
+    // BOT-SCOUT-02B: scouts in observing/returning/cooldown are NOT free for new scout orders.
+    var freeScout = actualScouts.find((u) => !FE_10G1_isUnitBusyForScout(u) && !FE_SCOUT02BIsLifecycleBusy(u));
     if (!freeScout) {
       freeScout = enemyTanks.find((u) => u.type !== 'scout' && !FE_10G1_isUnitBusyForScout(u));
     }
@@ -5337,6 +5523,55 @@ function updateEnemyBot(dt) {
       };
     } catch (err) {
       if (game) game._botScout02AError = String(err && err.message ? err.message : err);
+    }
+
+    // BOT-SCOUT-02B: lifecycle telemetry.
+    try {
+      var _scout02bTelemetryScout = null;
+      var _scout02bScouts = FE_SCOUT01GetEnemyScouts();
+      if (_scout02bScouts.length > 0) {
+        // Report first scout with lifecycle state.
+        for (var _si3 = 0; _si3 < _scout02bScouts.length; _si3++) {
+          if (_scout02bScouts[_si3]._scout02BState) {
+            _scout02bTelemetryScout = _scout02bScouts[_si3];
+            break;
+          }
+        }
+        // If no scout has lifecycle yet, report first scout anyway (outbound being assigned).
+        if (!_scout02bTelemetryScout) _scout02bTelemetryScout = _scout02bScouts[0];
+      }
+      if (_scout02bTelemetryScout) {
+        var _s02b = _scout02bTelemetryScout;
+        game._botScout02B = {
+          scoutId: _s02b.id || null,
+          state: _s02b._scout02BState || 'none',
+          targetX: _s02b._fe10c1ScoutTarget?.x ?? _s02b.targetX ?? null,
+          targetY: _s02b._fe10c1ScoutTarget?.y ?? _s02b.targetY ?? null,
+          homeX: _s02b._scout02BHomeX ?? null,
+          homeY: _s02b._scout02BHomeY ?? null,
+          observeUntil: _s02b._scout02BObserveUntil || 0,
+          cooldownUntil: _s02b._scout02BCooldownUntil || 0,
+          pathLen: (_s02b.path && _s02b.path.length) || 0,
+          reason: _s02b._scout02BState || 'no_lifecycle',
+          at: game ? (game.time || 0) : 0
+        };
+      } else {
+        game._botScout02B = {
+          scoutId: null,
+          state: 'no_scouts',
+          targetX: null,
+          targetY: null,
+          homeX: null,
+          homeY: null,
+          observeUntil: 0,
+          cooldownUntil: 0,
+          pathLen: 0,
+          reason: 'no_scouts',
+          at: game ? (game.time || 0) : 0
+        };
+      }
+    } catch (err) {
+      if (game) game._botScout02BError = String(err && err.message ? err.message : err);
     }
 
     if (!game || game.screen !== 'game' || game.paused) return;
