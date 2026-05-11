@@ -3486,7 +3486,13 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT02B_COOLDOWN_SEC = 30;       // fixed 30 sec cooldown
   var FE_SCOUT02B_ARRIVE_DIST = 2;         // tiles to target to count as "arrived"
   var FE_SCOUT02B_HOME_ARRIVE_DIST = 3;    // tiles to home to count as "home"
-  var FE_SCOUT02B_THREAT_RADIUS = 5;       // tiles: nearby player light_tank triggers retreat
+  // BOT-SCOUT-02C: tiered threat radii replace old FE_SCOUT02B_THREAT_RADIUS=5.
+  // danger: immediate return (tank can attack or is about to be in range).
+  // awareness: telemetry only — scout sees tank but tank can't see/attack scout.
+  // light_tank.attackRange defaults to 1 (see getLightTankCombatStats);
+  // DANGER_RADIUS=2 gives 1-tile buffer beyond attack range. TUNING: adjust if attackRange changes.
+  var FE_SCOUT02C_DANGER_RADIUS = 2;        // tiles: immediate return when tank this close
+  var FE_SCOUT02C_THREAT_AWARE_RADIUS = 5;  // tiles: telemetry only, no retreat
 
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
@@ -3733,23 +3739,67 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         }
         s._scout02BLastHp = _curHp;
 
-        // Check: nearby player light_tank within threat radius.
-        var _sx = FE_10C1_unitTileX(s);
-        var _sy = FE_10C1_unitTileY(s);
-        var _nearbyThreat = false;
+        // BOT-SCOUT-02C: tiered threat detection.
+        // danger (≤DANGER_RADIUS): immediate return — tank can attack scout.
+        // awareness (DANGER_RADIUS < dist ≤ AWARE_RADIUS): telemetry only, no retreat.
+        var _nearbyDanger = false;
+        var _threatAware = false;
+        var _nearestThreatDist = -1;
         var _units = game.units || [];
         for (var _ti = 0; _ti < _units.length; _ti++) {
           var _tu = _units[_ti];
           if (!_tu || !isPlayerUnit(_tu) || _tu.type !== 'light_tank' || (_tu.hp || 0) <= 0) continue;
           var _td = FE_10C1_distTiles(s, _tu);
-          if (_td <= FE_SCOUT02B_THREAT_RADIUS) { _nearbyThreat = true; break; }
+          if (_nearestThreatDist < 0 || _td < _nearestThreatDist) _nearestThreatDist = _td;
+          if (_td <= FE_SCOUT02C_DANGER_RADIUS) { _nearbyDanger = true; break; }
+          if (_td <= FE_SCOUT02C_THREAT_AWARE_RADIUS) { _threatAware = true; }
         }
-        if (_nearbyThreat) {
+        // Store 02C threat telemetry on scout (used by telemetry block).
+        s._scout02CThreatSeen = _nearbyDanger || _threatAware;
+        s._scout02CNearestThreatDist = _nearestThreatDist;
+        if (_nearbyDanger) {
           s._scout02BState = 'returning';
           var _returnFromThreat = FE_SCOUT02BResolveReturnMove(s);
-          s._scout02BReason = _returnFromThreat ? 'threat' : 'return_no_route';
+          s._scout02BReason = _returnFromThreat ? 'threat_danger' : 'return_no_route';
+          s._scout02CThreatReturnReason = _returnFromThreat ? 'danger_radius' : 'return_no_route';
           continue;
         }
+        // Awareness zone: tank visible but not dangerous — record only, keep scouting.
+        s._scout02CThreatReturnReason = _threatAware ? 'awareness_no_retreat' : '';
+
+        // BOT-SCOUT-02C: scouting completeness telemetry (outbound/observing only).
+        // Count visible player units, buildings, HQ within scout view radius.
+        // This is telemetry-only; no auto-return based on seen objects.
+        var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+        var _pUnitsCount = 0;
+        var _pBuildingsCount = 0;
+        var _pHqSeen = false;
+        // Units: iterate game.units (only mobile units here).
+        var _allUnits = game.units || [];
+        for (var _vi = 0; _vi < _allUnits.length; _vi++) {
+          var _vu = _allUnits[_vi];
+          if (!_vu || (_vu.hp || 0) <= 0) continue;
+          var _vd = FE_10C1_distTiles(s, _vu);
+          if (_vd > _sViewR) continue;
+          if (_vu.kind === 'unit' && isPlayerUnit(_vu)) {
+            _pUnitsCount++;
+          }
+        }
+        // Buildings: separate loop over game.buildings (buildings are not in game.units).
+        var _allBuildings = game.buildings || [];
+        for (var _bi = 0; _bi < _allBuildings.length; _bi++) {
+          var _vb = _allBuildings[_bi];
+          if (!_vb || (_vb.hp || 0) <= 0) continue;
+          var _bd = FE_10C1_distTiles(s, _vb);
+          if (_bd > _sViewR) continue;
+          if (isPlayerBuilding(_vb)) {
+            _pBuildingsCount++;
+            if (_vb.type === 'hq_base' || _vb.type === 'hq') _pHqSeen = true;
+          }
+        }
+        s._scout02CSeenPlayerUnitsCount = _pUnitsCount;
+        s._scout02CSeenPlayerBuildingsCount = _pBuildingsCount;
+        s._scout02CSeenPlayerHq = _pHqSeen;
       }
       // Also update _scout02BLastHp for returning/cooldown scouts so it's fresh on next outbound.
       if (s._scout02BState) {
@@ -3897,6 +3947,13 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         s._scout02BReturnY = null;
         s._scout02BAttemptedReturnTargets = [];
         s._scout02BReturnFallbackReason = '';
+        // BOT-SCOUT-02C: reset threat/completeness telemetry for new outbound cycle.
+        s._scout02CThreatSeen = false;
+        s._scout02CNearestThreatDist = -1;
+        s._scout02CThreatReturnReason = '';
+        s._scout02CSeenPlayerUnitsCount = 0;
+        s._scout02CSeenPlayerBuildingsCount = 0;
+        s._scout02CSeenPlayerHq = false;
         // Clear old target so a new one will be chosen.
         s._fe10c1ScoutTarget = null;
         s._fe10c1Role = null;
@@ -4390,6 +4447,13 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       unit._scout02BAttemptedReturnTargets = [];
       unit._scout02BReturnFallbackReason = '';
       unit._scout02BLastHp = unit.hp || 70;
+      // BOT-SCOUT-02C: tiered threat + scouting completeness telemetry fields.
+      unit._scout02CThreatSeen = false;
+      unit._scout02CNearestThreatDist = -1;
+      unit._scout02CThreatReturnReason = '';
+      unit._scout02CSeenPlayerUnitsCount = 0;
+      unit._scout02CSeenPlayerBuildingsCount = 0;
+      unit._scout02CSeenPlayerHq = false;
     }
 
     // Sync movement target fields.
@@ -5728,7 +5792,14 @@ function updateEnemyBot(dt) {
           observeUntil: _s02b._scout02BObserveUntil || 0,
           cooldownUntil: _s02b._scout02BCooldownUntil || 0,
           targetX: _s02b._fe10c1ScoutTarget?.x ?? _s02b.targetX ?? null,
-          targetY: _s02b._fe10c1ScoutTarget?.y ?? _s02b.targetY ?? null
+          targetY: _s02b._fe10c1ScoutTarget?.y ?? _s02b.targetY ?? null,
+          // BOT-SCOUT-02C: tiered threat + scouting completeness telemetry
+          threatSeen: !!_s02b._scout02CThreatSeen,
+          nearestThreatDist: _s02b._scout02CNearestThreatDist ?? -1,
+          threatReturnReason: _s02b._scout02CThreatReturnReason || '',
+          seenPlayerUnitsCount: _s02b._scout02CSeenPlayerUnitsCount ?? 0,
+          seenPlayerBuildingsCount: _s02b._scout02CSeenPlayerBuildingsCount ?? 0,
+          seenPlayerHq: !!_s02b._scout02CSeenPlayerHq
         };
       } else {
         game._botScout02B = {
@@ -5751,7 +5822,14 @@ function updateEnemyBot(dt) {
           observeUntil: 0,
           cooldownUntil: 0,
           targetX: null,
-          targetY: null
+          targetY: null,
+          // BOT-SCOUT-02C: tiered threat + scouting completeness telemetry
+          threatSeen: false,
+          nearestThreatDist: -1,
+          threatReturnReason: '',
+          seenPlayerUnitsCount: 0,
+          seenPlayerBuildingsCount: 0,
+          seenPlayerHq: false
         };
       }
     } catch (err) {

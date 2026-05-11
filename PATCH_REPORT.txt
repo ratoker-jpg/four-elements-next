@@ -3192,3 +3192,132 @@ BOT-SCOUT-02B2
 - Returning scouts now keep `_scout02BState='returning'`, store `returnX/returnY`, and only enter cooldown when near home or the selected return target.
 - When return routing fails, the scout no longer cools down far from base and telemetry now reports attempted return targets plus fallback reason details.
 - Kept all changes scoped away from ATTACK-08/09/10, tank attack-chain, combat damage, map generation, render/fog, save/load, and scout production/cap.
+
+BOT-SCOUT-02C
+
+Lane: Review
+Patch: BOT-SCOUT-02C — tiered threat detection + scouting completeness telemetry
+Problem: Scout sees player light_tank at distance 5 (within scout view=7) and immediately retreats, but light_tank view=4 cannot see the scout at that distance. This makes scouting incomplete — scout returns without gathering useful intel.
+
+Changes in src/main.js:
+
+1. Replaced FE_SCOUT02B_THREAT_RADIUS=5 with two tiered constants:
+   - FE_SCOUT02C_DANGER_RADIUS=2 — immediate return (tank can attack or 1-tile buffer)
+   - FE_SCOUT02C_THREAT_AWARE_RADIUS=5 — telemetry only, no retreat
+   Danger radius=2 based on light_tank.attackRange default=1 (see getLightTankCombatStats).
+   TUNING: adjust DANGER_RADIUS if attackRange changes.
+
+2. Rewrote threat detection (was L3736-3752):
+   - danger zone (≤DANGER_RADIUS): immediate return, reason='threat_danger'
+   - awareness zone (DANGER_RADIUS < dist ≤ AWARE_RADIUS): telemetry only, scout keeps scouting
+   - Tracks nearestThreatDist across all player light_tanks
+   - Stores _scout02CThreatSeen, _scout02CNearestThreatDist, _scout02CThreatReturnReason on scout
+
+3. Added scouting completeness telemetry (outbound/observing only):
+   - Counts visible player units, buildings, HQ within scout view radius (7 tiles)
+   - Uses isPlayerUnit() and isPlayerBuilding() helpers
+   - Stores _scout02CSeenPlayerUnitsCount, _scout02CSeenPlayerBuildingsCount, _scout02CSeenPlayerHq
+   - Telemetry-only — NO auto-return based on seen objects (per spec)
+
+4. Added init fields in scout lifecycle init block:
+   - _scout02CThreatSeen, _scout02CNearestThreatDist, _scout02CThreatReturnReason
+   - _scout02CSeenPlayerUnitsCount, _scout02CSeenPlayerBuildingsCount, _scout02CSeenPlayerHq
+
+5. Extended telemetry game._botScout02B with:
+   - threatSeen (bool)
+   - nearestThreatDist (int, -1 = none)
+   - threatReturnReason ('danger_radius' | 'awareness_no_retreat' | '')
+   - seenPlayerUnitsCount (int)
+   - seenPlayerBuildingsCount (int)
+   - seenPlayerHq (bool)
+   Both main-scout and no-scouts branches updated.
+
+6. Reset _scout02C fields on cooldown→outbound transition.
+
+7. Removed all usages of FE_SCOUT02B_THREAT_RADIUS (was only L3745).
+   Old reason='threat' replaced with 'threat_danger'.
+
+What was NOT touched:
+- Outbound target selection — unchanged
+- BOT-SCOUT-02B2 return fallback (FE_SCOUT02BResolveReturnMove / return candidates) — unchanged
+- Damage detection — still causes immediate return (reason='damaged')
+- BOT-SCOUT-02A targetability / production — unchanged
+- ATTACK-08/09/10 — unchanged
+- findPath / passable / combat / map / render / save — unchanged
+
+Verification:
+- node --check src/main.js -> PASS
+
+Safety:
+- assets changed: no
+- economy changed: no
+- combat changed: no
+- pathfinding changed: no
+- production/factory changed: no
+- BOT-SCOUT-02A code untouched
+- ATTACK code untouched
+- Google Drive sync touched: no
+- production paths touched: no
+
+Manual test plan:
+1. New game. Scout goes outbound, passes player tank at distance 4-5.
+2. Scout should NOT return — state stays outbound/observing.
+3. Telemetry: threatSeen=true, nearestThreatDist=4 or 5, threatReturnReason='awareness_no_retreat'.
+4. Scout passes tank at distance ≤2 → immediate return, reason='threat_danger', threatReturnReason='danger_radius'.
+5. Scout takes damage → immediate return, reason='damaged' (unchanged from 02B1).
+6. seenPlayerUnitsCount/seensPlayerBuildingsCount/seenPlayerHq populated during outbound/observing.
+7. After cooldown→outbound: all _scout02C fields reset to defaults.
+8. No tank present: threatSeen=false, nearestThreatDist=-1, threatReturnReason=''.
+
+---
+
+Задача: BOT-SCOUT-02C1 — fix scouting completeness telemetry (buildings/HQ source + view radius)
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-scout-02c-tiered-threat (amend commit)
+
+Проблема:
+BOT-SCOUT-02C scouting completeness считал buildings/HQ через game.units с фильтром kind==='building',
+но здания лежат в game.buildings, а player HQ имеет type='hq_base', не только 'hq'.
+Из-за этого seenPlayerBuildingsCount и seenPlayerHq всегда были 0/false.
+View radius был захардкожен как 7 вместо чтения из UNIT_DEFS.scout.view.
+
+Что исправлено:
+
+1. Buildings count: отдельный loop по game.buildings вместо game.units.
+   - Старый: один loop по game.units, фильтр _vu.kind==='building' — никогда не срабатывает
+   - Новый: отдельный loop по game.buildings с isPlayerBuilding()
+
+2. HQ detection: type === 'hq_base' || type === 'hq'
+   - Старый: if (_vu.type === 'hq') — не ловит 'hq_base'
+   - Новый: if (_vb.type === 'hq_base' || _vb.type === 'hq')
+
+3. View radius из UNIT_DEFS.scout.view с fallback 7:
+   - Старый: var _sViewR = 7;
+   - Новый: var _sViewR = (UNIT_DEFS && UNIT_DEFS.scout && Number.isFinite(UNIT_DEFS.scout.view)) ? UNIT_DEFS.scout.view : 7;
+
+4. Units count: оставлен через game.units (только мобильные юниты).
+
+Что НЕ менялось:
+- Tiered threat behavior (danger ≤2 retreat, aware 3-5 telemetry only) — unchanged
+- BOT-SCOUT-02B2 return fallback — unchanged
+- Damage detection — unchanged
+- No auto-return по seenPlayerBuildings/HQ
+- Init fields (_scout02C*) — unchanged
+- Reset fields on outbound — unchanged
+
+Изменённые файлы:
+- src/main.js — scouting completeness telemetry block (L3770-3802)
+- PATCH_REPORT.txt — добавлена эта запись
+
+Verification:
+- node --check src/main.js -> PASS
+
+Safety:
+- assets changed: no
+- economy changed: no
+- combat changed: no
+- pathfinding changed: no
+- tiered threat logic untouched
+- BOT-SCOUT-02B2 return fallback untouched
+- Google Drive sync touched: no
