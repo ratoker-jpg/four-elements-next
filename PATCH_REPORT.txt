@@ -3910,3 +3910,129 @@ Enemy bot не имеет стабильного persisted intel snapshot для
 7. intelFreshnessSec растёт со временем в game._botIntel01.
 8. Tank attack behavior не изменён.
 9. Scout lifecycle идентичен до патча.
+
+---
+
+Задача: BOT-ATTACK-11 — enemy tanks use scout intel target point as attack rally
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-11-intel-rally-target (от sandbox/main)
+
+Цель:
+Когда enemy light_tank attack target selection не находит цель через 10F1 vision
+(visible/known), использовать game.enemyIntel как источник target point.
+Танки двигаются к intel-координатам через FE_PATCH_08BSilentMoveTo (coordinate move),
+а не через setLightTankAttackApproachGeneric (реальный object target).
+При прибытии в район intel-точки — попытка найти visible target через 10F1 и
+переключиться на attack. Если цель не найдена — очистка rally flag, обычная bot logic.
+
+Root cause:
+Текущая attack-chain не поддерживает point-target (без real building/unit id):
+- FE_PATCH_07BGetHostileLightTankTargetKind требует target.kind/owner/hp
+- setLightTankAttackApproachGeneric требует target.id для attackApproachTargetId
+- FE_PATCH_06BResolveApproachTarget ищет target по id среди game.buildings/units
+- FE_ATTACK10IsWaveTargetAlive ищет targetId среди реальных объектов
+- Synthetic point object невозможен без cascade-изменений
+
+Решение:
+Intel rally — coordinate-based move через уже существующую FE_PATCH_08BSilentMoveTo.
+Танки получают _attack11IntelRally флаг с координатами и source.
+Не ломает ни одну существующую attack-функцию.
+
+Priority:
+1. confirmed_hq — game.enemyIntel.playerHqCenterX/Y (scout видел HQ визуально)
+2. estimated_hq — game.enemyIntel.playerHqEstimateCenterX/Y (scout target metadata)
+3. legacy_fallback — findBaseBuilding('player') как раньше
+
+Что сделано:
+
+1. FE_ATTACK11ChooseIntelTarget() — helper после FE_INTEL01UpdateFromScout:
+   - Читает game.enemyIntel
+   - Priority 1: confirmed HQ (playerHqSeen + playerHqCenterX/Y)
+   - Priority 2: estimated HQ (playerHqEstimateCenterX/Y)
+   - Возвращает { targetX, targetY, targetSource, targetReason, intelFreshnessSec,
+     playerHqSeen, playerHqEstimateAvailable } или null
+
+2. FE_PATCH_08BPrepareAttack ATTACK-01 fallback:
+   - Старый: if (!target) → findBaseBuilding('player') → hq_push
+   - Новый: if (!target) → FE_ATTACK11ChooseIntelTarget() →
+     если intel есть → SilentMoveTo(intelX, intelY) + _attack11IntelRally flag →
+     если assignedCount > 0 → return true (attack phase) →
+     если assignedCount === 0 или intel нет → legacy findBaseBuilding fallback
+   - return true / state.phase='attack' только если assignedCount > 0
+   - Не назначает unit.command='attack' вручную (SilentMoveTo ставит manual_move)
+   - Назначает только eligible tanks из waveSlice (не все enemy tanks)
+
+3. Intel rally arrival detection в bot tick (state.phase === 'attack'):
+   - Primary: dist(tank, rally) <= 3 → arrived
+   - Cleanup: pathDone + dist <= 6 → arrived (path_done_far)
+   - При arrival: FE_PATCH_10F1SelectAttackDecision → если direct target → attack command
+   - Если target не найден → очистить rally flag, bot logic продолжит
+
+4. Minimal guards:
+   - ATTACK-04 overChase/attackInvalid: intel rally tanks пропускают regroup
+   - ATTACK-04 pressure defense: intel rally tanks не отзываются для защиты базы
+   - Regroup phase: очистка _attack11IntelRally флага
+
+5. Telemetry game._botAttack11:
+   - targetSource, targetX/Y, usesIntelPoint
+   - assignedCount, rallyActiveCount
+   - rallyArrivedCount, rallyConvertedCount
+   - fallbackUsed, lastFailureReason
+   - playerHqSeen, playerHqEstimateAvailable
+   - intelFreshnessSec, lastScoutIntelAt, lastScoutSweepDoneAt
+
+6. ATTACK-01 telemetry расширена:
+   - source: 'vision' | 'intel_rally' | 'hq_fallback'
+   - intelRallySource, intelRallyAssignedCount
+
+Изменённые файлы:
+- src/main.js — FE_ATTACK11ChooseIntelTarget, FE_PATCH_08BPrepareAttack fallback,
+  arrival detection, guards, telemetry
+- PATCH_REPORT.txt
+
+Что НЕ тронуто:
+- BOT-SCOUT-02B2/02C/02D/02D3/02D4/02E — scout behavior
+- BOT-INTEL-01 update logic
+- FE_PATCH_10F1SelectAttackDecision — vision/memory target selection
+- FE_PATCH_10F1CanDirectAttackTarget — vision gate
+- setLightTankAttackApproachGeneric — не изменён
+- FE_PATCH_07BGetHostileLightTankTargetKind — не изменён
+- FE_PATCH_06BResolveApproachTarget — не изменён
+- ATTACK-08/09/10 internals — не изменены (только добавлены guards)
+- ATTACK-07 sync — не изменён
+- ATTACK-06 re-path — не изменён
+- Enemy light_tank production/cap
+- Combat damage/range/cooldowns
+- findPath/passable internals
+- Map generation, render, fog, save/load, economy
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Manual test plan:
+1. Запустить свежую игру (skirmish).
+2. Дождаться scout соберёт intel → game._botIntel01.playerHqSeen: true.
+3. Подтвердить game._botIntel01.playerHqCenterX/Y указывает на район базы игрока.
+4. Дождаться enemy light_tank wave.
+5. Проверить game._botAttack11:
+   - targetSource='confirmed_hq' или 'estimated_hq'
+   - targetX/Y ≈ координаты базы игрока
+   - usesIntelPoint=true
+   - fallbackUsed=false
+   - assignedCount > 0
+6. Наблюдать: танки двигаются к intel-координатам.
+7. При прибытии к intel-точке → rallyArrivedCount растёт.
+8. Если видят цель → rallyConvertedCount растёт, танки атакуют.
+9. Без intel: targetSource='none', usesIntelPoint=false, legacy fallback.
+10. Scout behavior не изменился.
+11. Combat/damage/range не изменился.
+
+Безопасность:
+- Scout behavior не тронут
+- Economy не тронута
+- Combat не тронут
+- findPath/passable не тронуты
+- ATTACK-10 wave internals не тронуты (только guards добавлены)
+- Google Drive sync тронут: нет
+
