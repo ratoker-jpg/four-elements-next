@@ -1,3 +1,9 @@
+> **STATUS: FROZEN / ARCHIVED**
+> Этот файл больше не обновляется. Новые patch reports создаются в `docs/patches/{TASK_ID}.md`.
+> Индекс всех патчей: `docs/patches/INDEX.md`.
+> Заморожен после патча BOT-ATTACK-12A (PR #50, 2026-05-11).
+> Исторические записи сохранены как есть.
+
 Task: SANDBOX-00 - prepare GLM sandbox
 Timestamp: 2026-05-09 20:17:44 +03:00
 

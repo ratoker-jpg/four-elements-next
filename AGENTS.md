@@ -16,7 +16,7 @@ C:\Users\Den\Desktop\four elements\four_elements_core_base
 
 Core rules:
 
-1. For **Fast lane** tasks (docs, prompts, PATCH_REPORT, .nojekyll, text-only HTML): commit and push directly to `sandbox/main`. No PR required.
+1. For **Fast lane** tasks (docs, prompts, .nojekyll, text-only HTML): commit and push directly to `sandbox/main`. No PR required.
 2. For **Review lane** tasks (src/main.js, src/core, src/config, assets, gameplay, economy, combat, pathfinding, save/load, multi-file code, anything risky): create a feature branch and a PR. Do not push directly to `sandbox/main`.
 3. Keep diffs minimal and reversible.
 4. Do not rewrite architecture unless explicitly requested.
@@ -26,25 +26,38 @@ Core rules:
 8. Do not run Google Drive sync helpers from this sandbox.
 9. Do not touch the production folder.
 10. If the task is ambiguous, stop and ask before changing files.
-11. **After every patch**, update the relevant roadmap file (`docs/project/scout_unit_roadmap_20260509.md` or `docs/project/four_elements_patch_roadmap_actual.md`): mark completed patches with ✅ and PR number, confirm what's next in the sequence. This keeps the roadmap the single source of truth for progress and planning.
-12. **For code/gameplay/bot tasks, always use the two-phase workflow from `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md`: Phase 1 = audit/plan only; Phase 2 = implementation only after explicit user confirmation “Делай”.**
+11. **Patch documentation**: GLM does NOT update PATCH_REPORT.txt (frozen) or roadmap files. After PR merge, GPT creates `docs/patches/{TASK_ID}.md`, updates `docs/patches/INDEX.md`, and updates roadmap files with ✅ + PR number.
+12. **For code/gameplay/bot tasks, always use the two-phase workflow from `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md`: Phase 1 = audit/plan only; Phase 2 = implementation only after explicit user confirmation "Делай".**
 13. **Do not over-split related low-risk changes into many tiny patches. Prefer Medium patches when 2-3 changes share one gameplay meaning, one smoke test, and nearby code. Do not combine movement/pathfinding/combat/brain/economy into one risky patch.**
+14. **After implementation**, GLM outputs CODE_SUMMARY in chat (5 fields: Branch, PR, SHA, Files, Checks). Full details go into PR description, not into chat.
 
 Working expectations:
 
 1. Prefer infrastructure, tooling, docs, and guardrail changes over broad refactors.
 2. Avoid touching `src/main.js` unless the task explicitly requires it.
 3. If `src/main.js` must be touched, explain why first and keep the edit as small as possible.
-4. Always create or update `PATCH_REPORT.txt` after changes.
-5. Always list changed files and checks that were run.
-6. Prefer reversible renames, guards, or isolated config updates over deletions.
-7. Always update the relevant roadmap after a patch — mark what's done (✅ + PR link) and what's planned next. Roadmap is the single source of truth for progress.
-8. Before implementation, read and follow `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` for patch size selection, two-phase workflow, and audit requirements.
+4. Always list changed files and checks that were run (in PR description and CODE_SUMMARY).
+5. Prefer reversible renames, guards, or isolated config updates over deletions.
+6. Before implementation, read and follow `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` for patch size selection, two-phase workflow, and audit requirements.
+
+GLM / GPT responsibility split:
+
+| Responsibility | GLM | GPT |
+|---------------|-----|-----|
+| Code implementation | ✅ | ❌ |
+| node --check | ✅ | ❌ |
+| Branch + commit + push + PR | ✅ | ❌ |
+| PR description (full) | ✅ | ❌ |
+| CODE_SUMMARY in chat | ✅ | ❌ |
+| `docs/patches/{TASK_ID}.md` | ❌ | ✅ (after PR merge) |
+| `docs/patches/INDEX.md` update | ❌ | ✅ (after PR merge) |
+| Roadmap updates (✅ + PR#) | ❌ | ✅ (after PR merge) |
+| AI_READ_FIRST.md update | ❌ | ✅ (if rules/SoT changed) |
 
 Git and review workflow:
 
 1. Use `sandbox/main` as the protected sandbox baseline branch.
-2. **Fast lane**: for docs, prompts, PATCH_REPORT, .nojekyll, text-only HTML — commit and push directly to `sandbox/main`. No PR.
+2. **Fast lane**: for docs, prompts, .nojekyll, text-only HTML — commit and push directly to `sandbox/main`. No PR.
 3. **Review lane**: for src/main.js, src/core, src/config, assets, gameplay, economy, combat, pathfinding, save/load, multi-file code, anything risky — create a feature branch and a PR.
 4. Review staged changes before commit.
 5. Never treat this sandbox as the source of truth for the production project.
