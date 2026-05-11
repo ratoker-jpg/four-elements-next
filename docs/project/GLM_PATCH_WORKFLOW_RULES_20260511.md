@@ -192,6 +192,7 @@ Large patch почти всегда Review lane и требует особенн
 - docs;
 - prompts;
 - docs/patches/;
+- docs/glm_exchange/;
 - roadmap/checkpoint;
 - текстовые правки без gameplay logic.
 ```
@@ -306,6 +307,12 @@ GPT-аудит отвечает по структуре:
 | `docs/patches/INDEX.md` update | ❌ | ✅ |
 | Roadmap updates (✅ + PR#) | ❌ | ✅ |
 | AI_READ_FIRST.md update | ❌ | ✅ (только при изменении правил/SoT) |
+| `docs/glm_exchange/PROMPT_TO_GLM.md` | ❌ | ✅ |
+| `docs/glm_exchange/AUDIT_FROM_GLM.md` | ✅ | ❌ |
+| `docs/glm_exchange/GPT_REVIEW.md` | ❌ | ✅ |
+| `docs/glm_exchange/PHASE2_COMMAND.md` | ❌ | ✅ |
+| `docs/glm_exchange/CODE_SUMMARY.md` | ✅ | ❌ |
+| `docs/glm_exchange/PR_REVIEW.md` | ❌ | ✅ |
 
 ---
 
@@ -318,7 +325,42 @@ GPT-аудит отвечает по структуре:
 
 ---
 
-## 13. Текущий вывод для bot/scout work
+## 13. GLM Exchange — file-based handoff
+
+Для обмена между GPT и GLM можно использовать фиксированные файлы:
+
+```text
+docs/glm_exchange/CURRENT_TASK.md
+docs/glm_exchange/PROMPT_TO_GLM.md
+docs/glm_exchange/AUDIT_FROM_GLM.md
+docs/glm_exchange/GPT_REVIEW.md
+docs/glm_exchange/PHASE2_COMMAND.md
+docs/glm_exchange/CODE_SUMMARY.md
+docs/glm_exchange/PR_REVIEW.md
+docs/glm_exchange/SESSION_LOG.md
+```
+
+Правила:
+
+```text
+1. Не создавать per-task подпапки.
+2. Не плодить новые exchange-файлы под каждую задачу.
+3. Все current-файлы полностью перезаписываются под текущую задачу.
+4. SESSION_LOG.md хранит только последние 5 handoff-записей.
+5. Результат Phase 1 GLM пишет только в AUDIT_FROM_GLM.md и ждёт команду «Делай».
+6. Если GPT_REVIEW.md не содержит Verdict: APPROVED_FOR_PHASE_2, GLM не пишет код.
+7. После Phase 2 GLM пишет CODE_SUMMARY.md и ждёт GPT PR review.
+```
+
+Полный сценарий и точные команды лежат в:
+
+```text
+docs/glm_exchange/README.md
+```
+
+---
+
+## 14. Текущий вывод для bot/scout work
 
 Для дальнейшей работы по боту предпочтительный формат:
 
