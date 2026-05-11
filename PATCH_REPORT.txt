@@ -3977,16 +3977,17 @@ Priority:
      восстанавливается для rally tanks
    - Regroup phase: очистка _attack11IntelRally флага
 
-5. Telemetry game._botAttack11:
-   - targetSource, targetX/Y, usesIntelPoint
-   - assignedCount, rallyActiveCount
-   - rallyArrivedCount, rallyConvertedCount, rallyClearedCount
-   - fallbackUsed, lastFailureReason, h1RecallGuardedCount
-   - playerHqSeen, playerHqEstimateAvailable
-   - intelFreshnessSec, lastScoutIntelAt, lastScoutSweepDoneAt
-   - Порядок: initial snapshot создаётся до decision logic (rally counters = 0),
-     затем обновляется после arrival detection block с реальными значениями тика.
-     lastFailureReason обновляется после FE_PATCH_08BPrepareAttack dispatch.
+5. Telemetry game._botAttack11 (обновлено BOT-ATTACK-11C):
+   - Intel availability: intelAvailable, intelTargetSource, intelTargetX/Y
+   - Dispatch result: dispatchSource, usesIntelPoint, assignedCount, fallbackUsed
+   - Skip reasons: skipReason, skipHasAttackOrder, skipAlreadyRally,
+     skipWaveLocked, skipPathFailed, skipDead
+   - Legacy aliases: targetSource/targetX/Y (→ intelTargetSource/X/Y)
+   - Rally state: rallyActiveCount, rallyArrivedCount, rallyConvertedCount,
+     rallyClearedCount, h1RecallGuardedCount
+   - Failure: lastFailureReason
+   - Intel metadata: playerHqSeen, playerHqEstimateAvailable,
+     intelFreshnessSec, lastScoutIntelAt, lastScoutSweepDoneAt
 
 6. ATTACK-01 telemetry расширена:
    - source: 'vision' | 'intel_rally' | 'hq_fallback'
@@ -4041,4 +4042,103 @@ Manual test plan:
 - findPath/passable не тронуты
 - ATTACK-10 wave internals не тронуты (только guards добавлены)
 - Google Drive sync тронут: нет
+
+Задача: BOT-ATTACK-11C — honest dispatch telemetry and skip reasons
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-11c-honest-telemetry (от sandbox/main)
+
+Цель:
+Раньше game._botAttack11 смешивал intel availability и actual dispatch в одних полях.
+Пример: targetSource='confirmed_hq' + usesIntelPoint=true при assignedCount=0 —
+телеметрия показывала, что intel rally используется, хотя ни один танк не был назначен.
+
+Root cause:
+1. targetSource / targetX / targetY отражали ДОСТУПНОСТЬ intel, а не РЕАЛЬНОЕ использование.
+   FE_ATTACK11ChooseIntelTarget() вызывался каждый тик → если intel доступна,
+   usesIntelPoint=true даже при dispatch через 10F1 vision.
+2. _a11LastFailureReason содержал только 'intel_path_failed_or_no_eligible_tanks'
+   без детализации (vision target available / no intel / no eligible tanks / wave locked / etc).
+3. usesIntelPoint=true при assignedCount=0 — противоречиво.
+
+Решение:
+Разделить поля телеметрии на три группы: intel availability / dispatch result / skip reasons.
+Добавить счётчики причин пропуска для каждого танка в wave slice.
+Не менять gameplay логику.
+
+Что сделано:
+
+1. Разделение полей game._botAttack11:
+   - Intel availability: intelAvailable, intelTargetSource, intelTargetX, intelTargetY
+   - Dispatch result: dispatchSource, usesIntelPoint, assignedCount, fallbackUsed
+   - Skip reasons: skipReason, skipHasAttackOrder, skipAlreadyRally,
+     skipWaveLocked, skipPathFailed, skipDead
+   - Legacy aliases: targetSource/targetX/targetY → зеркалят intelTargetSource/X/Y
+
+2. dispatchSource отражает реальный dispatch:
+   - 'vision' — 10F1 нашёл цель
+   - 'intel_rally' — реально назначен rally (assignedCount > 0)
+   - 'hq_fallback' — реально использован legacy findBaseBuilding fallback
+   - 'none' — приказ не выдан
+
+3. usesIntelPoint: true ТОЛЬКО при dispatchSource === 'intel_rally' && assignedCount > 0
+
+4. skipReason — честная причина, почему intel rally не назначен:
+   - 'vision_target_available' — 10F1 уже дал target
+   - 'no_intel' — нет intel из scout
+   - 'intel_rally_assigned' — rally назначен (позитивный случай)
+   - 'legacy_fallback_used' — использован legacy fallback
+   - 'no_eligible_tanks' — intel есть, но нет подходящих танков
+   - 'path_failed' — FE_PATCH_08BSilentMoveTo вернул false
+   - 'not_in_attack_dispatch' — тик не прошёл через attack dispatch
+
+5. Skip counters в wave slice loop:
+   - skipHasAttackOrder — танк уже имеет attackTargetId / attackApproachTargetId
+   - skipAlreadyRally — танк уже на _attack11IntelRally
+   - skipWaveLocked — FE_ATTACK10IsWaveLocked
+   - skipPathFailed — SilentMoveTo не смог проложить путь
+   - skipDead — hp <= 0
+
+6. Не удалены старые поля targetSource / targetX / targetY —
+   зеркалят intelTargetSource / intelTargetX / intelTargetY для обратной совместимости.
+
+Изменённые файлы:
+- src/main.js — game._botAttack11 поля, FE_PATCH_08BPrepareAttack skip counters,
+  dispatch telemetry update
+- PATCH_REPORT.txt
+
+Что НЕ тронуто:
+- Rally assignment gameplay — не изменён
+- Arrival detection gameplay — не изменён
+- 10H1 guard gameplay — не изменён
+- Attack/no-attack decision — не изменён
+- FE_ATTACK11ChooseIntelTarget — не изменён
+- FE_PATCH_10F1SelectAttackDecision — не изменён
+- setLightTankAttackApproachGeneric — не изменён
+- FE_PATCH_07BGetHostileLightTankTargetKind — не изменён
+- FE_PATCH_06BResolveApproachTarget — не изменён
+- ATTACK-08/09/10 internals — не изменены
+- Combat damage/range/cooldowns
+- findPath/passable
+- Scout behavior / BOT-INTEL-01
+- Production/caps
+- Map/render/fog/save/load/economy
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Manual test plan:
+1. Запустить свежую игру (skirmish).
+2. Дождаться scout соберёт intel → game._botIntel01.playerHqSeen: true.
+3. Проверить game._botAttack11:
+   - intelAvailable: true, intelTargetSource: 'confirmed_hq'
+   - Если 10F1 нашёл цель: dispatchSource='vision', skipReason='vision_target_available',
+     usesIntelPoint=false
+   - Если 10F1 не нашёл цель и rally назначен: dispatchSource='intel_rally',
+     usesIntelPoint=true, assignedCount>0, skipReason='intel_rally_assigned'
+   - Если intel есть, но нет eligible танков: dispatchSource='hq_fallback',
+     skipReason='no_eligible_tanks', skip-счётчики > 0
+   - Если нет intel: skipReason='no_intel'
+4. Танки на rally: rallyActiveCount>0, при прибытии rallyArrivedCount/rallyConvertedCount.
+5. Combat/scout/economy не изменились.
 
