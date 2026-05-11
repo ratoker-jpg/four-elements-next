@@ -3811,3 +3811,102 @@ OBSERVE_SEC=2 даёт 6 sec чистого observe на 3 точки.
 2. Проверить: scout завершает sweep с reason='sweep_done' (не 'sweep_timeout')
 3. Проверить telemetry: sweepPointsVisited достигает sweepSelectedCandidatesCount
 4. Проверить: при danger/immediate-return старая логика работает (не затронута)
+
+---
+
+Задача: BOT-INTEL-01 — persist scout intel snapshot
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-intel-01-persist-scout-intel (от sandbox/main)
+
+Проблема:
+Scout проходит полный lifecycle (outbound → observing → sweeping → returning → cooldown),
+но все данные разведки хранятся только как per-tick telemetry на самом scout-юните
+(s._scout02CSeenPlayerUnitsCount, s._scout02CSeenPlayerHq, etc.) и в debug-объекте
+game._botScout02B. Оба сбрасываются при новом lifecycle cycle или смерти scout.
+Enemy bot не имеет стабильного persisted intel snapshot для будущих tank-decision патчей.
+
+Цель:
+Создать game.enemyIntel — persist-объект с таймстемпами, который обновляется при
+наблюдениях scout и остаётся доступным независимо от lifecycle state или живости scout.
+
+Что сделано:
+
+1. FE_INTEL01Init(game) — инициализация game.enemyIntel при первом вызове.
+   Структура:
+   - playerHqSeen: boolean (sticky true)
+   - playerHqX/Y, playerHqCenterX/Y: координаты HQ (сохраняются при первом подтверждении)
+   - lastScoutSweepDoneAt: game.time при реальном sweep_done
+   - lastUsefulIntelAt: game.time при scan, реально увидевшем player объекты
+   - seenPlayerUnitsCount, seenPlayerBuildingsCount: max(old, current)
+   - knownPlayerUnitsByType: { harvester, builder, light_tank, scout, other } — max(old, current)
+   - knownPlayerBuildingsByType: { hq_base, units_factory, separator, minerals_storage,
+     energy_storage, elements_storage, power_plant, energy_reactor, repair_center,
+     defense_tower, other } — max(old, current)
+   - nearestKnownPlayerTankDist: обновляется при виде player tank
+   - intelSource: 'scout'
+
+2. FE_INTEL01UpdateFromScout(scout, now, reason) — сканирование видимых player
+   объектов вокруг scout и запись в game.enemyIntel.
+   - Scan units + buildings в scout.view radius
+   - Использует max(old, current) для counts — scout не «забывает» увиденное
+   - lastUsefulIntelAt обновляется только если scan реально увидел player объекты
+   - playerHqSeen: sticky true, координаты сохраняются при первом подтверждении
+   - HQ координаты: из scan (game.buildings) или из scout._fe10c1ScoutTarget metadata
+   - nearestKnownPlayerTankDist: из scan player light_tank
+
+3. Вызовы intel update в lifecycle:
+   - После 02C telemetry (outbound/observing/sweeping блок) — FE_INTEL01UpdateFromScout
+   - При sweep_done переходах (3 места) — FE_INTEL01Init(game).lastScoutSweepDoneAt = now
+
+4. Debug telemetry:
+   - game._botIntel01 — зеркало ключевых intel-полей + intelFreshnessSec (computed)
+   - game._botScout02B.intelUpdated / intelUpdateReason — индикаторы обновления
+
+Ключевые архитектурные решения:
+- game.enemyIntel хранится на game object, не на scout unit — переживает смерть scout
+- max(old, current) merge strategy — scout не «забывает» уже увиденные объекты
+- lastUsefulIntelAt только при реальном обнаружении player объектов — не на пустом scan
+- intelFreshnessSec computed в debug telemetry, не хранится в enemyIntel
+- playerHqSeen sticky true, HQ coords сохраняются при первом подтверждении
+- lastScoutSweepDoneAt только при реальном sweep_done (sweepCompletedCount > 0)
+
+Изменённые файлы:
+- src/main.js — FE_INTEL01Init, FE_INTEL01UpdateFromScout, lifecycle hooks, debug telemetry
+- PATCH_REPORT.txt — добавлена эта запись
+
+Что НЕ менялось (подтверждение):
+- Scout behavior/lifecycle — не тронут
+- BOT-SCOUT-02B2 return fallback — не тронут
+- BOT-SCOUT-02C threat thresholds — не тронуты
+- BOT-SCOUT-02D/02D3/02D4 sweep lifecycle/timing — не тронуты
+- BOT-SCOUT-02E outbound target selection — не тронут
+- ATTACK-08/09/10 — не тронуты
+- enemy light_tank attack-chain — не тронут
+- findPath/passable/combat/map/render/save/load — не тронуты
+- economy — не тронута
+- scout production/cap — не тронуты
+- telemetry structure (кроме добавления intelUpdated/intelUpdateReason) — не изменена
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Безопасность:
+- assets изменены: нет
+- economy изменена: нет
+- combat изменён: нет
+- pathfinding изменён: нет
+- production/factory изменён: нет
+- Google Drive sync тронут: нет
+- production paths тронуты: нет
+
+Метод тестирования:
+1. Запустить свежую игру.
+2. Дождаться enemy scout outbound → observing → sweeping.
+3. Проверить game._botIntel01: playerHqSeen=true, knownPlayerBuildingsByType.hq_base>=1.
+4. Проверить knownPlayerUnitsByType включает видимые типы player юнитов.
+5. После sweep_done: lastScoutSweepDoneAt обновлён.
+6. После возвращения scout в cooldown: game.enemyIntel всё ещё содержит данные.
+7. intelFreshnessSec растёт со временем в game._botIntel01.
+8. Tank attack behavior не изменён.
+9. Scout lifecycle идентичен до патча.
