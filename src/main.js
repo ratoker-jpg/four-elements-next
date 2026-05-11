@@ -3585,8 +3585,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var scouts = FE_SCOUT01GetEnemyScouts();
     if (!scouts.length) return;
 
-    var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    var gameTime = Number(game.time || 0);
+    // BOT-SCOUT-02B1: use game.time (seconds) for lifecycle timers, not performance.now().
+    var now = Number(game.time || 0);
 
     for (var i = 0; i < scouts.length; i++) {
       var s = scouts[i];
@@ -3602,6 +3602,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         var _curHp = s.hp || 0;
         if (_curHp < _prevHp) {
           s._scout02BState = 'returning';
+          s._scout02BReason = 'damaged';
           s._scout02BLastHp = _curHp;
           // Stop observing, go home.
           var _homeTarget = { x: s._scout02BHomeX, y: s._scout02BHomeY };
@@ -3623,6 +3624,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         }
         if (_nearbyThreat) {
           s._scout02BState = 'returning';
+          s._scout02BReason = 'threat';
           var _homeTarget2 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
           FE_10C1_trySetScoutMove(s, _homeTarget2);
           continue;
@@ -3678,7 +3680,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         if (_arrived) {
           // Transition: outbound → observing
           s._scout02BState = 'observing';
-          s._scout02BObserveUntil = now + FE_SCOUT02B_OBSERVE_SEC * 1000;
+          s._scout02BObserveUntil = now + FE_SCOUT02B_OBSERVE_SEC;
+          s._scout02BReason = 'observing';
           // Stop movement.
           s.path = [];
           s.state = 'idle';
@@ -3697,6 +3700,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
         // Transition: observing → returning
         s._scout02BState = 'returning';
+        s._scout02BReason = 'observe_done';
         var _homeTarget3 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
         FE_10C1_trySetScoutMove(s, _homeTarget3);
         continue;
@@ -3708,10 +3712,12 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         var _distToHome = FE_10C1_distTiles(s, { x: s._scout02BHomeX, y: s._scout02BHomeY });
         var _hasPathR = s.path && s.path.length > 0;
         var _isIdleR = !s.state || s.state === 'idle';
-        if (_distToHome <= FE_SCOUT02B_HOME_ARRIVE_DIST || (!_hasPathR && _isIdleR)) {
+        // BOT-SCOUT-02B1: cooldown only when near home, not when path is empty far away.
+        if (_distToHome <= FE_SCOUT02B_HOME_ARRIVE_DIST) {
           // Transition: returning → cooldown
           s._scout02BState = 'cooldown';
-          s._scout02BCooldownUntil = now + FE_SCOUT02B_COOLDOWN_SEC * 1000;
+          s._scout02BReason = 'at_home';
+          s._scout02BCooldownUntil = now + FE_SCOUT02B_COOLDOWN_SEC;
           // Stop movement.
           s.path = [];
           s.state = 'idle';
@@ -3726,9 +3732,14 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
           s.state = 'idle';
           s.command = '';
         } else if (!_hasPathR && _isIdleR && _distToHome > FE_SCOUT02B_HOME_ARRIVE_DIST) {
-          // Lost path but not home yet — re-path.
+          // BOT-SCOUT-02B1: Lost path but not home yet — re-path. Never enter cooldown here.
           var _homeTarget4 = { x: s._scout02BHomeX, y: s._scout02BHomeY };
-          FE_10C1_trySetScoutMove(s, _homeTarget4);
+          var _repathOk = FE_10C1_trySetScoutMove(s, _homeTarget4);
+          if (_repathOk) {
+            s._scout02BReason = '';
+          } else {
+            s._scout02BReason = 'return_repath_failed';
+          }
         }
         continue;
       }
@@ -3740,6 +3751,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
         // Transition: cooldown → outbound
         s._scout02BState = 'outbound';
+        s._scout02BReason = 'cooldown_done';
         s._scout02BObserveUntil = 0;
         s._scout02BCooldownUntil = 0;
         // Clear old target so a new one will be chosen.
@@ -4225,6 +4237,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     if (unit.type === 'scout' && !unit._scout02BState) {
       var _homeAnchor = FE_SCOUT02BGetEnemyHomeAnchor();
       unit._scout02BState = 'outbound';
+      unit._scout02BReason = '';
       unit._scout02BObserveUntil = 0;
       unit._scout02BCooldownUntil = 0;
       unit._scout02BHomeX = _homeAnchor.x;
@@ -5542,32 +5555,43 @@ function updateEnemyBot(dt) {
       }
       if (_scout02bTelemetryScout) {
         var _s02b = _scout02bTelemetryScout;
+        var _s02bDistHome = (_s02b._scout02BHomeX != null && _s02b._scout02BHomeY != null)
+          ? FE_10C1_distTiles(_s02b, { x: _s02b._scout02BHomeX, y: _s02b._scout02BHomeY })
+          : -1;
         game._botScout02B = {
           scoutId: _s02b.id || null,
           state: _s02b._scout02BState || 'none',
-          targetX: _s02b._fe10c1ScoutTarget?.x ?? _s02b.targetX ?? null,
-          targetY: _s02b._fe10c1ScoutTarget?.y ?? _s02b.targetY ?? null,
+          reason: _s02b._scout02BReason || '',
+          timeBase: 'game.time',
+          gameTime: game ? (game.time || 0) : 0,
+          distToHome: _s02bDistHome,
+          pathLen: (_s02b.path && _s02b.path.length) || 0,
           homeX: _s02b._scout02BHomeX ?? null,
           homeY: _s02b._scout02BHomeY ?? null,
+          x: FE_10C1_unitTileX(_s02b),
+          y: FE_10C1_unitTileY(_s02b),
           observeUntil: _s02b._scout02BObserveUntil || 0,
           cooldownUntil: _s02b._scout02BCooldownUntil || 0,
-          pathLen: (_s02b.path && _s02b.path.length) || 0,
-          reason: _s02b._scout02BState || 'no_lifecycle',
-          at: game ? (game.time || 0) : 0
+          targetX: _s02b._fe10c1ScoutTarget?.x ?? _s02b.targetX ?? null,
+          targetY: _s02b._fe10c1ScoutTarget?.y ?? _s02b.targetY ?? null
         };
       } else {
         game._botScout02B = {
           scoutId: null,
           state: 'no_scouts',
-          targetX: null,
-          targetY: null,
+          reason: 'no_scouts',
+          timeBase: 'game.time',
+          gameTime: game ? (game.time || 0) : 0,
+          distToHome: -1,
+          pathLen: 0,
           homeX: null,
           homeY: null,
+          x: null,
+          y: null,
           observeUntil: 0,
           cooldownUntil: 0,
-          pathLen: 0,
-          reason: 'no_scouts',
-          at: game ? (game.time || 0) : 0
+          targetX: null,
+          targetY: null
         };
       }
     } catch (err) {
