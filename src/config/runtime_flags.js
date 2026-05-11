@@ -48,10 +48,11 @@ window.FE_UNIT_CLICK_MARKER_LIFE = 0.62;
 window.FE_UNIT_CLICK_MARKER_SIZE = 0.23;
 // v0.4 build menu cleanup: only show buildings with a clear role in the current playable loop.
 window.FE_V04_BUILD_MENU_TYPES = ['separator', 'minerals_storage', 'energy_storage', 'elements_storage', 'units_factory', 'power_plant'];
-window.FE_POWER_HQ_MW = 10;
+window.FE_POWER_HQ_MW = 15; // POWER-SYSTEM-01A: increased from 10 to 15 — starter workers + separator + factory fit within HQ capacity
 window.FE_POWER_PLANT_MW = 20;
 window.FE_SEPARATOR_ACTIVE_POWER_MW = 4;
 window.FE_UNITS_FACTORY_ACTIVE_POWER_MW = 5;
+window.FE_POWER_UNIT_MW = 1; // POWER-SYSTEM-01A: each active unit consumes 1 MW of power (upkeep)
 window.FE_POWER_ENFORCEMENT_ENABLED = true;
 window.FE_BUILDER_CLICK_MARKER_ENABLED = true;
 window.FE_BUILDER_CLICK_MARKER_LIFE = 0.62;

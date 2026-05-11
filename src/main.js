@@ -2020,12 +2020,22 @@
     return next - old;
   }
 
+  // POWER-SYSTEM-01A: HQ power increased from 10 to 15 MW so starter workers +
+  // separator + factory fit within HQ capacity without immediate power_plant.
+  // Baseline: 2 harvester (2) + 1 builder (1) + separator (4) + factory (5) = 12 MW <= 15 MW.
+  const FE_POWER_01A_HQ_MW = 15;
+  // POWER-SYSTEM-01A: each active unit consumes 1 MW of power (upkeep).
+  const FE_POWER_01A_UNIT_MW = 1;
+  // POWER-SYSTEM-01A: enemy should build power_plant when usage >= 80% of capacity.
+  const FE_POWER_01A_ENEMY_POWER_PLANT_THRESHOLD = 0.8;
+
   function powerConfig() {
     return {
-      hqMw: Number.isFinite(window.FE_POWER_HQ_MW) ? window.FE_POWER_HQ_MW : 10,
+      hqMw: Number.isFinite(window.FE_POWER_HQ_MW) ? window.FE_POWER_HQ_MW : FE_POWER_01A_HQ_MW,
       powerPlantMw: Number.isFinite(window.FE_POWER_PLANT_MW) ? window.FE_POWER_PLANT_MW : 20,
       separatorMw: Number.isFinite(window.FE_SEPARATOR_ACTIVE_POWER_MW) ? window.FE_SEPARATOR_ACTIVE_POWER_MW : 4,
       factoryMw: Number.isFinite(window.FE_UNITS_FACTORY_ACTIVE_POWER_MW) ? window.FE_UNITS_FACTORY_ACTIVE_POWER_MW : 5,
+      unitMw: Number.isFinite(window.FE_POWER_UNIT_MW) ? window.FE_POWER_UNIT_MW : FE_POWER_01A_UNIT_MW,
     };
   }
 
@@ -2052,9 +2062,11 @@
 
   function evaluatePowerState() {
     // v0.4 patch 4: Power is enforced as active grid capacity.
-    // Separator consumes power only while it can process resources.
-    // Units Factory consumes power only while producing a queued unit.
-    if (!game || !game.resources) return { total: 0, used: 0, activeSeparatorCount: 0 };
+    // POWER-SYSTEM-01A: Units also consume power (1 MW per active unit).
+    // Priority: unit upkeep (always) → separator → factory.
+    // If power is insufficient, buildings pause (separator first, then factory).
+    // Units are never depowered — they always consume power.
+    if (!game || !game.resources) return { total: 0, used: 0, activeSeparatorCount: 0, unitPowerUsed: 0, buildingPowerUsed: 0 };
 
     const cfg = powerConfig();
     const total = calculatePowerTotal();
@@ -2062,6 +2074,15 @@
     let activeSeparatorCount = 0;
 
     resetBuildingPowerState();
+
+    // POWER-SYSTEM-01A: Unit upkeep — always reserved first, never paused.
+    let unitPowerUsed = 0;
+    for (const u of game.units || []) {
+      if (!isPlayerUnit(u)) continue;
+      if ((u.hp ?? 1) <= 0) continue;
+      unitPowerUsed += cfg.unitMw;
+    }
+    used += unitPowerUsed;
 
     const tryReservePower = (building, mw) => {
       if (!building || !Number.isFinite(mw) || mw <= 0) return true;
@@ -2094,11 +2115,125 @@
 
     game.resources.powerTotal = total;
     game.resources.powerUsed = used;
-    return { total, used, activeSeparatorCount };
+
+    // POWER-SYSTEM-01A telemetry: update per-frame.
+    const buildingPowerUsed = used - unitPowerUsed;
+    if (!game._powerSystem01) {
+      game._powerSystem01 = {
+        playerUnitPowerUsed: 0,
+        playerBuildingPowerUsed: 0,
+        playerPowerTotal: 0,
+        enemyUnitPowerUsed: 0,
+        enemyBuildingPowerUsed: 0,
+        enemyPowerTotal: 0,
+        enemyPowerPlantOrderCount: 0,
+        enemyLastPowerPlantOrderAt: 0,
+        enemyLastPowerReason: null
+      };
+    }
+    game._powerSystem01.playerUnitPowerUsed = unitPowerUsed;
+    game._powerSystem01.playerBuildingPowerUsed = buildingPowerUsed;
+    game._powerSystem01.playerPowerTotal = total;
+
+    return { total, used, activeSeparatorCount, unitPowerUsed, buildingPowerUsed };
+  }
+
+  // POWER-SYSTEM-01A: Check if a unit belongs to the player.
+  function isPlayerUnit(u) {
+    return u && u.kind === 'unit' && unitOwner(u) === 'player';
+  }
+
+  // POWER-SYSTEM-01A: Evaluate enemy power state — mirrors player logic.
+  // Enemy HQ provides power, enemy power_plant adds capacity.
+  // Enemy units consume upkeep, enemy separator/factory consume building power.
+  // Returns { total, used, unitPowerUsed, buildingPowerUsed, separatorsAllowed, factoriesAllowed }.
+  function FE_POWER_01_EvaluateEnemyPowerState() {
+    if (!game) return { total: 0, used: 0, unitPowerUsed: 0, buildingPowerUsed: 0, separatorsAllowed: 0, factoriesAllowed: 0 };
+
+    const cfg = powerConfig();
+    let total = 0;
+    let used = 0;
+    let separatorsAllowed = 0;
+    let factoriesAllowed = 0;
+
+    // Count enemy power capacity from HQ + power_plants.
+    for (const b of game.buildings || []) {
+      if (!isEnemyBuilding(b)) continue;
+      if (!b.complete || b.destroyed || b.dead) continue;
+      if (b.type === 'hq_base') total += cfg.hqMw;
+      else if (b.type === 'power_plant') total += cfg.powerPlantMw;
+    }
+
+    // Enemy unit upkeep — always reserved first.
+    let unitPowerUsed = 0;
+    for (const u of game.units || []) {
+      if (u && u.kind === 'unit' && unitOwner(u) === 'enemy' && (u.hp ?? 1) > 0) {
+        unitPowerUsed += cfg.unitMw;
+      }
+    }
+    used += unitPowerUsed;
+
+    // Enemy separator power — reserve only for separators that can actually process.
+    // A separator that is resource-stalled (no minerals, or storage full) does not
+    // consume power, so it should not reserve capacity or be marked power-paused.
+    const enemySeps = FE_PATCH_09C3CompleteEnemySeparators();
+    const sepCycleOk = FE_PATCH_09C3EnemySeparatorCycleCheck().ok;
+    for (const sep of enemySeps) {
+      if (!sepCycleOk) {
+        // Separator cannot process — do not reserve power, do not power-pause.
+        // Resource-stall marking is handled by FE_PATCH_09C3UpdateEnemySeparatorMarks.
+        sep._enemyPowerPaused = false;
+        continue;
+      }
+      if (used + cfg.separatorMw <= total) {
+        used += cfg.separatorMw;
+        sep._enemyPowerPaused = false;
+        separatorsAllowed++;
+      } else {
+        sep._enemyPowerPaused = true;
+      }
+    }
+
+    // Enemy factory power — pause if insufficient.
+    const enemyFacs = FE_PATCH_09ECompleteEnemyFactories();
+    for (const fac of enemyFacs) {
+      const fq = FE_PATCH_09EEnsureFactoryQueue(fac);
+      if (!fq.length) continue; // idle factory doesn't consume power
+      if (used + cfg.factoryMw <= total) {
+        used += cfg.factoryMw;
+        fac._enemyPowerPaused = false;
+        factoriesAllowed++;
+      } else {
+        fac._enemyPowerPaused = true;
+      }
+    }
+
+    // POWER-SYSTEM-01A telemetry: update.
+    const buildingPowerUsed = used - unitPowerUsed;
+    if (!game._powerSystem01) {
+      game._powerSystem01 = {
+        playerUnitPowerUsed: 0,
+        playerBuildingPowerUsed: 0,
+        playerPowerTotal: 0,
+        enemyUnitPowerUsed: 0,
+        enemyBuildingPowerUsed: 0,
+        enemyPowerTotal: 0,
+        enemyPowerPlantOrderCount: 0,
+        enemyLastPowerPlantOrderAt: 0,
+        enemyLastPowerReason: null
+      };
+    }
+    game._powerSystem01.enemyUnitPowerUsed = unitPowerUsed;
+    game._powerSystem01.enemyBuildingPowerUsed = buildingPowerUsed;
+    game._powerSystem01.enemyPowerTotal = total;
+
+    return { total, used, unitPowerUsed, buildingPowerUsed, separatorsAllowed, factoriesAllowed };
   }
 
   function updatePower() {
     evaluatePowerState();
+    // POWER-SYSTEM-01A: also evaluate enemy power state each frame.
+    FE_POWER_01_EvaluateEnemyPowerState();
   }
 
   function formatLimitValue(current, limit) {
@@ -9246,6 +9381,134 @@ function debugLog(event, payload={}) {
     return true;
   }
 
+  // POWER-SYSTEM-01A: check if enemy already has or is building a power_plant.
+  // Unlike elements_storage (one-shot), allows multiple power_plants over time.
+  function FE_POWER_01_EnemyPowerPlantBuildInProgress() {
+    if (!game) return false;
+    return (game.units || []).some(u =>
+      u &&
+      u.kind === 'unit' &&
+      u.type === 'builder' &&
+      unitOwner(u) === 'enemy' &&
+      (
+        u.buildOrder?.type === 'power_plant' ||
+        (u.currentBuilding && (game.buildings || []).some(b =>
+          b && b.id === u.currentBuilding && b.type === 'power_plant' && buildingOwner(b) === 'enemy' && !b.complete
+        ))
+      )
+    );
+  }
+
+  // POWER-SYSTEM-01A: count complete enemy power_plants.
+  function FE_POWER_01_EnemyPowerPlantCount() {
+    if (!game) return 0;
+    return (game.buildings || []).filter(b =>
+      b &&
+      b.kind === 'building' &&
+      b.type === 'power_plant' &&
+      buildingOwner(b) === 'enemy' &&
+      b.complete &&
+      !b.destroyed &&
+      !b.dead
+    ).length;
+  }
+
+  // POWER-SYSTEM-01A: find a free enemy builder for power_plant construction.
+  function FE_POWER_01_FindEnemyBuilderForPowerPlant() {
+    return (game?.units || []).find(u =>
+      u &&
+      u.kind === 'unit' &&
+      u.type === 'builder' &&
+      unitOwner(u) === 'enemy' &&
+      (u.hp ?? 1) > 0 &&
+      u.state !== 'moving_to_build' &&
+      u.state !== 'building'
+    ) || null;
+  }
+
+  // POWER-SYSTEM-01A: order an enemy builder to build power_plant.
+  function FE_POWER_01_OrderEnemyBuilderBuildPowerPlant() {
+    if (!game || game.screen !== 'game' || game.skirmishMode !== true) return false;
+    if (game.gameResult || game.result || game.gameEnded || game.ended) return false;
+
+    // Don't queue if a power_plant build is already in progress.
+    if (FE_POWER_01_EnemyPowerPlantBuildInProgress()) return false;
+
+    const builder = FE_POWER_01_FindEnemyBuilderForPowerPlant();
+    if (!builder) {
+      debugLog('enemy_power_plant_build_skipped_no_available_builder_01a', {
+        enemyBuilders:(game.units || []).filter(u => u?.type === 'builder' && unitOwner(u) === 'enemy').map(getBuilderDebugSnapshot)
+      });
+      return false;
+    }
+
+    const plan = findBuildPlan(builder, 'power_plant');
+    if (!plan || !plan.spot || !Array.isArray(plan.path)) {
+      debugLog('enemy_power_plant_build_failed_no_plan_01a', {
+        builder:getBuilderDebugSnapshot(builder),
+        plan:safeCloneForLog(plan),
+        enemyBase:safeCloneForLog(FE_PATCH_08BResolveEnemyHomeBase?.() || FE_PATCH_06AExistingEnemyBase?.())
+      });
+      return false;
+    }
+
+    const spent = FE_PATCH_09C2SpendEnemyBuildCost('power_plant');
+    if (!spent.ok) return false;
+
+    builder._reservedBuildCost = {
+      type: 'power_plant',
+      owner: 'enemy',
+      cost: spent.cost,
+      createdAt: performance.now(),
+      resourcesAfterSpend: safeCloneForLog(ensureEnemyResources())
+    };
+    builder._buildRefunded = false;
+    builder.buildOrder = {
+      type: 'power_plant',
+      spot: plan.spot,
+      accessCell: plan.accessCell || null,
+      owner: 'enemy',
+      silent: true,
+      createdAt: performance.now(),
+      sourcePatch: 'POWER-01A'
+    };
+    builder.path = plan.path || [];
+    builder.state = 'moving_to_build';
+    builder._buildMoveTimer = 0;
+    builder._buildStuckTimer = 0;
+    builder._buildNoProgressTimer = 0;
+    builder._buildLastX = builder.x;
+    builder._buildLastY = builder.y;
+    builder._buildLastDist = null;
+    builder._debugStateTimer = 0;
+
+    // POWER-SYSTEM-01A telemetry: update when order is placed.
+    if (!game._powerSystem01) {
+      game._powerSystem01 = {
+        playerUnitPowerUsed: 0,
+        playerBuildingPowerUsed: 0,
+        playerPowerTotal: 0,
+        enemyUnitPowerUsed: 0,
+        enemyBuildingPowerUsed: 0,
+        enemyPowerTotal: 0,
+        enemyPowerPlantOrderCount: 0,
+        enemyLastPowerPlantOrderAt: 0,
+        enemyLastPowerReason: null
+      };
+    }
+    game._powerSystem01.enemyPowerPlantOrderCount = (game._powerSystem01.enemyPowerPlantOrderCount || 0) + 1;
+    game._powerSystem01.enemyLastPowerPlantOrderAt = game.time || 0;
+    game._powerSystem01.enemyLastPowerReason = 'enemy_power_near_capacity';
+
+    debugLog('enemy_builder_power_plant_build_order_assigned_01a', {
+      builder:getBuilderDebugSnapshot(builder),
+      plan:safeCloneForLog(plan),
+      reservedBuildCost:safeCloneForLog(builder._reservedBuildCost)
+    });
+
+    return true;
+  }
+
   function FE_PATCH_09C2EnemySeparatorBuildCost() {
     const cost = Object.assign({}, getBuildCost('separator'));
     if (!Number.isFinite(cost.energy) || cost.energy <= 0) {
@@ -9410,6 +9673,13 @@ function debugLog(event, payload={}) {
     const separators = FE_PATCH_09C3CompleteEnemySeparators();
     if (!separators.length) return;
 
+    // POWER-SYSTEM-01A: check if enemy separator is power-paused.
+    const activeSeps = separators.filter(sep => !sep._enemyPowerPaused);
+    if (!activeSeps.length) {
+      FE_PATCH_09C3UpdateEnemySeparatorMarks(separators, false, 'power_paused');
+      return;
+    }
+
     const check = FE_PATCH_09C3EnemySeparatorCycleCheck();
     if (!check.ok) {
       FE_PATCH_09C3UpdateEnemySeparatorMarks(separators, false, check.reason);
@@ -9418,7 +9688,7 @@ function debugLog(event, payload={}) {
 
     FE_PATCH_09C3UpdateEnemySeparatorMarks(separators, true, 'processing');
     game._enemySepTimer = Number.isFinite(game._enemySepTimer) ? game._enemySepTimer : 0;
-    game._enemySepTimer += dt * separators.length;
+    game._enemySepTimer += dt * activeSeps.length;
 
     let cycles = 0;
     while (game._enemySepTimer >= FE_PATCH_09C3_SEPARATOR_CYCLE_SECONDS && cycles < 10) {
@@ -9894,6 +10164,11 @@ function debugLog(event, payload={}) {
     };
 
     for (const factory of factories) {
+      // POWER-SYSTEM-01A: if factory is power-paused, skip production tick.
+      if (factory._enemyPowerPaused) {
+        continue;
+      }
+
       const queue = FE_PATCH_09EEnsureFactoryQueue(factory);
 
       // BOT-BASELINE-01: choose unit type — workers have priority over tanks.
@@ -10103,6 +10378,7 @@ function debugLog(event, payload={}) {
     'build_separator',      // no separator exists → build it
     'build_factory',        // no factory exists → build it
     'build_elements_storage', // BOT-ECONOMY-01A: element storage near full → expand capacity
+    'build_power_plant',    // POWER-SYSTEM-01A: enemy power near capacity → expand power
     'produce_builder',      // builder count below minimum → produce
     'produce_harvester',    // harvester count below minimum → produce
     'produce_combat',       // workers ok → produce light_tank / attack
@@ -10141,6 +10417,27 @@ function debugLog(event, payload={}) {
           return { action: 'build_elements_storage', reason: 'element_storage_near_full', elCurrent: elCurrent, elLimit: elLimit };
         }
         // Preflight failed — fall through to lower priorities instead of looping on this action.
+      }
+    }
+
+    // Priority 2.6 (POWER-SYSTEM-01A): power_plant — enemy power near capacity.
+    // Only trigger when enemy power usage >= 80% AND no power_plant build is in progress.
+    // Preflight checks: no in-progress build, free builder, can afford.
+    if (!FE_POWER_01_EnemyPowerPlantBuildInProgress()) {
+      var _psEnemyPower = FE_POWER_01_EvaluateEnemyPowerState();
+      if (_psEnemyPower.total > 0 && _psEnemyPower.used >= _psEnemyPower.total * FE_POWER_01A_ENEMY_POWER_PLANT_THRESHOLD) {
+        // Preflight: verify the action can execute.
+        var _psBuilder = FE_POWER_01_FindEnemyBuilderForPowerPlant();
+        var _psCost = getBuildCost('power_plant');
+        var _psBucket = ensureEnemyResources();
+        var _psCanAfford = true;
+        for (var _psR in _psCost) {
+          if (_psCost[_psR] && (_psBucket[_psR] || 0) < _psCost[_psR]) { _psCanAfford = false; break; }
+        }
+        if (_psBuilder && _psCanAfford) {
+          return { action: 'build_power_plant', reason: 'enemy_power_near_capacity', powerUsed: _psEnemyPower.used, powerTotal: _psEnemyPower.total };
+        }
+        // Preflight failed — fall through to lower priorities.
       }
     }
 
@@ -10187,6 +10484,9 @@ function debugLog(event, payload={}) {
         break;
       case 'build_elements_storage':
         FE_PATCH_09C2OrderEnemyBuilderBuildElementsStorage();
+        break;
+      case 'build_power_plant':
+        FE_POWER_01_OrderEnemyBuilderBuildPowerPlant();
         break;
       case 'produce_builder':
         FE_PATCH_BRAIN_01_TryProduceWorker('builder');
