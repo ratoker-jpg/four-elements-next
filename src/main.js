@@ -3501,6 +3501,11 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   var FE_SCOUT02D_SWEEP_TIMEOUT_SEC = 22;   // seconds: hard timeout for entire sweep phase
   var FE_SCOUT02D_SWEEP_ARRIVE_DIST = 2;    // tiles: distance to count as arrived at sweep point
 
+  // BOT-SCOUT-02E: outbound target selection constants.
+  var FE_SCOUT02E_HQ_RALLY_MIN_RADIUS = 3;  // tiles: minimum distance from HQ center for rally point
+  var FE_SCOUT02E_HQ_RALLY_MAX_RADIUS = 7;  // tiles: maximum distance from HQ center for rally point
+  var FE_SCOUT02E_RALLY_DIR_COUNT = 8;       // number of angular samples per radius ring
+
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
     try {
@@ -3774,6 +3779,149 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return st === 'observing' || st === 'sweeping' || st === 'returning' || st === 'cooldown';
   }
 
+  // BOT-SCOUT-02E: unified outbound target selection for scout units.
+  // Priority:
+  //   1. Player base/HQ rally point — find player HQ, search radius 3..7 for a reachable tile
+  //   2. Knowledge target — reuse FE_10G1_chooseKnowledgeScoutTarget
+  //   3. Map_probe fallback — reuse FE_10C1_chooseScoutTargets
+  // Returns a target object { x, y, source, reason, confidence, ... } or null.
+  // Does NOT mutate the scout — pathability is checked via dry-run findPath.
+  function FE_SCOUT02EChooseOutboundTarget(scout, scoutState) {
+    var _02ePlayerHqX = null, _02ePlayerHqY = null;
+    var _02ePlayerHqCenterX = null, _02ePlayerHqCenterY = null;
+    var _02eOldKnowledgeTargetX = null, _02eOldKnowledgeTargetY = null;
+    var _02eFallbackUsed = false;
+    var _02eTargetSource = 'none';
+    var _02eTargetReason = 'no_target';
+
+    // Pre-compute knowledge target (needed even if HQ rally wins, for oldKnowledgeTargetX/Y telemetry).
+    var knowledgeTarget = null;
+    if (typeof FE_10G1_chooseKnowledgeScoutTarget === 'function') {
+      knowledgeTarget = FE_10G1_chooseKnowledgeScoutTarget(scout);
+    }
+
+    // --- Priority 1: Player HQ rally point ---
+    var playerHq = typeof findBaseBuilding === 'function' ? findBaseBuilding('player') : null;
+    if (playerHq && (playerHq.hp || 0) > 0) {
+      _02ePlayerHqX = Math.round(playerHq.x);
+      _02ePlayerHqY = Math.round(playerHq.y);
+      _02ePlayerHqCenterX = Math.round(playerHq.x + (playerHq.w || 1) / 2);
+      _02ePlayerHqCenterY = Math.round(playerHq.y + (playerHq.h || 1) / 2);
+
+      // Search for a reachable rally point around HQ center at distances 3..7.
+      var sx = FE_10C1_unitTileX(scout);
+      var sy = FE_10C1_unitTileY(scout);
+      var mapSize = FE_10C1_getMapSize();
+      var rallyCandidate = null;
+
+      for (var r = FE_SCOUT02E_HQ_RALLY_MIN_RADIUS; r <= FE_SCOUT02E_HQ_RALLY_MAX_RADIUS; r++) {
+        for (var di = 0; di < FE_SCOUT02E_RALLY_DIR_COUNT; di++) {
+          var angle = (di / FE_SCOUT02E_RALLY_DIR_COUNT) * 2 * Math.PI;
+          var cx = _02ePlayerHqCenterX + Math.round(r * Math.cos(angle));
+          var cy = _02ePlayerHqCenterY + Math.round(r * Math.sin(angle));
+          // In-bounds check.
+          if (cx < 1 || cy < 1 || cx >= mapSize.width - 1 || cy >= mapSize.height - 1) continue;
+          // Skip same-tile (scout already there).
+          if (cx === sx && cy === sy) continue;
+          // Dry-run findPath to check reachability without mutating scout.
+          var dryPath = null;
+          try {
+            if (typeof findPath === 'function') {
+              dryPath = findPath({ x: sx, y: sy }, { x: cx, y: cy }, scout.id);
+            }
+          } catch (_e) { /* pathfinding error — skip this candidate */ }
+          if (dryPath !== null && Array.isArray(dryPath) && dryPath.length > 0) {
+            rallyCandidate = { x: cx, y: cy };
+            break;
+          }
+        }
+        if (rallyCandidate) break;
+      }
+
+      if (rallyCandidate) {
+        var distToHq = FE_10C1_distTiles(rallyCandidate, { x: _02ePlayerHqCenterX, y: _02ePlayerHqCenterY });
+        _02eTargetSource = 'player_hq_rally';
+        _02eTargetReason = 'rally_at_dist_' + distToHq;
+        // Record knowledge target that was superseded by HQ rally (if any).
+        if (knowledgeTarget) {
+          _02eOldKnowledgeTargetX = knowledgeTarget.x;
+          _02eOldKnowledgeTargetY = knowledgeTarget.y;
+        }
+        var result = FE_10G1_clampScoutPoint({
+          x: rallyCandidate.x,
+          y: rallyCandidate.y,
+          label: 'player-hq-rally',
+          source: _02eTargetSource,
+          confidence: 0.9,
+          reason: _02eTargetReason
+        });
+        // Attach 02E telemetry metadata.
+        result.playerHqX = _02ePlayerHqX;
+        result.playerHqY = _02ePlayerHqY;
+        result.playerHqCenterX = _02ePlayerHqCenterX;
+        result.playerHqCenterY = _02ePlayerHqCenterY;
+        result.targetDistToPlayerHq = distToHq;
+        result.oldKnowledgeTargetX = _02eOldKnowledgeTargetX;
+        result.oldKnowledgeTargetY = _02eOldKnowledgeTargetY;
+        result.fallbackUsed = false;
+        return result;
+      }
+      // HQ found but no reachable rally point — fall through to knowledge/fallback.
+      _02eTargetReason = 'hq_found_no_rally';
+    }
+
+    // --- Priority 2: Knowledge target ---
+    if (knowledgeTarget) {
+      _02eTargetSource = knowledgeTarget.source || 'knowledge';
+      _02eTargetReason = knowledgeTarget.reason || 'knowledge_selected';
+      var kResult = FE_10G1_clampScoutPoint({
+        x: knowledgeTarget.x,
+        y: knowledgeTarget.y,
+        label: knowledgeTarget.label || 'knowledge',
+        source: _02eTargetSource,
+        confidence: Number.isFinite(knowledgeTarget.confidence) ? knowledgeTarget.confidence : 0,
+        reason: _02eTargetReason
+      });
+      kResult.playerHqX = _02ePlayerHqX;
+      kResult.playerHqY = _02ePlayerHqY;
+      kResult.playerHqCenterX = _02ePlayerHqCenterX;
+      kResult.playerHqCenterY = _02ePlayerHqCenterY;
+      kResult.targetDistToPlayerHq = (_02ePlayerHqCenterX != null && _02ePlayerHqCenterY != null)
+        ? FE_10C1_distTiles(kResult, { x: _02ePlayerHqCenterX, y: _02ePlayerHqCenterY })
+        : -1;
+      kResult.oldKnowledgeTargetX = null;
+      kResult.oldKnowledgeTargetY = null;
+      kResult.fallbackUsed = false;
+      return kResult;
+    }
+
+    // --- Priority 3: Map_probe fallback ---
+    var targets = FE_10C1_chooseScoutTargets();
+    var idx = ((scoutState?.targetIndex || 0) + 1) % targets.length;
+    if (scoutState) scoutState.targetIndex = idx;
+    if (!targets.length) return null;
+    _02eFallbackUsed = true;
+    _02eTargetSource = 'map_probe';
+    _02eTargetReason = 'map_probe_fallback';
+    var fResult = FE_10G1_clampScoutPoint({
+      ...targets[idx],
+      source: 'map_probe',
+      confidence: 0,
+      reason: _02eTargetReason
+    });
+    fResult.playerHqX = _02ePlayerHqX;
+    fResult.playerHqY = _02ePlayerHqY;
+    fResult.playerHqCenterX = _02ePlayerHqCenterX;
+    fResult.playerHqCenterY = _02ePlayerHqCenterY;
+    fResult.targetDistToPlayerHq = (_02ePlayerHqCenterX != null && _02ePlayerHqCenterY != null)
+      ? FE_10C1_distTiles(fResult, { x: _02ePlayerHqCenterX, y: _02ePlayerHqCenterY })
+      : -1;
+    fResult.oldKnowledgeTargetX = null;
+    fResult.oldKnowledgeTargetY = null;
+    fResult.fallbackUsed = true;
+    return fResult;
+  }
+
   // Get all enemy scout units (alive).
   function FE_SCOUT01GetEnemyScouts() {
     return (game?.units || []).filter(u =>
@@ -3789,19 +3937,26 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   }
 
   // Scout behavior: choose next scouting target for an enemy scout.
-  // Priority: knowledge-based → last known player area → map center → opposite corner.
+  // BOT-SCOUT-02E: for actual scout-type units, use unified FE_SCOUT02EChooseOutboundTarget
+  // which prioritizes player HQ rally → knowledge → map_probe.
+  // For non-scout units (tanks used as scouts), keep old knowledge → map_probe chain.
   function FE_SCOUT01ChooseScoutTarget(scoutUnit) {
-    // Try knowledge-based target first (reuse 10G1 infrastructure).
+    // BOT-SCOUT-02E: actual scout units use the new unified target selection.
+    if (scoutUnit && scoutUnit.type === 'scout' && typeof FE_SCOUT02EChooseOutboundTarget === 'function') {
+      var scoutState = game?.enemyScoutingMvp;
+      return FE_SCOUT02EChooseOutboundTarget(scoutUnit, scoutState);
+    }
+    // Legacy path for non-scout units (tanks used as scouts): knowledge → map_probe.
     if (typeof FE_10G1_chooseKnowledgeScoutTarget === 'function') {
       var knowledgeTarget = FE_10G1_chooseKnowledgeScoutTarget(scoutUnit);
       if (knowledgeTarget) return knowledgeTarget;
     }
     // Fallback to map-probe targets.
     var targets = FE_10C1_chooseScoutTargets();
-    var scoutState = game?.enemyScoutingMvp;
+    var scoutState2 = game?.enemyScoutingMvp;
     if (targets.length) {
-      var idx = ((scoutState?.targetIndex || 0) + 1) % targets.length;
-      if (scoutState) scoutState.targetIndex = idx;
+      var idx = ((scoutState2?.targetIndex || 0) + 1) % targets.length;
+      if (scoutState2) scoutState2.targetIndex = idx;
       return FE_10G1_clampScoutPoint({
         ...targets[idx],
         source: 'map_probe',
@@ -4691,7 +4846,16 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       label: target.label || 'scout',
       source: target.source || 'map_probe',
       confidence: Number.isFinite(target.confidence) ? target.confidence : 0,
-      reason: target.reason || ''
+      reason: target.reason || '',
+      // BOT-SCOUT-02E: propagate outbound target telemetry metadata.
+      playerHqX: target.playerHqX ?? null,
+      playerHqY: target.playerHqY ?? null,
+      playerHqCenterX: target.playerHqCenterX ?? null,
+      playerHqCenterY: target.playerHqCenterY ?? null,
+      targetDistToPlayerHq: target.targetDistToPlayerHq ?? -1,
+      oldKnowledgeTargetX: target.oldKnowledgeTargetX ?? null,
+      oldKnowledgeTargetY: target.oldKnowledgeTargetY ?? null,
+      fallbackUsed: !!target.fallbackUsed
     };
     unit._fe10c1ScoutIssuedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     unit._fe10c1Role = 'scout';
@@ -4890,17 +5054,26 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       return;
     }
 
-    const knowledgeTarget = FE_10G1_chooseKnowledgeScoutTarget(scout);
-    let target = knowledgeTarget;
-    if (!target) {
-      const targets = FE_10C1_chooseScoutTargets();
-      scoutState.targetIndex = ((scoutState.targetIndex || 0) + 1) % targets.length;
-      target = FE_10G1_clampScoutPoint({
-        ...targets[scoutState.targetIndex],
-        source: 'map_probe',
-        confidence: 0,
-        reason: 'map_probe_fallback'
-      });
+    // BOT-SCOUT-02E: for actual scout units, use unified outbound target selection
+    // (player HQ rally → knowledge → map_probe). For tank-based scouts, use old chain.
+    let target = null;
+    var oldKnowledgeTarget = null;
+    if (scout.type === 'scout' && typeof FE_SCOUT02EChooseOutboundTarget === 'function') {
+      target = FE_SCOUT02EChooseOutboundTarget(scout, scoutState);
+    } else {
+      // Legacy path for tank-based scouts: knowledge → map_probe.
+      const knowledgeTarget = FE_10G1_chooseKnowledgeScoutTarget(scout);
+      target = knowledgeTarget;
+      if (!target) {
+        const targets = FE_10C1_chooseScoutTargets();
+        scoutState.targetIndex = ((scoutState.targetIndex || 0) + 1) % targets.length;
+        target = FE_10G1_clampScoutPoint({
+          ...targets[scoutState.targetIndex],
+          source: 'map_probe',
+          confidence: 0,
+          reason: 'map_probe_fallback'
+        });
+      }
     }
 
     const ok = FE_10C1_trySetScoutMove(scout, target);
@@ -4911,6 +5084,19 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     scoutState.targetSource = target?.source || 'none';
     scoutState.targetConfidence = Number.isFinite(target?.confidence) ? target.confidence : 0;
     scoutState.targetReason = target?.reason || (ok ? 'scout_target_selected' : 'scout_target_failed');
+    // BOT-SCOUT-02E: store 02E telemetry metadata on scoutState.
+    scoutState.outboundTargetSource = target?.source || 'none';
+    scoutState.outboundTargetReason = target?.reason || '';
+    scoutState.outboundTargetX = target?.x ?? null;
+    scoutState.outboundTargetY = target?.y ?? null;
+    scoutState.playerHqX = target?.playerHqX ?? null;
+    scoutState.playerHqY = target?.playerHqY ?? null;
+    scoutState.playerHqCenterX = target?.playerHqCenterX ?? null;
+    scoutState.playerHqCenterY = target?.playerHqCenterY ?? null;
+    scoutState.targetDistToPlayerHq = target?.targetDistToPlayerHq ?? -1;
+    scoutState.oldKnowledgeTargetX = target?.oldKnowledgeTargetX ?? null;
+    scoutState.oldKnowledgeTargetY = target?.oldKnowledgeTargetY ?? null;
+    scoutState.fallbackUsed = !!target?.fallbackUsed;
     if (target?.source === 'knowledge' || target?.source === 'last_seen') {
       scoutState.lastKnowledgeScoutPoint = target ? { x: target.x, y: target.y, source: target.source, confidence: scoutState.targetConfidence } : null;
     }
@@ -4918,6 +5104,8 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       scoutState.issuedCount = (scoutState.issuedCount || 0) + 1;
       if (target?.source === 'knowledge' || target?.source === 'last_seen') {
         scoutState.knowledgeScoutIssuedCount = (scoutState.knowledgeScoutIssuedCount || 0) + 1;
+      } else if (target?.source === 'player_hq_rally') {
+        scoutState.hqRallyScoutIssuedCount = (scoutState.hqRallyScoutIssuedCount || 0) + 1;
       } else {
         scoutState.fallbackScoutIssuedCount = (scoutState.fallbackScoutIssuedCount || 0) + 1;
       }
@@ -6087,7 +6275,20 @@ function updateEnemyBot(dt) {
           sweepCandidatesCount: Array.isArray(_s02b._scout02DSweepCandidates) ? _s02b._scout02DSweepCandidates.length : 0,
           sweepSkippedDangerCount: _s02b._scout02DSweepSkippedDangerCount ?? 0,
           sweepReason: _s02b._scout02DSweepReason || '',
-          sweepStartedAt: _s02b._scout02DSweepStartedAt || 0
+          sweepStartedAt: _s02b._scout02DSweepStartedAt || 0,
+          // BOT-SCOUT-02E: outbound target selection telemetry
+          outboundTargetSource: _s02b._fe10c1ScoutTarget?.source || game?.enemyScoutingMvp?.outboundTargetSource || 'none',
+          outboundTargetReason: _s02b._fe10c1ScoutTarget?.reason || game?.enemyScoutingMvp?.outboundTargetReason || '',
+          outboundTargetX: _s02b._fe10c1ScoutTarget?.x ?? game?.enemyScoutingMvp?.outboundTargetX ?? null,
+          outboundTargetY: _s02b._fe10c1ScoutTarget?.y ?? game?.enemyScoutingMvp?.outboundTargetY ?? null,
+          playerHqX: _s02b._fe10c1ScoutTarget?.playerHqX ?? game?.enemyScoutingMvp?.playerHqX ?? null,
+          playerHqY: _s02b._fe10c1ScoutTarget?.playerHqY ?? game?.enemyScoutingMvp?.playerHqY ?? null,
+          playerHqCenterX: _s02b._fe10c1ScoutTarget?.playerHqCenterX ?? game?.enemyScoutingMvp?.playerHqCenterX ?? null,
+          playerHqCenterY: _s02b._fe10c1ScoutTarget?.playerHqCenterY ?? game?.enemyScoutingMvp?.playerHqCenterY ?? null,
+          targetDistToPlayerHq: _s02b._fe10c1ScoutTarget?.targetDistToPlayerHq ?? game?.enemyScoutingMvp?.targetDistToPlayerHq ?? -1,
+          oldKnowledgeTargetX: _s02b._fe10c1ScoutTarget?.oldKnowledgeTargetX ?? game?.enemyScoutingMvp?.oldKnowledgeTargetX ?? null,
+          oldKnowledgeTargetY: _s02b._fe10c1ScoutTarget?.oldKnowledgeTargetY ?? game?.enemyScoutingMvp?.oldKnowledgeTargetY ?? null,
+          fallbackUsed: !!(_s02b._fe10c1ScoutTarget?.fallbackUsed ?? game?.enemyScoutingMvp?.fallbackUsed)
         };
       } else {
         game._botScout02B = {
@@ -6129,7 +6330,20 @@ function updateEnemyBot(dt) {
           sweepCandidatesCount: 0,
           sweepSkippedDangerCount: 0,
           sweepReason: '',
-          sweepStartedAt: 0
+          sweepStartedAt: 0,
+          // BOT-SCOUT-02E: outbound target selection telemetry defaults
+          outboundTargetSource: 'none',
+          outboundTargetReason: '',
+          outboundTargetX: null,
+          outboundTargetY: null,
+          playerHqX: null,
+          playerHqY: null,
+          playerHqCenterX: null,
+          playerHqCenterY: null,
+          targetDistToPlayerHq: -1,
+          oldKnowledgeTargetX: null,
+          oldKnowledgeTargetY: null,
+          fallbackUsed: false
         };
       }
     } catch (err) {
