@@ -1,6 +1,6 @@
-# AUDIT_FROM_GLM — BOT-PROGRESSION-01
+# AUDIT_FROM_GLM — VISUAL-COMBAT-FX-01
 
-**Task:** BOT-PROGRESSION-01 — audit why enemy economy/production seems to stall around ~3 tanks
+**Task:** VISUAL-COMBAT-FX-01 — minimal procedural light_tank shot and hit effects
 **Lane:** Audit only
 **Date:** 2026-05-12
 
@@ -8,296 +8,293 @@
 
 ## 1. Root cause / цель аудита
 
-Enemy bot appears to stop progressing around ~3 light_tanks and does not clearly scale economy/production during a match. After deep audit of the codebase, there are **three root causes** working together to create this stall:
+Light_tank combat currently has zero visual feedback. When a tank fires, the only observable change is the target's HP bar shrinking. There is no shot/tracer, no muzzle flash, no impact/hit effect. This makes combat feel lifeless and makes it hard for the player to notice that a tank is actually shooting.
 
-### Primary cause: `FE_ENEMY_LIGHT_TANK_CAP = 3` (L9572)
-
-```javascript
-window.FE_ENEMY_LIGHT_TANK_CAP = 3;
-```
-
-This is an **ATTACK-09 experimental production cap** that hard-limits enemy light_tank count (alive + queued) to 3. Once the enemy has 3 tanks alive or in queue, `FE_PATCH_09ECanStartLightTankProduction()` (L9632) returns `{ ok: false, reason: 'attack09_tank_cap' }` and no further tanks are produced. The cap never increases over time, never scales with game progress, and has no mechanism to adapt. It was introduced as an experimental safeguard in BOT-ATTACK-09 but was never tuned or removed.
-
-This is the **dominant cause** of the stall. Once 3 tanks exist, the factory goes idle. The bot cannot grow its army beyond this hard ceiling regardless of economy, game time, or player pressure.
-
-### Secondary cause: No additional economy buildings
-
-The enemy bot has no logic to build additional separators, storage buildings, or a second factory. The BRAIN-01 priority loop (L9977) only checks:
-
-1. `build_separator` — only if **no** separator exists yet (`FE_PATCH_09C2EnemySeparatorExistsOrQueued()`)
-2. `build_factory` — only if **no** factory exists yet (`FE_PATCH_09DEnemyFactoryExistsOrQueued()`)
-
-Once one separator and one factory are built, BRAIN-01 never orders another. This means:
-
-- **One separator** processes 15 minerals → 10 energy + 1 element every 6 seconds. Maximum element production rate: ~10 elements/min.
-- **No additional storage**: enemy starts with BASE_STORAGE (purple: 20). Element storage caps at 20. With one separator producing 1 element per 6 sec, storage fills in ~2 minutes and the separator pauses (`element_storage_full`).
-- **No second factory**: even if resources were unlimited, only one factory can produce units at a time, and `FE_PATCH_09E_FACTORY_MAX_QUEUE = 1` limits queue depth to 1.
-
-### Tertiary cause: Element income bottleneck
-
-A single separator producing 1 element per 6 seconds gives ~10 elements/min. A light_tank costs 2 elements with a 35-second build time. The element production rate supports roughly one tank every 12 seconds (2 elements × 6 sec = 12 sec), which is actually faster than the build time (35 sec). But the **storage cap of 20 elements** means the separator pauses frequently when the cap is hit and tanks aren't being produced (because of the TANK_CAP). This creates a feedback loop:
-
-1. Tank cap reached → factory stops consuming elements.
-2. Element storage fills to 20 → separator pauses.
-3. Enemy economy stalls completely — no production, no conversion, no spending.
+The root cause is that `updateLightTankCombat()` (L1441) applies damage purely logically — it decrements HP via `damageUnit()` / `FE_PATCH_06BDamageBuilding()` and resets the cooldown timer. No visual event is emitted at the point of fire or impact. The rendering pipeline in `render()` (L12390) only draws static sprites, HP bars, dust particles, and click markers — nothing related to combat.
 
 ---
 
-## 2. Функции economy/production
+## 2. Существующая particle/effect система
 
-| Функция | Линия | Роль |
-|---------|-------|------|
-| `FE_ATTACK09GetEnemyLightTankCountIncludingQueue()` | L9574 | Counts alive + queued enemy light_tanks. Used by cap check. |
-| `FE_PATCH_09ECanStartLightTankProduction()` | L9632 | Checks if production can start: cap, queue depth, resources. |
-| `FE_PATCH_09EStartLightTankProduction()` | L9663 | Starts tank production after canStart check. Deducts resources. |
-| `FE_PATCH_09EUpdateEnemyFactoryProduction()` | L9738 | Main production tick. Chooses unit type, advances queue, spawns units. |
-| `FE_PATCH_09ECompleteEnemyFactories()` | L9604 | Returns all complete non-destroyed enemy factories. |
-| `FE_PATCH_09EEnsureFactoryQueue()` | L9609 | Lazy-init factory queue. Max depth = 1. |
-| `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` | L9866 | Decides what to produce: builder < harvester < scout < light_tank. Checks tank cap. |
-| `FE_PATCH_BASELINE_01_StartFactoryProduction()` | L9941 | Starts worker/scout production. |
-| `FE_PATCH_BRAIN_01_ChoosePriorityAction()` | L9977 | Top-level decision: separator → factory → builder → harvester → combat → wait. |
-| `FE_PATCH_BRAIN_01_ExecuteAction()` | L10020 | Executes BRAIN-01 decision. |
-| `FE_PATCH_BRAIN_01_TryProduceWorker()` | L10047 | Tries to produce a worker in any free factory. |
-| `FE_PATCH_09C3UpdateEnemySeparatorProduction()` | L9273 | Runs separator cycles. Pauses if storage full or not enough minerals. |
-| `FE_PATCH_09C3EnemySeparatorCycleCheck()` | L9248 | Checks if separator can run: minerals, energy space, element space. |
-| `FE_PATCH_09C2EnemySeparatorExistsOrQueued()` | L9078 | Checks if enemy has separator (exists or being built). |
-| `FE_PATCH_09DEnemyFactoryExistsOrQueued()` | L9352 | Checks if enemy has factory (exists or being built). |
-| `ensureEnemyResources()` | L1966 | Lazy-init enemy resource bucket. |
-| `changeResourceForOwner()` | L9032 | Changes resources with storage cap enforcement. |
-| `addResourceForOwner()` | L1991 | Adds resources with storage cap enforcement. Used by harvester unload (L8862). |
-| `getStorageLimitsForOwner()` | L1948 | Returns storage caps = BASE_STORAGE + building storageBonus. |
+The game already has a mature procedural particle system for **builder dust** (FE_BUILDER_DUST_PATCH, L12133–12336). This system provides a proven pattern we can replicate for combat FX:
 
----
+| Компонент | Dust аналог | Combat FX аналог |
+|-----------|-------------|-----------------|
+| Storage | `game.dustParticles[]` | `game.combatFxParticles[]` |
+| Spawn function | `spawnBuilderDust(unit, mode, dx, dy)` (L12163) | `spawnShotFx(attacker, target)` + `spawnHitFx(target)` |
+| Update function | `updateDustParticles(dt)` (L12294) | `updateCombatFxParticles(dt)` |
+| Draw function | `drawDustParticles()` (L12309) | `drawCombatFxParticles()` |
+| Max particles cap | `FE_BUILDER_DUST_MAX_PARTICLES = 80` | `FE_COMBAT_FX_MAX_PARTICLES = 60` |
+| Particle lifetime | 0.32–0.56 sec | Shot tracer: ~0.18 sec, Hit flash: ~0.25 sec |
+| Draw order | After terrain, before z-sorted objects (L12414) | Same — or after units for overlay effect |
 
-## 3. Где production cap блокирует прогрессию
-
-**Critical gate 1: `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` (L9866)**
-
-```javascript
-// ATTACK-09: if light_tank cap is reached, return null (factory waits, no builder spam).
-var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
-if (_a09Cap != null && _a09Cap > 0) {
-  var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
-  if (_a09Count >= _a09Cap) return null;  // <-- PRODUCTION STOPS HERE
-}
-```
-
-When tank cap is reached, `ChooseFactoryUnitType` returns `null`. The factory queue stays empty. The factory sits idle.
-
-**Critical gate 2: `FE_PATCH_09ECanStartLightTankProduction()` (L9632)**
-
-```javascript
-var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
-if (_a09Cap != null && _a09Cap > 0) {
-  var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
-  if (_a09Count >= _a09Cap) {
-    return { ok:false, reason:'attack09_tank_cap', ... };
-  }
-}
-```
-
-Even if somehow a tank production order got past `ChooseFactoryUnitType`, this second check blocks it at the `CanStart` level.
-
-**Critical gate 3: Early-exit in `ChooseFactoryUnitType` (L9876–L9879)**
-
-```javascript
-if (!game) return _a09CapBlocked ? null : 'light_tank';
-var now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-if (now - (game._baseline01LastWorkerCheck || 0) < FE_PATCH_BASELINE_01_WORKER_CHECK_COOLDOWN_MS) {
-  return _a09CapBlocked ? null : 'light_tank';
-}
-```
-
-The worker check has a 5-second cooldown. During those 5 seconds, if the tank cap is active, the function short-circuits to `null` without even checking if workers need replenishment. This means if a harvester or builder dies during this cooldown window, the factory won't replace it — it will just wait, because the cap check returns null before the worker check.
+The dust system demonstrates:
+- Position in **tile coordinates** with `tileToScreen()` conversion at draw time
+- `baseOffsetX/baseOffsetY` for screen-space offsets relative to sprite anchor
+- Velocity (`vx/vy`) in screen-space pixels per second
+- Fade via `life/maxLife` ratio
+- `ctx.globalAlpha` for transparency
+- `ctx.ellipse()` for particle shapes
+- Particle cap with splice to prevent memory growth
 
 ---
 
-## 4. Как "progression stall" выглядит в игре
+## 3. Где в combat pipeline вставлять FX
 
-Timeline of a typical skirmish:
+**Critical point: `updateLightTankCombat()` line 1475**
 
-1. **0:00–0:30**: Skirmish start. Enemy gets: HQ, 2 harvesters, 1 builder, 1 tank. Enemy resources: minerals:0, energy:160, purple:0.
-2. **0:30–1:00**: BRAIN-01 orders separator build (cost 30 energy). Builder starts building separator. Factory starts producing (builder/harvester first, then light_tank).
-3. **1:00–2:00**: Separator completes. Harvester income feeds minerals → separator → purple. Tank production starts. Enemy reaches 2–3 tanks.
-4. **2:00**: **TANK CAP HIT (3 tanks).** Factory stops producing tanks. `ChooseFactoryUnitType` returns `null`.
-5. **2:00–3:00**: Element storage fills to 20 (no consumption). Separator pauses (`element_storage_full`).
-6. **3:00+**: Enemy economy is completely idle. Factory idle, separator idle, harvesters return cargo but minerals pile up. Bot does nothing productive with its economy. Player can freely build up.
+```javascript
+if (unit.attackCooldown <= 0) {
+  const killed = isBuildingTarget
+    ? FE_PATCH_06BDamageBuilding(target, stats.damage)
+    : damageUnit(target, stats.damage);
+  unit.attackCooldown = stats.cooldown;
+  // << FX SPAWN POINT — right here, after damage application
+```
 
-The enemy never progresses beyond this point unless tanks die (freeing cap slots). But even when a tank dies, the replacement cycle is slow (35 sec production + element accumulation), and the cap hits again quickly.
+This is the exact frame where a shot is fired. At this point we know:
+- `unit` — the attacker (has `unit.x`, `unit.y`, `unit.type`, direction via `unit._renderDir`)
+- `target` — the target (has position, kind)
+- `isBuildingTarget` — whether target is a building or unit
+
+We need to spawn two effects here:
+1. **Shot/tracer**: a short bright line or elongated glow from attacker toward target
+2. **Hit/impact**: a small burst at the target position
 
 ---
 
-## 5. Как увеличить progression минимально
+## 4. Какой эффект нужен
 
-There are two independent fixes needed:
+### Effect A: Shot/tracer (дульная вспышка + трассер)
 
-### Fix A: Remove or increase `FE_ENEMY_LIGHT_TANK_CAP`
+**Visual:** A short bright line from the tank's turret toward the target, lasting ~0.15–0.20 seconds. It should fade quickly. Color: bright yellow/white for player, reddish for enemy.
 
-The simplest fix: raise the cap or make it scale with game time.
+**Implementation approach:**
+- Spawn 2–3 small elongated particles along the line from attacker to target
+- Each particle: position along the line, velocity toward target, short life
+- Use `ctx.ellipse()` with horizontal stretch for tracer shape
+- Alternative (simpler): a single short-lived particle at the attacker's position that moves toward the target position over ~0.15 sec
 
-**Option A1 (simplest — just raise the cap):**
+**Simpler approach (recommended):** Instead of a true tracer line, spawn a **muzzle flash** at the attacker position — a bright expanding circle that fades in ~0.15 sec. This is visually clear and trivially simple:
+- Position: attacker's tile coordinates
+- Size: starts small (~3px), grows to ~8px over life
+- Alpha: starts at 0.8, fades to 0
+- Color: yellow-white (#ffe060) for player, red-orange (#ff6630) for enemy
 
-```javascript
-window.FE_ENEMY_LIGHT_TANK_CAP = 8;  // was 3
-```
+### Effect B: Hit/impact (вспышка попадания)
 
-Pros: One-line change. Enemy can now build 8 tanks.
-Cons: Fixed cap still doesn't scale. If player turtles, enemy stalls at 8.
+**Visual:** A small bright burst at the target position, lasting ~0.20–0.25 seconds. Expanding then fading.
 
-**Option A2 (time-based scaling):**
+**Implementation approach:**
+- Spawn 3–5 small particles at the target position
+- Each particle: random offset, slight outward velocity, short life
+- Use `ctx.ellipse()` with decreasing alpha
+- Color: orange/yellow for unit hit, gray/orange for building hit
 
-```javascript
-function FE_ATTACK09GetTankCap(now) {
-  var base = window.FE_ENEMY_LIGHT_TANK_CAP || 3;
-  if (base <= 0) return Infinity; // disabled
-  var gameMinutes = (game?.time || 0) / 60;
-  // Scale: +1 tank every 3 minutes after minute 5, up to +5 bonus
-  var bonus = Math.min(5, Math.floor(Math.max(0, gameMinutes - 5) / 3));
-  return base + bonus;
-}
-```
+**Simpler approach (recommended):** A single expanding ring/flash at the target's center:
+- Position: target center (`FE_PATCH_06BTargetCenter()` for buildings, `{x: target.x, y: target.y}` for units)
+- Size: starts at ~4px, expands to ~12px over life
+- Alpha: starts at 0.7, fades to 0
+- Color: bright orange (#ff8c30) fading to dark
 
-Pros: Enemy grows over time. 3 tanks at start, up to 8 by minute 20.
-Cons: Slightly more complex. Needs tuning.
+### Effect C (optional): Smoke puff at impact
 
-**Option A3 (disable the cap entirely):**
-
-```javascript
-window.FE_ENEMY_LIGHT_TANK_CAP = 0;  // disable cap
-```
-
-Pros: Simplest possible change. No hard limit.
-Cons: ATTACK-12 attack gate already limits attack waves. But without the cap, the enemy might stockpile too many tanks if economy is strong. However, with only 1 factory and queue depth 1, production is naturally limited to ~1 tank per 35 sec + element cost. This is self-regulating.
-
-**Recommendation: Option A3** — disable the cap. The existing economy itself (1 separator, 1 factory, element cost) is the natural limiter. The ATTACK-12 attack gate already decides when to send waves. An artificial cap is unnecessary and causes the observed stall.
-
-### Fix B: Fix early-exit cap check in `ChooseFactoryUnitType`
-
-When tank cap is active and the 5-second worker check cooldown hasn't expired, the function returns `null` instead of checking workers. This prevents worker replenishment when a worker dies during the cooldown.
-
-**Fix:** Move the cap-blocked return **after** the worker checks, not before:
-
-```javascript
-function FE_PATCH_BASELINE_01_ChooseFactoryUnitType() {
-  // ... worker checks first (builder, harvester, scout) ...
-  // Only check tank cap AFTER worker checks
-  var _a09Cap = window.FE_ENEMY_LIGHT_TANK_CAP;
-  if (_a09Cap != null && _a09Cap > 0) {
-    var _a09Count = FE_ATTACK09GetEnemyLightTankCountIncludingQueue();
-    if (_a09Count >= _a09Cap) return null;
-  }
-  return 'light_tank';
-}
-```
-
-This ensures workers always get priority, even when tank cap is active. If the cap is disabled (Option A3), this fix is less critical but still good practice.
-
-### Fix C (optional, not required for this patch): Build additional economy buildings
-
-This is **out of scope** for BOT-PROGRESSION-01 but noted for future consideration:
-
-- Build a second separator after game time > 5 min
-- Build element/energy storage when approaching cap
-- Build a second factory for faster production
-
-These would require expanding BRAIN-01's action list and build order logic, which is a larger scope change.
+A secondary delayed particle (~2 particles, dark gray, rising slowly) after the hit flash. This adds "weight" to the impact. Can be added in the same system — just different color/velocity/longer life.
 
 ---
 
-## 6. Точные файлы/функции для изменения
+## 5. Точные функции/файлы для изменения
 
 **Единственный файл:** `src/main.js`
 
 | # | Функция / блок | Линия | Изменение |
 |---|---------|-------|-----------|
-| 1 | `window.FE_ENEMY_LIGHT_TANK_CAP` | L9572 | Change from `3` to `0` (disable cap). Or raise to higher value. |
-| 2 | `FE_PATCH_BASELINE_01_ChooseFactoryUnitType()` | L9866 | Move tank-cap early-exit returns **after** worker checks. Currently at L9876–L9879 (two early returns) and L9914–L9918 (final check). The two early returns should be removed; only the final check after worker/scout logic should remain. |
+| 1 | Constants near combat/dust constants | ~L12133 | Add `FE_COMBAT_FX_MAX_PARTICLES`, `FE_COMBAT_FX_SHOT_LIFE`, `FE_COMBAT_FX_HIT_LIFE`, color constants |
+| 2 | New: `spawnShotFx(attacker, targetPos)` | After dust system | Spawn muzzle flash particles at attacker position |
+| 3 | New: `spawnHitFx(target, isBuilding)` | After dust system | Spawn hit burst particles at target position |
+| 4 | New: `updateCombatFxParticles(dt)` | After `updateDustParticles` | Update life, position, velocity of combat FX particles |
+| 5 | New: `drawCombatFxParticles()` | After `drawDustParticles` | Render combat FX particles using canvas 2D |
+| 6 | `updateLightTankCombat()` | L1475–1479 | After damage application, call `spawnShotFx(unit, targetCenter)` and `spawnHitFx(target, isBuildingTarget)` |
+| 7 | `update()` | L14347 (after `updateDustParticles(dt)`) | Add `updateCombatFxParticles(dt)` |
+| 8 | `render()` | L12414 (after `drawDustParticles()`) | Add `drawCombatFxParticles()` |
+| 9 | Game init | L187 (near `clickMarkers:[]`) | Add `combatFxParticles:[]` to game object init |
 
 ---
 
-## 7. Что НЕ трогать
+## 6. Как рисовать трассер без asset dependency
 
-- Combat damage/range/cooldown functions and values
+The task requires **no asset dependencies** — no sprite sheets, no images. Everything must be procedural via Canvas 2D API.
+
+### Shot/tracer rendering:
+
+```javascript
+// Short bright line from attacker toward target
+function drawCombatFxParticles() {
+  if (!game?.combatFxParticles?.length) return;
+  const z = game.camera.zoom;
+  ctx.save();
+  for (const p of game.combatFxParticles) {
+    const pos = tileToScreen(p.x, p.y);
+    const t = clamp(p.life / p.maxLife, 0, 1);
+    ctx.globalAlpha = p.alpha * t;
+    if (p.fxType === 'shot') {
+      // Muzzle flash: expanding bright circle at attacker position
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.ellipse(
+        pos.x + (p.baseOffsetX || 0) * z,
+        pos.y + (p.baseOffsetY || 0) * z,
+        p.r * z,
+        p.r * 0.6 * z,
+        0, 0, Math.PI * 2
+      );
+      ctx.fill();
+    } else if (p.fxType === 'tracer') {
+      // Short line from attacker toward target
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = Math.max(1.5, p.width * z * t);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      const sx = pos.x + (p.ox || 0) * z;
+      const sy = pos.y + (p.oy || 0) * z;
+      const ex = sx + p.dx * z * t;
+      const ey = sy + p.dy * z * t;
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    } else if (p.fxType === 'hit') {
+      // Expanding ring/burst at target position
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.ellipse(
+        pos.x + (p.ox || 0) * z,
+        pos.y + (p.oy || 0) * z,
+        p.r * z,
+        p.r * 0.65 * z,
+        0, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+```
+
+This uses only `ctx.ellipse()`, `ctx.fillStyle`, `ctx.strokeStyle`, `ctx.beginPath()`, `ctx.moveTo()`, `ctx.lineTo()`, `ctx.stroke()`, `ctx.fill()` — all standard Canvas 2D with no images.
+
+---
+
+## 7. Visibility check
+
+Combat FX must respect fog of war. A player should not see enemy-on-enemy combat FX in fog, and enemy-on-player combat FX should only show if the attacker/target is visible.
+
+**Existing helper:** `isVisible(x, y)` (L11534) checks `game.fogVisible[y][x]`.
+
+**Rule:**
+- Player tank shooting: always show FX (player sees their own units)
+- Enemy tank shooting player unit: show if attacker OR target tile is visible to player
+- Enemy-on-enemy: only show if the area is visible to player
+
+Simple implementation: before spawning FX, check if at least one of (attacker position, target position) is `isVisible()`. For player-initiated shots, skip the check entirely.
+
+---
+
+## 8. Что НЕ трогать
+
+- Combat damage/range/cooldown values and formulas
+- `damageUnit()` / `FE_PATCH_06BDamageBuilding()` logic
 - Pathfinding / `findPath` / `passable`
 - Scout lifecycle (`FE_SCOUT01*`, `FE_INTEL01*`)
 - BOT-ATTACK-11/12 attack gate logic
-- BOT-ATTACK-12 thresholds
 - BOT-COMBAT-AWARENESS-01
 - BOT-DEFENSE-RETREAT-01
+- BOT-PROGRESSION-01
 - ATTACK-04 hq_push protection
 - ATTACK-08 invariant repair
 - ATTACK-10 wave lock
-- FE_PATCH_BRAIN_01 action list (do not add new actions)
-- Enemy harvester mining logic (works correctly)
-- Enemy separator conversion logic (works correctly — stalls due to storage cap, which is a symptom not a cause)
-- Factory queue depth (`FE_PATCH_09E_FACTORY_MAX_QUEUE = 1`)
+- Enemy production / economy / BRAIN-01
+- Builder dust system (separate system, do not merge)
 - Save/load
-- Render / fog
+- Fog rendering logic
 - Map generation
-- Building construction logic (`FE_PATCH_09C2*`, `FE_PATCH_09D*`)
+- Building construction logic
+- Unit state machine (idle/moving/attacking states)
+- HP bar rendering
+- Unit sprite rendering
 
 ---
 
-## 8. Риск
+## 9. Риск
 
 **Low.**
 
 Обоснование:
 
-- **Fix A (disable cap)**: The tank cap was an experimental safeguard. Removing it does not change combat behavior — tanks still have the same stats. The ATTACK-12 attack gate already decides when waves attack. The only change is that the factory can keep producing instead of idling. Natural economy limits (1 separator, 1 factory, queue depth 1, element cost 2, build time 35 sec) provide a self-regulating ceiling of roughly 1 tank per 40–50 seconds.
-- **Fix B (worker priority)**: This is a pure bugfix. Workers should always have production priority over tanks. Currently the cap check short-circuits worker replenishment, which can cause economy collapse if a worker dies. This is clearly wrong behavior.
-- **Worst case**: If economy is too strong (unlikely with current setup), enemy could accumulate more tanks than intended. This is mitigated by ATTACK-12's attack gate sending waves, which naturally consumes tanks.
-- **No risk to existing systems**: Neither fix touches combat, pathfinding, attack gates, scout, retreat, or any other system.
+- **Purely additive rendering:** Adding a new particle system that is drawn after existing content. It does not modify any existing draw calls or render state.
+- **No gameplay changes:** Combat FX are visual-only. They do not affect damage, targeting, pathfinding, or any game logic. The `updateLightTankCombat()` change is a single-line call to `spawnShotFx/spawnHitFx` after the existing damage application — it does not change the combat flow.
+- **Proven pattern:** The dust particle system has been stable for multiple patches. Combat FX use the same pattern: `game.combatFxParticles[]`, spawn/update/draw lifecycle, particle cap.
+- **No asset dependency:** All FX are procedural Canvas 2D. No image loading, no sprite sheets.
+- **Visibility-gated:** FX only render when visible to player. No information leak through fog.
+- **Worst case:** Too many particles could cause a minor frame rate dip in large battles. Mitigated by `FE_COMBAT_FX_MAX_PARTICLES` cap (default 60) and short particle lifetimes (~0.2 sec). With cooldown of 0.75 sec per tank, even 10 tanks firing simultaneously produce only ~30 particles per second, decaying quickly.
 
 ---
 
-## 9. Telemetry / debug plan
+## 10. Telemetry / debug plan
 
-The existing telemetry already covers this:
-
-- `game._attack09EnemyTankCap` — already populated by `FE_PATCH_09EUpdateEnemyFactoryProduction` (L9754). Shows `{ cap, count, blocked, reason, at }`. After fix, `blocked` should be `false` most of the time.
-- `game._enemyFactoryProductionStatus` — shows production status including `attack09_tank_cap` reason. After fix, this reason should not appear.
-
-**Additional telemetry (minimal):**
-
-Add to `game._botProgression01` (new debug object):
+Minimal telemetry. Existing systems already provide enough debug info. Add one debug object:
 
 ```javascript
-{
-  tankCapValue: 0,              // current value of FE_ENEMY_LIGHT_TANK_CAP
-  lastWorkerPriorityFixAt: 0,   // game time when worker was prioritized over cap
-  workerPriorityFixCount: 0     // how many times worker check overrode cap check
+game._combatFx01 = {
+  shotCount: 0,        // total shot FX spawned
+  hitCount: 0,         // total hit FX spawned
+  activeParticles: 0   // current live particle count
 }
 ```
 
-This is only needed if Fix B is implemented. If cap is disabled (Fix A), worker priority fix becomes moot and this telemetry is optional.
+This is populated by the spawn functions and updated by the update function. Accessible via browser console: `game._combatFx01`.
+
+No per-frame noisy telemetry. The debug object is only for development tuning.
 
 ---
 
-## 10. Targeted smoke test plan
+## 11. Targeted smoke test plan
 
-**Сценарий 1 — Production continues past 3 tanks:**
-1. Start skirmish, observe enemy production.
-2. Wait for enemy to produce 3+ tanks (check `game.units` for enemy light_tanks).
-3. Verify factory continues producing tanks beyond 3 (check `game._enemyFactoryProductionStatus.status` is not `'attack09_tank_cap'`).
-4. Verify separator continues processing elements (not stuck at `element_storage_full`).
-5. Observe enemy sends attack waves with 4+ tanks.
+**Сценарий 1 — Player tank fires at enemy:**
+1. Start skirmish, produce a player light_tank.
+2. Move tank near enemy, observe attack engagement.
+3. Verify: bright yellow muzzle flash appears at player tank position when it fires.
+4. Verify: orange hit burst appears at the enemy target position on impact.
+5. Verify: effects are short-lived (~0.2 sec), do not linger.
+6. Verify: HP bar of target still decreases normally (combat unchanged).
 
-**Сценарий 2 — Worker replenishment still works:**
-1. Start skirmish, let enemy build up economy.
-2. Kill an enemy harvester (using player tanks).
-3. Verify factory produces a replacement harvester even while at tank cap (or beyond).
-4. Verify enemy economy does not collapse after worker loss.
+**Сценарий 2 — Enemy tank fires at player:**
+1. Let enemy tanks engage player tanks/buildings.
+2. Verify: red-orange muzzle flash appears at enemy tank position.
+3. Verify: orange hit burst appears at player target position.
+4. Verify: effects only visible when area is not in fog.
 
-**Сценарий 3 — ATTACK-12 gate still controls waves:**
-1. Start skirmish, let enemy build up.
-2. Verify attack waves are still gated by ATTACK-12 (check `game._attack12State`).
-3. Verify enemy does not send all tanks in one giant wave.
+**Сценарий 3 — Multiple tanks fighting:**
+1. Create a large engagement (3+ tanks per side).
+2. Verify: FX do not cause noticeable frame rate drop.
+3. Verify: FX do not overlap excessively or obscure units.
+4. Verify: particle count stays within cap (`game._combatFx01.activeParticles`).
 
-**Сценарий 4 — Regression:**
-1. Normal game flow — bot should build separator, factory, workers, tanks in correct order.
-2. BRAIN-01 priority loop should work identically.
-3. Scout lifecycle unchanged.
-4. Retreat/defense behavior unchanged.
+**Сценарий 4 — Tank attacks building:**
+1. Player tank attacks enemy building.
+2. Verify: hit effect appears at building center (not at corner).
+3. Verify: building HP decreases normally.
+
+**Сценарий 5 — Fog of war:**
+1. Player has no vision of enemy area.
+2. Enemy tanks fight each other (if possible in current AI).
+3. Verify: no combat FX visible in fogged area.
+4. Verify: when player gains vision, FX appear correctly.
+
+**Сценарий 6 — Regression:**
+1. Normal game flow — bot should build, attack, defend normally.
+2. Combat damage/range/cooldown unchanged.
+3. Dust particles still work normally.
+4. Click markers still work normally.
+5. Save/load works correctly (combatFxParticles are visual-only, no need to persist).
 
 Жду «Делай».
