@@ -68,3 +68,4 @@ screenshots/
 # Local GPT/agent context folders - do not commit
 _gpt_state/
 _inbox/
+glm-game-sandbox/
