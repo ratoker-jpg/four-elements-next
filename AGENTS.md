@@ -30,6 +30,7 @@ Core rules:
 12. **For code/gameplay/bot tasks, always use the two-phase workflow from `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md`: Phase 1 = audit/plan only; Phase 2 = implementation only after explicit user confirmation "Делай".**
 13. **Do not over-split related low-risk changes into many tiny patches. Prefer Medium patches when 2-3 changes share one gameplay meaning, one smoke test, and nearby code. Do not combine movement/pathfinding/combat/brain/economy into one risky patch.**
 14. **After implementation**, GLM outputs CODE_SUMMARY in chat (5 fields: Branch, PR, SHA, Files, Checks). Full details go into PR description, not into chat.
+15. **GLM Exchange**: for GPT/GLM handoff, use fixed files in `docs/glm_exchange/`. Do not create per-task subfolders. Current exchange files are fully overwritten for each task; only `SESSION_LOG.md` keeps the latest 5 handoffs.
 
 Working expectations:
 
@@ -39,6 +40,7 @@ Working expectations:
 4. Always list changed files and checks that were run (in PR description and CODE_SUMMARY).
 5. Prefer reversible renames, guards, or isolated config updates over deletions.
 6. Before implementation, read and follow `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` for patch size selection, two-phase workflow, and audit requirements.
+7. When using `docs/glm_exchange/`, write results to the exact requested file and stop after the requested phase. Do not continue from Phase 1 to Phase 2 without explicit user command.
 
 GLM / GPT responsibility split:
 
@@ -53,6 +55,12 @@ GLM / GPT responsibility split:
 | `docs/patches/INDEX.md` update | ❌ | ✅ (after PR merge) |
 | Roadmap updates (✅ + PR#) | ❌ | ✅ (after PR merge) |
 | AI_READ_FIRST.md update | ❌ | ✅ (if rules/SoT changed) |
+| `docs/glm_exchange/PROMPT_TO_GLM.md` | ❌ | ✅ |
+| `docs/glm_exchange/AUDIT_FROM_GLM.md` | ✅ | ❌ |
+| `docs/glm_exchange/GPT_REVIEW.md` | ❌ | ✅ |
+| `docs/glm_exchange/PHASE2_COMMAND.md` | ❌ | ✅ |
+| `docs/glm_exchange/CODE_SUMMARY.md` | ✅ | ❌ |
+| `docs/glm_exchange/PR_REVIEW.md` | ❌ | ✅ |
 
 Git and review workflow:
 
