@@ -2368,6 +2368,11 @@
     regroupArriveRadiusTiles: 3
   };
 
+  // BOT-ATTACK-12: intel-based attack gate constants.
+  var FE_ATTACK12_MAX_INTEL_AGE_SEC = 180;
+  var FE_ATTACK12_MIN_ATTACK_TANKS = 2;
+  var FE_ATTACK12_FORCE_ADVANTAGE = 1;
+
   const FE_10I1_BOT_BEHAVIOR_PROFILES = {
     normal: {
       checkIntervalMs: 1200,
@@ -3735,6 +3740,85 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return null;
   }
 
+  // BOT-ATTACK-12: evaluate whether bot should launch a new attack wave.
+  // Uses scout intel to decide: allow attack or delay until intel/tanks are sufficient.
+  // This gates only NEW offensive waves when 10F1 vision has no target.
+  // Does NOT interrupt active attacks, defense, or retreat.
+  function FE_ATTACK12EvaluateAttackDecision(enemyTanks, now) {
+    var intel = game && game.enemyIntel;
+    var _a12Attack11Ds = game && game._botAttack11 ? (game._botAttack11.dispatchSource || '') : '';
+
+    // Count ready enemy tanks: alive, not wave-locked, not on intel rally.
+    var _a12Ready = 0;
+    for (var _a12i = 0; _a12i < (enemyTanks || []).length; _a12i++) {
+      var _a12u = enemyTanks[_a12i];
+      if (!_a12u || (_a12u.hp || 0) <= 0) continue;
+      if (_a12u._attack11IntelRally) continue;
+      if (typeof FE_ATTACK10IsWaveLocked === 'function' && FE_ATTACK10IsWaveLocked(_a12u)) continue;
+      _a12Ready++;
+    }
+
+    // HQ position intel: confirmed or estimated.
+    var _a12HqAvailable = !!(intel && (intel.playerHqSeen || intel.playerHqEstimateCenterX != null));
+    var _a12PlayerHqSeen = !!(intel && intel.playerHqSeen);
+    var _a12HqEstimateAvailable = !!(intel && intel.playerHqEstimateCenterX != null);
+
+    // Force intel: needs to be fresh (age <= MAX_AGE).
+    var _a12LastUsefulAt = intel ? (intel.lastUsefulIntelAt || 0) : 0;
+    var _a12LastSweepAt = intel ? (intel.lastScoutSweepDoneAt || 0) : 0;
+    var _a12ForceKnown = _a12LastUsefulAt > 0 || _a12LastSweepAt > 0;
+    var _a12ForceAge1 = _a12LastUsefulAt > 0 ? (now - _a12LastUsefulAt) : Infinity;
+    var _a12ForceAge2 = _a12LastSweepAt > 0 ? (now - _a12LastSweepAt) : Infinity;
+    var _a12ForceAgeSec = _a12ForceKnown ? Math.min(_a12ForceAge1, _a12ForceAge2) : -1;
+    var _a12ForceFresh = _a12ForceKnown && _a12ForceAgeSec <= FE_ATTACK12_MAX_INTEL_AGE_SEC;
+
+    var _a12IntelFreshness = _a12LastUsefulAt > 0 ? (now - _a12LastUsefulAt) : -1;
+    var _a12KnownPlayerLT = (intel && intel.knownPlayerUnitsByType) ? (intel.knownPlayerUnitsByType.light_tank || 0) : 0;
+    var _a12KnownPlayerHv = (intel && intel.knownPlayerUnitsByType) ? (intel.knownPlayerUnitsByType.harvester || 0) : 0;
+
+    // Decision logic (ordered checks).
+    var _a12Allowed = false;
+    var _a12Decision = 'delay';
+    var _a12Reason = '';
+
+    if (!_a12HqAvailable) {
+      _a12Reason = 'delay_no_intel';
+    } else if (!_a12ForceKnown || !_a12ForceFresh) {
+      _a12Reason = 'delay_stale_intel';
+    } else if (_a12Ready < FE_ATTACK12_MIN_ATTACK_TANKS) {
+      _a12Reason = 'delay_too_few_tanks';
+    } else if (_a12KnownPlayerLT > 0 && _a12Ready < _a12KnownPlayerLT + FE_ATTACK12_FORCE_ADVANTAGE) {
+      _a12Reason = 'delay_enemy_outnumbered';
+    } else {
+      _a12Allowed = true;
+      _a12Decision = 'allow';
+      _a12Reason = 'allow_favorable_intel';
+    }
+
+    return {
+      attackAllowed: _a12Allowed,
+      decision: _a12Decision,
+      reason: _a12Reason,
+      readyEnemyTanks: _a12Ready,
+      knownPlayerLightTanks: _a12KnownPlayerLT,
+      knownPlayerHarvesters: _a12KnownPlayerHv,
+      playerHqSeen: _a12PlayerHqSeen,
+      playerHqEstimateAvailable: _a12HqEstimateAvailable,
+      hqIntelAvailable: _a12HqAvailable,
+      forceIntelKnown: _a12ForceKnown,
+      forceIntelFresh: _a12ForceFresh,
+      forceIntelAgeSec: _a12ForceAgeSec,
+      intelFreshnessSec: _a12IntelFreshness,
+      lastUsefulIntelAt: _a12LastUsefulAt,
+      lastScoutSweepDoneAt: _a12LastSweepAt,
+      requiredTanks: FE_ATTACK12_MIN_ATTACK_TANKS,
+      forceAdvantageRequired: FE_ATTACK12_FORCE_ADVANTAGE,
+      attack11DispatchSource: _a12Attack11Ds,
+      gateApplied: true,
+      skippedBecauseActiveAttack: false
+    };
+  }
+
   // BOT-SCOUT-02B: get enemy home anchor point (reuses existing helpers).
   function FE_SCOUT02BGetEnemyHomeAnchor() {
     try {
@@ -4892,6 +4976,32 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     var _a11SkipPathFailed = 0, _a11SkipDead = 0;
     var _a11SkipReason = '';
     if (!target) {
+      // BOT-ATTACK-12: intel-based attack gate.
+      // When 10F1 vision has no target, check scout intel before launching blind attack.
+      var _a12Decision = FE_ATTACK12EvaluateAttackDecision(enemyUnits, game ? (game.time || 0) : 0);
+      if (game) game._botAttack12 = _a12Decision;
+      if (!_a12Decision.attackAllowed) {
+        // Gate denied — same pattern as armyScore < threshold branch.
+        for (const unit of enemyUnits) {
+          // ATTACK-10: do not return wave-locked units home — they are in an active attack wave.
+          if (FE_ATTACK10IsWaveLocked(unit)) continue;
+          // BOT-ATTACK-11: do not recall tanks on intel rally.
+          if (unit._attack11IntelRally) continue;
+          // Do not recall tanks already in active attack.
+          if (unit.attackTargetId || unit.attackApproachTargetId) continue;
+          if (FE_PATCH_08BShouldKeepUnitNearHome(unit, state, FE_10I1_knobs().regroupArriveRadiusTiles)) {
+            FE_PATCH_08BReturnUnitHome(unit, state);
+          }
+        }
+        state.phase = 'defend';
+        if (game && game._botAttack11) {
+          game._botAttack11.attack12Allowed = false;
+          game._botAttack11.attack12Reason = _a12Decision.reason;
+        }
+        return false;
+      }
+      // Gate passed — proceed to ATTACK-11 intel rally / hq_push fallback.
+
       // BOT-ATTACK-11: use scout intel as rally point for coordinate move.
       _a11Intel = FE_ATTACK11ChooseIntelTarget();
       if (_a11Intel) {
@@ -4948,8 +5058,20 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         }
       }
     } else {
-      // 10F1 vision found a target — intel rally not needed.
+      // 10F1 vision found a target — intel rally not needed, gate not applied.
       _a11SkipReason = 'vision_target_available';
+      // BOT-ATTACK-12: gate not applied because 10F1 vision has a target.
+      if (game) {
+        game._botAttack12 = game._botAttack12 || {};
+        game._botAttack12.gateApplied = false;
+        game._botAttack12.attackAllowed = true;
+        game._botAttack12.reason = 'skip_existing_attack_active';
+        game._botAttack12.skippedBecauseActiveAttack = false;
+      }
+      if (game && game._botAttack11) {
+        game._botAttack11.attack12Allowed = true;
+        game._botAttack11.attack12Reason = 'vision_target_available';
+      }
     }
 
     // ATTACK-01 telemetry: record whether vision, intel rally, or fallback was used.
@@ -6935,10 +7057,44 @@ function updateEnemyBot(dt) {
         playerHqEstimateAvailable: !!(_a11IntelObj && _a11IntelObj.playerHqEstimateCenterX != null),
         intelFreshnessSec: _a11TIntel ? _a11TIntel.intelFreshnessSec : -1,
         lastScoutIntelAt: _a11IntelObj ? _a11IntelObj.lastUsefulIntelAt : 0,
-        lastScoutSweepDoneAt: _a11IntelObj ? _a11IntelObj.lastScoutSweepDoneAt : 0
+        lastScoutSweepDoneAt: _a11IntelObj ? _a11IntelObj.lastScoutSweepDoneAt : 0,
+        // BOT-ATTACK-12: gate result reflected in attack11 telemetry.
+        attack12Allowed: false,
+        attack12Reason: ''
       };
     } catch (_a11TErr) {
       if (game) game._botAttack11Error = String(_a11TErr && _a11TErr.message ? _a11TErr.message : _a11TErr);
+    }
+
+    // BOT-ATTACK-12: debug telemetry for intel-based attack gate.
+    try {
+      var _a12IntelObj = game && game.enemyIntel;
+      var _a12Now = game ? (game.time || 0) : 0;
+      var _a12State = game && game._enemyBotState;
+      game._botAttack12 = {
+        attackAllowed: false,
+        decision: 'delay',
+        reason: 'not_in_attack_dispatch',
+        readyEnemyTanks: 0,
+        knownPlayerLightTanks: (_a12IntelObj && _a12IntelObj.knownPlayerUnitsByType) ? (_a12IntelObj.knownPlayerUnitsByType.light_tank || 0) : 0,
+        knownPlayerHarvesters: (_a12IntelObj && _a12IntelObj.knownPlayerUnitsByType) ? (_a12IntelObj.knownPlayerUnitsByType.harvester || 0) : 0,
+        playerHqSeen: !!(_a12IntelObj && _a12IntelObj.playerHqSeen),
+        playerHqEstimateAvailable: !!(_a12IntelObj && _a12IntelObj.playerHqEstimateCenterX != null),
+        hqIntelAvailable: !!(_a12IntelObj && (_a12IntelObj.playerHqSeen || _a12IntelObj.playerHqEstimateCenterX != null)),
+        forceIntelKnown: (_a12IntelObj && (_a12IntelObj.lastUsefulIntelAt > 0 || _a12IntelObj.lastScoutSweepDoneAt > 0)),
+        forceIntelFresh: false,
+        forceIntelAgeSec: -1,
+        intelFreshnessSec: (_a12IntelObj && _a12IntelObj.lastUsefulIntelAt > 0) ? (_a12Now - _a12IntelObj.lastUsefulIntelAt) : -1,
+        lastUsefulIntelAt: _a12IntelObj ? (_a12IntelObj.lastUsefulIntelAt || 0) : 0,
+        lastScoutSweepDoneAt: _a12IntelObj ? (_a12IntelObj.lastScoutSweepDoneAt || 0) : 0,
+        requiredTanks: FE_ATTACK12_MIN_ATTACK_TANKS,
+        forceAdvantageRequired: FE_ATTACK12_FORCE_ADVANTAGE,
+        attack11DispatchSource: game && game._botAttack11 ? (game._botAttack11.dispatchSource || '') : '',
+        gateApplied: false,
+        skippedBecauseActiveAttack: !!(_a12State && _a12State.phase === 'attack')
+      };
+    } catch (_a12TErr) {
+      if (game) game._botAttack12Error = String(_a12TErr && _a12TErr.message ? _a12TErr.message : _a12TErr);
     }
 
     if (!game || game.screen !== 'game' || game.paused) return;

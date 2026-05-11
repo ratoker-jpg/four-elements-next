@@ -4142,3 +4142,134 @@ Manual test plan:
 4. Танки на rally: rallyActiveCount>0, при прибытии rallyArrivedCount/rallyConvertedCount.
 5. Combat/scout/economy не изменились.
 
+---
+
+Задача: BOT-ATTACK-12 — intel-based attack/no-attack decision gate
+Дата: 2026-05-11
+Lane: Review
+Ветка: glm/bot-attack-12-intel-attack-gate (от sandbox/main)
+
+Цель:
+Добавить gate перед запуском новой волны атаки, когда 10F1 vision не видит цель.
+Если scout intel отсутствует/устарел или вражеских танков недостаточно — отложить атаку.
+Не прерывать активные атаки, defence, retreat, visible target logic.
+
+Проблема:
+Enemy tank attack стартует всегда, когда armyScore >= attackScoreThreshold (1 на normal).
+Scout intel влиял только на куда идут танки (BOT-ATTACK-11), но не на следует ли атаковать.
+Бот мог запускать слепую атаку с 1 танком без intel о позиции игрока.
+
+Что сделано:
+
+1. Константы BOT-ATTACK-12 (L2371-2374):
+   - FE_ATTACK12_MAX_INTEL_AGE_SEC = 180 — max возраст force intel
+   - FE_ATTACK12_MIN_ATTACK_TANKS = 2 — минимум танков для атаки
+   - FE_ATTACK12_FORCE_ADVANTAGE = 1 — минимум превосходства над известными player tanks
+
+2. Helper FE_ATTACK12EvaluateAttackDecision(enemyTanks, now) (L3743-3820):
+   Разделяет два типа intel:
+   - HQ position intel (playerHqSeen / playerHqEstimateCenterX) — без ограничения возраста,
+     HQ не перемещается
+   - Force intel (lastUsefulIntelAt / lastScoutSweepDoneAt) — должен быть свежим,
+     age <= FE_ATTACK12_MAX_INTEL_AGE_SEC
+
+   Логика decision (по порядку):
+   - Нет HQ intel (ни confirmed, ни estimated) → delay_no_intel
+   - Force intel отсутствует или устарел → delay_stale_intel
+   - readyEnemyTanks < 2 → delay_too_few_tanks
+   - knownPlayerLightTanks > 0 и readyEnemyTanks < knownPlayerLightTanks + 1 → delay_enemy_outnumbered
+   - Всё ок → allow_favorable_intel
+
+   readyEnemyTanks: живые enemy light_tank, не wave-locked, не на intel rally.
+
+3. Gate insertion в FE_PATCH_08BPrepareAttack (L4978-5003):
+   Gate вставлен внутри if (!target) блока, ПЕРЕД ATTACK-11 intel rally кодом.
+   - Если FE_PATCH_08BAttackTarget() вернул target (10F1 vision) → gate НЕ применяется
+   - Если target нет → gate вычисляется и проверяется
+
+   При delay:
+   - Используется тот же паттерн, что и armyScore < threshold branch:
+     return home для не-wave-locked, не-rally, не-в-атаке танков
+   - state.phase = 'defend'
+   - Не отзывает: wave-locked, _attack11IntelRally, танки с attackTargetId/attackApproachTargetId
+   - return false
+
+   Spam/loop защита: nextCheckAt (1200ms cooldown) — gate не вызывается каждый tick.
+
+4. 10F1 vision branch (L5060-5075):
+   Когда 10F1 видит цель — gateApplied: false, attackAllowed: true.
+   Не ломает visible immediate target logic.
+
+5. Телеметрия game._botAttack12 (L7066-7095):
+   Поля:
+   - attackAllowed: boolean
+   - decision: "allow" | "delay"
+   - reason: конкретная причина (allow_favorable_intel / delay_no_intel / delay_stale_intel / delay_too_few_tanks / delay_enemy_outnumbered / skip_existing_attack_active / not_in_attack_dispatch)
+   - gateApplied: boolean — gate был вычислен (false = 10F1 target был доступен)
+   - skippedBecauseActiveAttack: boolean — gate не применялся из-за активной атаки
+   - hqIntelAvailable: boolean
+   - forceIntelKnown: boolean
+   - forceIntelFresh: boolean
+   - forceIntelAgeSec: number
+   - readyEnemyTanks: number
+   - knownPlayerLightTanks: number
+   - knownPlayerHarvesters: number
+   - playerHqSeen: boolean
+   - playerHqEstimateAvailable: boolean
+   - intelFreshnessSec: number
+   - lastUsefulIntelAt: number
+   - lastScoutSweepDoneAt: number
+   - requiredTanks: number
+   - forceAdvantageRequired: number
+   - attack11DispatchSource: string
+
+6. Доп. поля в game._botAttack11 (L7061-7063):
+   - attack12Allowed: boolean
+   - attack12Reason: string
+
+Что НЕ тронуто:
+- BOT-SCOUT поведение (02B2/02C/02D/02D3/02D4/02E)
+- BOT-INTEL-01 update logic (FE_INTEL01Init, FE_INTEL01UpdateFromScout)
+- BOT-ATTACK-11 target selection (FE_ATTACK11ChooseIntelTarget)
+- BOT-ATTACK-11C telemetry semantics (game._botAttack11 — только 2 доп. поля)
+- ATTACK-08/09/10 internals
+- setLightTankAttackApproachGeneric
+- FE_PATCH_10F1SelectAttackDecision
+- FE_PATCH_08BCommandEnemyTankAttack
+- FE_PATCH_08BArmyScore
+- FE_10H1_updateEnemyRetreatAndDefenseMvp
+- Combat damage/range/cooldowns
+- findPath/passable
+- Scout behavior
+- Production/caps
+- Map/render/fog/save/load/economy
+
+Изменённые файлы:
+- src/main.js (константы, helper, gate, телеметрия)
+- PATCH_REPORT.txt
+
+Выполненные проверки:
+- node --check src/main.js -> PASS
+
+Manual test plan:
+1. Свежая игра, до scout intel:
+   - game._botAttack12.reason = "delay_no_intel"
+   - Танки не атакуют, остаются дома
+2. Scout собрал intel, intel свежая, танков >= 2:
+   - game._botAttack12.reason = "allow_favorable_intel"
+   - Атака идёт через ATTACK-11 intel rally
+3. Enemy < 2 танков:
+   - game._botAttack12.reason = "delay_too_few_tanks"
+4. Intel > 180 сек:
+   - game._botAttack12.reason = "delay_stale_intel"
+   - game._botAttack12.forceIntelFresh = false
+5. Player light_tanks >= enemy tanks - 1:
+   - game._botAttack12.reason = "delay_enemy_outnumbered"
+6. 10F1 видит цель:
+   - game._botAttack12.gateApplied = false
+   - Атака без gate
+7. Активная атака (phase='attack'):
+   - game._botAttack12.skippedBecauseActiveAttack = true
+   - Gate не вычисляется
+8. Scout / combat / production не изменились
+
