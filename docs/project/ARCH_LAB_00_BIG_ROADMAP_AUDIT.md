@@ -8,6 +8,8 @@
 
 **ARCH-LAB-00B corrections:** LAB-05 split на 05A–05D, добавлен Playwright E2E smoke baseline, решение по unit_controller.js, таблица line count tracking, wiring/bridge budget, обновлён dependency graph и next recommended arch.
 
+**ARCH-LAB-00C risk clarifications:** LAB-05C обязательный pre-design (ARCH-AI-05C-DESIGN), актуализированы review load numbers (11 merge-back milestones → ~13–14 sessions), LAB-05A fallback split с stop conditions, критерии переключения FE_TANK_DECIDER_ENABLED default на true.
+
 ---
 
 ## 1. Executive summary
@@ -49,7 +51,7 @@ Four Elements Remake v0.4 — browser RTS, работающий как один 
 
 **Hybrid lab strategy** (Стратегия C) — sandbox/main остаётся стабильным baseline, где игра всегда запускается, а крупная архитектурная работа ведётся в отдельной lab-ветке, где игра может временно не запускаться. Это позволяет делать крупные перестройки без review fatigue и без риска сломать baseline, при этом сохраняя возможность быстрого sync-back.
 
-Примерно 10 architecture-lab шагов (ARCH-LAB-01–07, где LAB-05 разделён на 05A–05D), каждый — большой блок работы в lab-ветке с checkpoint-коммитами, но с обязательными merge-back milestones, когда игра снова playable. Перед LAB-01 создаётся Playwright E2E smoke baseline для автоматической верификации merge-back.
+Примерно 11 merge-back milestones (ARCH-LAB-01A, 01, 02, 03, 04, 05A, 05B, 05C, 05D, 06, 07), каждый — большой блок работы в lab-ветке с checkpoint-коммитами, но с обязательными merge-back milestones, когда игра снова playable. Перед LAB-01 создаётся Playwright E2E smoke baseline для автоматической верификации merge-back.
 
 ### Что будет считаться успехом
 
@@ -382,7 +384,7 @@ DOCS-ARCH-00C устанавливал правило контролируемо
 
 ### Обзор roadmap
 
-Вместо 30 микрошагов — 7 крупных архитектурных блоков (LAB-05 разделён на 4 подшага 05A–05D, итого 10 merge-back milestones). Каждый блок — это lab-подветка с checkpoint-коммитами и merge-back milestone.
+Вместо 30 микрошагов — 7 крупных архитектурных блоков (LAB-05 разделён на 4 подшага 05A–05D, LAB-01A добавлен как prerequisite, итого 11 merge-back milestones). Каждый блок — это lab-подветка с checkpoint-коммитами и merge-back milestone.
 
 ### Line count tracking
 
@@ -532,7 +534,7 @@ Acceptance criteria:
 | Expected files/modules | src/ai/tank_decider.js (expanded с 276 до ~500 строк), src/ai/enemy_brain.js (new, bot tick orchestration); src/main.js сокращён на ~1 500 строк (10H1/10D1/10E1 wiring replaced) |
 | Can be broken? | Лаб может быть broken (decision restructure — самая сложная часть), merge-back = playable |
 | Risk | Very High — 10H1/10D1/10E1 — основные источники oscillation, любое изменение требует careful testing |
-| Dependencies | ARCH-LAB-05A (intel), ARCH-LAB-05B (targeting — decider использует targeting для pick_next_target) |
+| Dependencies | ARCH-LAB-05A (intel), ARCH-LAB-05B (targeting — decider использует targeting для pick_next_target), **ARCH-AI-05C-DESIGN (обязательный pre-design — LAB-05C не начинается без утверждённого spec)** |
 | Acceptance criteria | FE_TANK_DECIDER_ENABLED=true: defend/retreat/attack без oscillation; FE_TANK_DECIDER_ENABLED=false: legacy 1:1; ATTACK-08 repair не нужен для managed танков; E2E smoke PASS |
 | Smoke/Checks | E2E merge_back_smoke, browser: defend, retreat, attack, regroup, no oscillation, toggle flag on/off |
 
@@ -572,6 +574,70 @@ Acceptance criteria:
 | Acceptance criteria | Полный browser smoke checklist PASS; main.js < 8 000 строк; FE_PATCH_ < 100; нет dead flags; все модули имеют чёткие API |
 | Smoke/Checks | Full session QA: boot → menu → faction → new game → economy → build → attack → defend → scout → save → load → victory → defeat |
 
+### LAB-05C pre-design required (ARCH-AI-05C-DESIGN)
+
+LAB-05C — самая опасная точка roadmap: attack/retreat/defense Priority Stack migration, 10H1/10D1/10E1, order overwrite, oscillation. Перед реализацией LAB-05C обязателен отдельный docs-only design:
+
+**ARCH-AI-05C-DESIGN — attack/retreat/defense Priority Stack spec**
+
+Этот дизайн должен описать:
+
+- Список правил Priority Stack — полный перечень правил, которые будут добавлены в tank_decider.js для LAB-05C (defend_hq, retreat, keep_attacking, pick_next_target, regroup, intel_target, rally, patrol, idle), с приоритетами и условиями срабатывания
+- Приоритеты — числовые значения приоритетов для каждого правила, обоснование порядка
+- Условия срабатывания — конкретные предикаты для каждого правила (HP threshold, distance to HQ, threat count, wave composition и т.д.)
+- Edge cases — граничные ситуации: defend + retreat одновременно, низкий HP у нескольких танков, wave рассыпалась, scout intel устарел, async setTimeout(0) race
+- Какие legacy overwrite paths заменяются — маппинг: каждое правило Priority Stack → какие legacy FE_10H1/10D1/10E1/ATTACK-08 вызовы оно заменяет
+- Какие guards удаляются — конкретные guard-chains, которые станут ненужными после LAB-05C
+- Telemetry — какие метрики собирать для верификации (oscillation count, decision distribution, fallback rate, legacy suppression rate)
+- Rollback — как откатить LAB-05C если что-то пойдёт не так (FE_TANK_DECIDER_ENABLED=false, какие wiring reversal нужны)
+- Критерии готовности — когда LAB-05C считается завершённым (все правила реализованы, legacy paths заменены, oscillation < threshold, E2E smoke PASS)
+
+Цель: когда дойдём до LAB-05C, GLM не должен «придумывать архитектуру на ходу», а должен реализовать заранее утверждённый spec.
+
+**Dependency graph update:** ARCH-AI-05C-DESIGN должен быть завершён и утверждён до начала LAB-05C. Добавляется в параллельный путь:
+
+```text
+ARCH-LAB-05B → ARCH-AI-05C-DESIGN (docs) → ARCH-LAB-05C (implementation)
+```
+
+ARCH-AI-05C-DESIGN может создаваться параллельно с LAB-05A/05B, но LAB-05C не может начаться без утверждённого 05C-DESIGN.
+
+### LAB-05A fallback split
+
+LAB-05A сейчас: scout + enemy_intel, примерно ~2 000 строк. Это может быть тяжёлым первым подшагом Z13.
+
+Не обязательно дробить основной roadmap прямо сейчас, но добавляется fallback: если audit перед LAB-05A покажет high coupling, слишком большой diff или риск застревания, LAB-05A делится на:
+
+- **LAB-05A1 — enemy_intel extraction** — enemy_intel (Z13h, ~283 строки) + enemy vision (Z13b, ~199 строк) = ~482 строки. Это меньше и обычно менее связный модуль. Intel extraction — наиболее изолированная часть: читает данные из scout и tank vision, не управляет движением скаутов.
+- **LAB-05A2 — scout_lifecycle extraction** — scout lifecycle (Z13g, ~1 475 строк) + scouting coordinator (Z13i, ~459 строк) = ~1 934 строки. Scout lifecycle имеет ~30 `_scout*` свойств и сложный state machine, выше риск.
+
+Обоснование порядка: enemy_intel меньше и обычно менее связный; scout lifecycle имеет много `_scout*` state и выше риск. Fallback split не увеличивает roadmap заранее, но даёт план Б.
+
+**Stop conditions для split:**
+
+1. Estimated diff too large — если LAB-05A audit показывает diff > 2 500 строк изменений в main.js
+2. Scout/intel ownership unclear — если при audit невозможно чётко разделить, какие функции владеют intel data, а какие — scout movement
+3. No playable checkpoint after first extraction attempt — если после попытки выноса scout + intel вместе игра не запускается и нет очевидного restore plan
+4. GLM cannot produce safe merge-back plan — если GLM не может описать, как вернуть playable состояние при частичном выносе
+
+Если хотя бы одно условие выполняется — LAB-05A разделяется на LAB-05A1 + LAB-05A2 с дополнительным merge-back milestone.
+
+### Criteria for switching FE_TANK_DECIDER_ENABLED default to true
+
+Сейчас `FE_TANK_DECIDER_ENABLED = false` — безопасный default. Roadmap должен явно определить, когда можно переключать default на true.
+
+**Критерии:**
+
+1. **LAB-05C завершён и playable merge-back прошёл** — Priority Stack migration реализован, все правила работают, E2E smoke PASS
+2. **LAB-05D cleanup удалил/изолировал конфликтующие legacy overwrite paths** — FE_10H1/10D1/10E1 guards удалены или изолированы за feature flag, ATTACK-08 invariant repair не нужен для managed танков
+3. **Playwright smoke проходит** — автоматическая верификация playable baseline
+4. **Manual QA enemy tank behavior accepted** — пользователь провёл ручной тест enemy tank поведения (defend, retreat, attack, regroup, scout) и одобрил
+5. **Telemetry `game._tankDecider01` не показывает массовые errors/suppress/oscillation** — за несколько игровых сессий нет тревожных паттернов: нет повторяющихся suppress events, нет oscillation между defend/retreat, нет unexpected fallback to idle
+6. **Rollback через flag сохраняется минимум ещё один milestone** — после переключения default на true, механизм отката через FE_TANK_DECIDER_ENABLED = false продолжает работать как минимум до конца LAB-06
+7. **Пользователь явно approve'ит default = true** — финальное решение принимает пользователь после просмотра всех критериев
+
+До выполнения этих критериев флаг остаётся `false` в sandbox/main. В lab-ветках flag может быть `true` для тестирования.
+
 ### Сводная таблица roadmap
 
 | Arch | Goal | Expected reduction | Can be broken? | Risk | Dependencies | Acceptance criteria | Smoke/Checks |
@@ -583,7 +649,7 @@ Acceptance criteria:
 | ARCH-LAB-04 | Command + movement + combat + input | ~3 000 строк | Lab может | High | LAB-03 | All unit actions work | Browser: move, attack, select |
 | ARCH-LAB-05A | Scout + enemy_intel extraction | ~2 000 строк | Lab может | High | LAB-04 | Scout lifecycle + intel | E2E + browser: scout lifecycle |
 | ARCH-LAB-05B | Enemy_targeting extraction | ~1 000 строк | Lab может | High | LAB-05A | Attack dispatch + intel gate | E2E + browser: attack waves |
-| ARCH-LAB-05C | Tank decider Priority Stack migration | ~1 500 строк | Lab может | Very High | LAB-05A, 05B | No oscillation, flag toggle | E2E + browser: defend/retreat/attack |
+| ARCH-LAB-05C | Tank decider Priority Stack migration | ~1 500 строк | Lab может | Very High | LAB-05A, 05B, **05C-DESIGN** | No oscillation, flag toggle | E2E + browser: defend/retreat/attack |
 | ARCH-LAB-05D | Enemy_brain + economy + guard cleanup | ~1 500 строк | Lab может | High | LAB-05C | Full bot cycle, no dead guards | E2E + browser: full bot session |
 | ARCH-LAB-06 | Render + UI + player economy | ~3 500 строк | Lab может | Medium | LAB-04, 05D | Visual parity | Browser: full visual QA |
 | ARCH-LAB-07 | Cleanup + merge-back readiness | Cleanup only | Нет | Low-Med | LAB-01–06 | main.js 5K–8K, FE_PATCH_ <100 | Full session QA |
@@ -602,10 +668,11 @@ ARCH-LAB-01A E2E smoke baseline
         → ARCH-LAB-04 command/movement/combat/input
           → ARCH-LAB-05A scout + enemy_intel
             → ARCH-LAB-05B enemy_targeting
-              → ARCH-LAB-05C tank decider Priority Stack migration
-                → ARCH-LAB-05D enemy_brain + economy + guard cleanup
-                  → ARCH-LAB-06 render/UI/player economy
-                    → ARCH-LAB-07 cleanup/merge-back
+              → ARCH-AI-05C-DESIGN (docs-only, required before 05C)
+                → ARCH-LAB-05C tank decider Priority Stack migration
+                  → ARCH-LAB-05D enemy_brain + economy + guard cleanup
+                    → ARCH-LAB-06 render/UI/player economy
+                      → ARCH-LAB-07 cleanup/merge-back
 ```
 
 ### Параллелизм
@@ -622,8 +689,10 @@ ARCH-LAB-01A E2E smoke baseline
     ARCH-LAB-04    (LAB-05 prep:
         |            AI design docs,
     ARCH-LAB-05A   intel audit,
-        |           targeting spec)
-    ARCH-LAB-05B
+        |           targeting spec,
+    ARCH-LAB-05B  05C-DESIGN spec)
+        |
+    ARCH-AI-05C-DESIGN (docs-only, required)
         |
     ARCH-LAB-05C
         |
@@ -635,6 +704,7 @@ ARCH-LAB-01A E2E smoke baseline
 
 После ARCH-LAB-04:
   ARCH-LAB-05A–05D (AI) строго последовательно.
+  ARCH-AI-05C-DESIGN — обязательный pre-design перед LAB-05C.
   ARCH-LAB-06 может начаться после LAB-05D.
 ```
 
@@ -643,12 +713,13 @@ ARCH-LAB-01A E2E smoke baseline
 - ARCH-LAB-01A + docs/exchange work (E2E smoke можно создать параллельно с любым другим)
 - ARCH-LAB-03 + AI design docs (targeting spec, intel spec)
 - ARCH-LAB-05A + LAB-05B design (intel spec можно писать параллельно с scout extraction)
+- ARCH-LAB-05A/05B + ARCH-AI-05C-DESIGN (05C-DESIGN можно писать параллельно с 05A/05B implementation)
 
 ### Что строго последовательно
 
 - LAB-01A → LAB-01 → LAB-02 → LAB-03 → LAB-04 (каждый зависит от предыдущего)
 - LAB-04 → LAB-05A (AI execution зависит от command/movement/combat)
-- LAB-05A → LAB-05B → LAB-05C → LAB-05D (AI подшаги строго последовательно)
+- LAB-05A → LAB-05B → ARCH-AI-05C-DESIGN (docs, может параллельно с 05A/05B) → LAB-05C → LAB-05D (AI подшаги строго последовательно, 05C требует утверждённый 05C-DESIGN)
 - LAB-05D → LAB-06 (player economy зависит от enemy economy helpers)
 - LAB-06 → LAB-07 (cleanup требует все системы на месте)
 
@@ -774,9 +845,9 @@ NO_REVIEW (пользователь не смотрит):
 
 ```text
 Текущий подход (30 small PR): 30 review sessions
-Hybrid lab approach (7 lab milestones): 7 merge-back review sessions + 2-3 strategic decisions = ~10 review sessions
+Hybrid lab approach (11 merge-back milestones): ~11 merge-back reviews + 2–3 strategic/design reviews = ~13–14 review sessions
 
-Снижение review load: ~3x
+Снижение review load: ~2x (не 3x — 11 milestones + 2–3 strategic/design reviews = ~13–14 sessions, что примерно в 2 раза лучше, чем 30, но не в 3)
 ```
 
 ---
