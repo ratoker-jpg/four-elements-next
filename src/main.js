@@ -6878,6 +6878,7 @@ function updateEnemyBot(dt) {
         rallyClearedCount: 0,
         fallbackUsed: _a11LastDispatch ? (_a11LastDispatch.source === 'hq_fallback') : false,
         lastFailureReason: _a11LastFail,
+        h1RecallGuardedCount: 0,
         playerHqSeen: !!(_a11IntelObj && _a11IntelObj.playerHqSeen),
         playerHqEstimateAvailable: !!(_a11IntelObj && _a11IntelObj.playerHqEstimateCenterX != null),
         intelFreshnessSec: _a11TIntel ? _a11TIntel.intelFreshnessSec : -1,
@@ -6936,7 +6937,24 @@ function updateEnemyBot(dt) {
         if (_a04PHQ) _a04TgtId = _a04PHQ.id || null;
         FE_PATCH_08BAttack04Telemetry(state.phase, 'FE_10H1', _a04HqBlock, _a04Reason, _a04TgtId, _a04ArmyN);
       }
-      if (!_a04HqBlock && FE_10H1_updateEnemyRetreatAndDefenseMvp(state, enemyTanks, now)) return;
+      // BOT-ATTACK-11: exclude intel-rally tanks from FE_10H1 defense/retreat pool.
+      // 10H1 can overwrite their manual_move orders or set phase='defend'/'regroup',
+      // which cancels the intel rally attack. Filter rally tanks out, and if 10H1
+      // triggers but rally tanks exist, keep attack phase and don't return.
+      var _a11H1Tanks = enemyTanks.filter(function(u) { return u && !u._attack11IntelRally; });
+      var _a11H1RallyCount = enemyTanks.filter(function(u) { return u && u._attack11IntelRally; }).length;
+      var _a11H1Result = !_a04HqBlock && _a11H1Tanks.length > 0 && FE_10H1_updateEnemyRetreatAndDefenseMvp(state, _a11H1Tanks, now);
+      if (_a11H1Result && _a11H1RallyCount === 0) return;
+      if (_a11H1Result && _a11H1RallyCount > 0) {
+        // 10H1 issued defend/retreat for non-rally tanks, but rally tanks must continue.
+        // Restore attack phase so rally tanks are not abandoned.
+        state.phase = 'attack';
+        // Don't return — let rally tanks proceed through the rest of the bot tick.
+      }
+      // BOT-ATTACK-11 telemetry: record how many rally tanks were guarded from 10H1 recall.
+      if (_a11H1RallyCount > 0 && game && game._botAttack11) {
+        game._botAttack11.h1RecallGuardedCount = _a11H1RallyCount;
+      }
     } catch (err) {
       const g10h1 = FE_10H1_getGameObject && FE_10H1_getGameObject();
       if (g10h1) {

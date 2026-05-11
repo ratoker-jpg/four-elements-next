@@ -3972,13 +3972,16 @@ Priority:
 4. Minimal guards:
    - ATTACK-04 overChase/attackInvalid: intel rally tanks пропускают regroup
    - ATTACK-04 pressure defense: intel rally tanks не отзываются для защиты базы
+   - FE_10H1 early defense/retreat: intel rally tanks исключены из пула 10H1;
+     если 10H1 вызывает defend/retreat для остальных танков, phase='attack'
+     восстанавливается для rally tanks
    - Regroup phase: очистка _attack11IntelRally флага
 
 5. Telemetry game._botAttack11:
    - targetSource, targetX/Y, usesIntelPoint
    - assignedCount, rallyActiveCount
    - rallyArrivedCount, rallyConvertedCount, rallyClearedCount
-   - fallbackUsed, lastFailureReason
+   - fallbackUsed, lastFailureReason, h1RecallGuardedCount
    - playerHqSeen, playerHqEstimateAvailable
    - intelFreshnessSec, lastScoutIntelAt, lastScoutSweepDoneAt
    - Порядок: initial snapshot создаётся до decision logic (rally counters = 0),
