@@ -36,6 +36,8 @@ Core rules:
 
 Architecture Migration Mode is now the default for non-trivial gameplay/AI/refactor work. Patch mode is allowed only for emergency/small fixes or thin bridge/wiring changes.
 
+**Current progress checkpoint:** `docs/project/ARCH_PROGRESS_CHECKPOINT_2026-05-13.md` — completed blocks (00–04 mostly done), remaining work (05–08), and progress metrics.
+
 1. Новая крупная логика не должна добавляться напрямую в `src/main.js`. Если задача требует новой логики — сначала определить систему/модуль, куда она должна лечь. См. `docs/project/ARCHITECTURE_TARGET.md`.
 2. `src/main.js` должен постепенно становиться composition/wiring layer. Допустимо: bootstrap, game loop calls, thin compatibility wrappers, временные bridge/adaptor-вызовы. Недопустимо: новая gameplay-логика, новый AI-decision layer, большие patch-prefixed helper chains.
 3. Если GLM предлагает добавить новый guard/flag/if в `updateEnemyBot`, он обязан объяснить, почему это не увеличивает архитектурный долг, или остановиться и предложить системное решение.

@@ -12,6 +12,20 @@
 
 ---
 
+## Current checkpoint after ARCH-LAB-05A
+
+**Updated:** 2026-05-13
+
+Full checkpoint document: [`docs/project/ARCH_PROGRESS_CHECKPOINT_2026-05-13.md`](ARCH_PROGRESS_CHECKPOINT_2026-05-13.md)
+
+Key updates since this roadmap was written:
+- **04C combat-helper phase completed and QA PASS** — ARCH-LAB-04C1 through 04C4 (PRs #78–#81) created combat_system.js with 4 pure decision helpers, all wired through safe wrappers in main.js with legacy fallbacks.
+- **05A enemy_intel contract merged** — PR #82 created enemy_intel.js with SCOUT_LIFECYCLE_STATES, INTEL_SOURCES, SCOUT_RETURN_REASONS, createEnemyKnowledgeShell, createEnemyIntelSnapshot, isValidEnemyKnowledge, isValidEnemyIntelSnapshot. Contract-only, not yet wired.
+- **Remaining estimate should be read as 4 large blocks / 12–18 micro-ARCH PRs**, not the original "10–12 ARCH left." The count increased because large blocks are split into safer micro-PRs (e.g., 04C → 04C1–04C4), not because more work was discovered.
+- **Progress should be tracked by completed blocks, contracts, and delegations** — not by remaining PR count.
+
+---
+
 ## 1. Executive summary
 
 ### Текущий статус проекта
