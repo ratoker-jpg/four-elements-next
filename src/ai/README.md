@@ -1,7 +1,7 @@
 # src/ai/ — AI & Decision Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Partial — tank_decider.js extracted (ARCH-AI-01)
+**Status:** Partial — tank_decider.js extracted (ARCH-AI-01), enemy_intel.js contract (ARCH-LAB-05A)
 **Roadmap step:** ARCH-LAB-02, ARCH-LAB-05
 
 ## Purpose
@@ -15,6 +15,7 @@ main.js Z13 (5 255 lines, 34% of main.js — the single largest zone).
 | Module | Lines | PR | Description |
 |--------|-------|-----|-------------|
 | `tank_decider.js` | 276 | #67 | Priority Stack decision layer for enemy light_tank (ARCH-AI-01 MVP) |
+| `enemy_intel.js` | 198 | TBD | Pure data/contract: constants, factories, validators for enemy intel (ARCH-LAB-05A) |
 
 ## Planned modules
 
@@ -32,7 +33,7 @@ main.js Z13 (5 255 lines, 34% of main.js — the single largest zone).
 | `enemy_production.js` | Z13 partial | ~400 | Enemy unit production, factory management |
 | `enemy_scout.js` | Z13 partial | ~500 | Scout dispatch, observation, cooldown, intel collection |
 | `enemy_attack.js` | Z13 partial | ~600 | Attack wave composition, dispatch, group movement |
-| `enemy_intel.js` | Z13 partial | ~300 | Intel persistence, player strength estimation |
+| `enemy_intel.js` | Z13 partial | ~300 | Intel persistence, player strength estimation — contract-only (05A), full extraction later |
 | `targeting.js` | Z7 partial | ~300 | Target selection, threat assessment, attack priority |
 
 ## Dependencies
@@ -63,3 +64,4 @@ When a module passes all acceptance criteria, its flag is flipped to
 ## Current contents
 
 - `tank_decider.js` — extracted and active (ARCH-AI-01)
+- `enemy_intel.js` — contract-only (ARCH-LAB-05A); constants, factories, validators; not wired to main.js yet
