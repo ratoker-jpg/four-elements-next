@@ -160,42 +160,15 @@
     document.documentElement.style.setProperty('--ui-scale', String(settings.uiScale || 1));
   }
 
+  // ARCH-LAB-02: body moved to window.FE_GAME_STATE.createBlankGame()
   function blankGame(sizeKey='standard') {
-    const cfg = MAP_SIZES[sizeKey] || MAP_SIZES.standard;
-    return {
-      screen:'game',
-      paused:false,
-      mapSize:sizeKey,
-      mapW:cfg.w,
-      mapH:cfg.h,
-      time:0,
-      faction:'cyan',
-      factionWasRandom:false,
-      resources:{ minerals:0, purple:0, greenEl:0, cyanEl:0, yellowEl:0, energy:160, powerTotal:0, powerUsed:0 },
-      // FE_PATCH_09A: hidden enemy economy bucket. Not shown in player HUD.
-      enemyResources:{ minerals:0, energy:160, purple:0, greenEl:0, cyanEl:0, yellowEl:0 },
-      camera:{ x:0, y:0, zoom:1.05 },
-      terrain:[],
-      minerals:[],
-      units:[],
-      buildings:[],
-      obstacles:[],
-      territory:[],
-      fogVisible:[],
-      fogExplored:[],
-      messages:[],
-      clickMarkers:[],
-      dustParticles:[],
-      combatFxParticles:[],
-      _sepTimer:0,
-      _reactTimer:0,
-      _saveTimer:0,
-      gameResult:null,
-      gameResultReason:null,
-      gameResultAt:0,
-      gameEnded:false,
-      _enemyHqSeen:false
-    };
+    if (!window.FE_GAME_STATE) {
+      const msg = '[FE] FATAL: window.FE_GAME_STATE is missing — cannot create game state. ' +
+        'Ensure src/game/game_state.js is loaded before main.js.';
+      console.error(msg);
+      throw new Error(msg);
+    }
+    return window.FE_GAME_STATE.createBlankGame(sizeKey);
   }
 
   // ============================================================
