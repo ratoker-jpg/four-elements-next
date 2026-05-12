@@ -60,3 +60,4 @@
 | ARCH-LAB-00B | 2026-05-12 | TBD | Roadmap corrections: LAB-05 split, E2E smoke baseline, unit_controller decision, line count tracking, wiring budget |
 | ARCH-LAB-00C | 2026-05-12 | TBD | Roadmap risk clarifications: LAB-05C pre-design required, review load update, LAB-05A fallback split, FE_TANK_DECIDER_ENABLED criteria |
 | ARCH-LAB-01A | 2026-05-12 | TBD | Playwright E2E smoke baseline — Node static server + full playable flow test |
+| ARCH-LAB-01 | 2026-05-13 | TBD | Skeleton contracts & unit_controller archive — 6 ownership READMEs, module boundaries, FE_CORE bridge, archive deprecated module |

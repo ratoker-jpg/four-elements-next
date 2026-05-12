@@ -1,3 +1,15 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  WARNING — DEPRECATED MODULE — DO NOT ACTIVATE                     ║
+// ║                                                                     ║
+// ║  This module was an alternative unit movement controller that was   ║
+// ║  never activated in production. FE_UNIT_CONTROLLER_ENABLED has      ║
+// ║  always been false. The production movement code remains in         ║
+// ║  main.js (Z14). This file is archived for design record only.       ║
+// ║                                                                     ║
+// ║  Archived: 2026-05-13 (ARCH-LAB-01)                                ║
+// ║  Decision: ARCH-LAB-00B — archive, do not delete                   ║
+// ║  Do NOT remove FE_UNIT_CONTROLLER_ENABLED flag — main.js reads it  ║
+// ╚══════════════════════════════════════════════════════════════════════╝
 // Four Elements v0.4.2 Unit Controller
 // Отдельный контроллер движения и состояний юнитов.
 // main.js передаёт сюда game + функции через api.
