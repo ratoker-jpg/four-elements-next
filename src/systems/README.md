@@ -1,8 +1,8 @@
 # src/systems/ — Gameplay Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Active — 2 production modules (04B2 adds decision helpers to movement_system)
-**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1, 04B2 complete)
+**Status:** Active — 3 production modules
+**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1, 04B2, 04C1 complete)
 
 ## Purpose
 
@@ -52,6 +52,7 @@ All modules in this directory must:
 |--------|-------|-----|------|------------|
 | `command_system.js` | 196 | #75 | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
 | `movement_system.js` | ~410 | #76+04B2 | Medium | Movement state/result/reason/recovery constants, factory functions, predicates, ATTACK-06 decision helpers |
+| `combat_system.js` | ~190 | 04C1 | Low | Combat result/target kind/damage reason/attack state constants, factory functions, predicates — pure data, zero game mutation |
 
 ## ATTACK-06 decision delegation (ARCH-LAB-04B2)
 
@@ -74,7 +75,31 @@ Execution (`setLightTankAttackApproachGeneric`, telemetry writes) stays in main.
 If `FE_MOVEMENT_SYSTEM` helpers are unavailable, main.js falls back to legacy
 inline logic with identical behavior.
 
+## Combat contract (ARCH-LAB-04C1)
+
+The first step of combat system separation — a pure data contract module
+with zero game mutation. `combat_system.js` provides constants and factory
+functions for combat results, target kinds, damage reasons, and attack states.
+
+- **`COMBAT_RESULTS`** — 7 combat outcome types: DAMAGED, KILLED, TARGET_INVALID,
+  TARGET_DEAD, OUT_OF_RANGE, COOLDOWN_NOT_READY, ALREADY_DEAD.
+- **`TARGET_KINDS`** — 2 target classifications: UNIT, BUILDING.
+- **`DAMAGE_REASONS`** — 3 damage origin types: COMBAT_DAMAGE, ALREADY_DEAD, SCRIPTED.
+- **`ATTACK_STATES`** — 4 attack lifecycle phases: ATTACKING, ATTACK_APPROACH,
+  ATTACK_MOVE, MOVING_TO_ATTACK.
+- **`createCombatResult(type, details)`** — factory for combat result objects.
+- **`createDamageResult(type, details)`** — convenience factory (alias).
+- **`createKillResult(type, details)`** — convenience factory (alias).
+- **`isCombatResult(value)`** — type guard predicate.
+- **`isValidCombatResult(cr)`** — structural validation (returns true or error string).
+
+**Not yet in 04C1** (deferred to 04C2 when main.js delegates to them):
+classifyAttackTarget, isAttackableTarget, isInRange, targetCenter,
+distanceToBuilding, isDeadBuilding, shouldClearAttackTarget,
+shouldClearAttackApproach, createAttackDecision.
+
 ## Current contents
 
 - `command_system.js` — pure data command API (ARCH-LAB-04A)
 - `movement_system.js` — pure data movement API + ATTACK-06 decision helpers (ARCH-LAB-04B1 + 04B2)
+- `combat_system.js` — pure data combat contract API (ARCH-LAB-04C1)
