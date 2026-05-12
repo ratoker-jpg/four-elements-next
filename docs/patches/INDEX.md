@@ -63,3 +63,4 @@
 | ARCH-LAB-01 | 2026-05-13 | TBD | Skeleton contracts & unit_controller archive — 6 ownership READMEs, module boundaries, FE_CORE bridge, archive deprecated module |
 | ARCH-LAB-02 | 2026-05-13 | #73 | Extract blankGame data factory into src/game/game_state.js |
 | ARCH-LAB-03 | 2026-05-13 | #74 | Extract pure geometry/math helpers into src/core/geometry.js |
+| ARCH-LAB-04A | 2026-05-13 | #75 | Command boundary — pure data command API (COMMAND_TYPES, factories, predicates) |
