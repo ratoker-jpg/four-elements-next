@@ -1,7 +1,7 @@
 # src/core/ — Core Infrastructure
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Active — 4 production modules + 1 archived module
+**Status:** Active — 5 production modules + 1 archived module
 **Roadmap step:** Ongoing (LAB-01 through LAB-07)
 
 ## Purpose
@@ -19,6 +19,7 @@ and are loaded early in the script order. Core modules provide:
 | Module | Lines | PR | Risk | Description |
 |--------|-------|-----|------|-------------|
 | `standalone_constants.js` | 28 | #61 | Low | Frozen constants: TILE_W, TILE_H, SAVE_KEY, MAP_SIZES |
+| `geometry.js` | 91 | ARCH-LAB-03 | Low | Pure math helpers: clamp, dist, rectsOverlap, safeNum, formatTime, normalizeVec |
 | `storage_guard.js` | 51 | — | Low | localStorage overflow protection |
 | `asset_loader.js` | 108 | — | Low | Sprite sheet and animation loading |
 | `save_manager.js` | 105 | — | Medium | Save/load game state + UI slot management |
