@@ -97,6 +97,11 @@ window.FE_LIGHT_TANK_DIR_MAP = [2, 0, 0, 6, 6, 4, 4, 2];
 // Scout 8-direction mapping: confirmed by manual dev-calibration.
 // rawDir 0→3, 1→2, 2→1, 3→0, 4→7, 5→6, 6→5, 7→4.
 window.FE_SCOUT_DIR_MAP = [3, 2, 1, 0, 7, 6, 5, 4];
+// ARCH-LAB-01: FE_UNIT_CONTROLLER_ENABLED is permanently false.
+// unit_controller.js has been archived to src/core/_archived/unit_controller.js.
+// The production movement code remains in main.js (Z14).
+// Do NOT delete this flag — main.js guard code reads it.
+// See: docs/project/ARCH_LAB_01_SKELETON_CONTRACTS.md §5
 window.FE_UNIT_CONTROLLER_ENABLED = false;
 
 // ARCH-AI-01: Tank Decider — Priority Stack decision layer for enemy light_tank.
