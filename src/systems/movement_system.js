@@ -283,7 +283,7 @@
    * @param {boolean} params.hasAttackApproachTarget — !!unit.attackApproachTargetId
    * @param {number|null|undefined} [params.blockedTimer] — unit._blockedTimer or 0;
    *   if null/undefined, the blockedTimer threshold is not checked
-   *   (recoverUnitPath context); if a number, must be >= 0.5
+   *   (recoverUnitPath context); if a number, must be > 0.5
    *   (updateUnitMovement context)
    * @returns {boolean}
    */
@@ -294,7 +294,7 @@
     // blockedTimer gate: only checked when provided (updateUnitMovement context).
     // In recoverUnitPath context, blockedTimer is not provided/null, so skip.
     if (typeof params.blockedTimer === 'number') {
-      if (params.blockedTimer < ATTACK06_BLOCKED_TIMER_THRESHOLD) return false;
+      if (params.blockedTimer <= ATTACK06_BLOCKED_TIMER_THRESHOLD) return false;
     }
     return true;
   }

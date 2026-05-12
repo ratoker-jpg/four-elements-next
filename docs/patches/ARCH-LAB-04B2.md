@@ -81,7 +81,9 @@ FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision(params)
    **iff** legacy code would have called `setLightTankAttackApproachGeneric`.
 4. `_attack06LastRepathAt` update timing is identical to legacy behavior
    (updated before execution call, only when throttle passes).
-5. Throttle value remains 800ms. blockedTimer threshold remains 0.5.
+5. Throttle value remains 800ms. blockedTimer threshold remains 0.5 (strict
+   greater-than: recovery triggers when `blockedTimer > 0.5`, not `>= 0.5`,
+   matching the legacy `unit._blockedTimer > 0.5` condition exactly).
 6. `FE_MOVEMENT_SYSTEM` does NOT call pathfinding, combat, command execution,
    `FE_CORE`, `game`, DOM, or canvas.
 7. If `FE_MOVEMENT_SYSTEM` helpers are unavailable, legacy inline logic is used
