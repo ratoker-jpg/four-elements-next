@@ -185,8 +185,17 @@
   // ============================================================
   // Helpers
   // ============================================================
-  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
-  function dist(a,b){ return Math.abs(Math.round(a.x)-Math.round(b.x)) + Math.abs(Math.round(a.y)-Math.round(b.y)); }
+  if (!window.FE_GEOMETRY) {
+    const msg = '[FE] FATAL: window.FE_GEOMETRY is missing — cannot run. ' +
+      'Ensure src/core/geometry.js is loaded before main.js.';
+    console.error(msg);
+    throw new Error(msg);
+  }
+  // ARCH-LAB-03: bodies of clamp/dist/rectsOverlap/safeNum/formatTime/normalizeVec moved to window.FE_GEOMETRY
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.clamp()
+  function clamp(v,min,max){ return window.FE_GEOMETRY.clamp(v,min,max); }
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.dist()
+  function dist(a,b){ return window.FE_GEOMETRY.dist(a,b); }
   function inBounds(x,y){ return game && x>=0 && y>=0 && x<game.mapW && y<game.mapH; }
   function defaultFactionForOwner(owner='player') {
     return owner === 'enemy'
@@ -254,14 +263,10 @@
 
   function showToast(text, ms=6700) { screenManager.showToast(text, ms); }
   function choose(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
-  function safeNum(v){ return Number.isFinite(v) ? Math.round(v) : 0; }
-  function formatTime(sec) {
-    sec = Math.floor(sec||0);
-    const h = String(Math.floor(sec/3600)).padStart(2,'0');
-    const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
-    const s = String(sec%60).padStart(2,'0');
-    return `${h}:${m}:${s}`;
-  }
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.safeNum()
+  function safeNum(v){ return window.FE_GEOMETRY.safeNum(v); }
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.formatTime()
+  function formatTime(sec) { return window.FE_GEOMETRY.formatTime(sec); }
   function canContinue() { return window.FE_SAVE_MANAGER.canContinue(SAVE_KEY); }
   function allScreens(){ return screenManager.allScreens(); }
   function showScreen(el) { screenManager.showScreen(el); }
@@ -329,10 +334,8 @@
     return starts.slice(0, count).map(clampStartCell);
   }
 
-  function normalizeVec(vx, vy) {
-    const len = Math.hypot(vx, vy) || 1;
-    return { x: vx / len, y: vy / len };
-  }
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.normalizeVec()
+  function normalizeVec(vx, vy) { return window.FE_GEOMETRY.normalizeVec(vx, vy); }
 
   function spawnOutwardVector(start) {
     const center = { x:(game.mapW - 1) / 2, y:(game.mapH - 1) / 2 };
@@ -362,9 +365,8 @@
   }
   // SPAWN_BASED_RESOURCE_GENERATION_PATCH_END
 
-  function rectsOverlap(a,b) {
-    return !(a.x+a.w<=b.x || b.x+b.w<=a.x || a.y+a.h<=b.y || b.y+b.h<=a.y);
-  }
+  // ARCH-LAB-03: body moved to window.FE_GEOMETRY.rectsOverlap()
+  function rectsOverlap(a,b) { return window.FE_GEOMETRY.rectsOverlap(a,b); }
 
   // PATCH-MAP-04-ENVIRONMENT-COLLISION-BLOCKERS_START
   const FE_MAP04_PASSABLE_ENVIRONMENT_ASSETS = new Set([

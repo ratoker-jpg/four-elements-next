@@ -62,3 +62,4 @@
 | ARCH-LAB-01A | 2026-05-12 | TBD | Playwright E2E smoke baseline — Node static server + full playable flow test |
 | ARCH-LAB-01 | 2026-05-13 | TBD | Skeleton contracts & unit_controller archive — 6 ownership READMEs, module boundaries, FE_CORE bridge, archive deprecated module |
 | ARCH-LAB-02 | 2026-05-13 | #73 | Extract blankGame data factory into src/game/game_state.js |
+| ARCH-LAB-03 | 2026-05-13 | #74 | Extract pure geometry/math helpers into src/core/geometry.js |
