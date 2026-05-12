@@ -13,14 +13,15 @@
 | Приоритет | Файл | Зачем читать |
 |-----------|------|-------------|
 | 1 | `AGENTS.md` | Правила sandbox: Fast/Review lane, Architecture Migration Mode, запрещённые действия |
-| 2 | `docs/project/ARCHITECTURE_TARGET.md` | **Целевая архитектура и Architecture Migration Mode** — обязательное чтение перед любой gameplay/AI задачей |
-| 3 | `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` | Patch workflow (legacy) + Architecture Migration Gate |
-| 4 | `README_GLM_SANDBOX.md` | Описание sandbox, workflow, GLM разрешения/запреты |
-| 5 | `docs/project/REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md` | История рефакторинга main.js |
-| 6 | `docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md` | Классификация всех документов по актуальности |
-| 7 | `docs/project/GLM_ROADMAP_20260510.md` | Перспективный план развития (Phase 0-4) |
-| 8 | `docs/project/four_elements_bot_roadmap_merged_glm.md` | Актуальный роадмап бота |
-| 9 | `docs/prompts/PROMPT_NEW_CHAT_GLM_FOUR_ELEMENTS_SANDBOX.txt` | Промпт для новой GLM-сессии |
+| 2 | `docs/project/ARCH_PROGRESS_CHECKPOINT_2026-05-13.md` | **Architecture progress checkpoint** — completed blocks, remaining work, progress metrics |
+| 3 | `docs/project/ARCHITECTURE_TARGET.md` | Целевая архитектура и Architecture Migration Mode — обязательное чтение перед любой gameplay/AI задачей |
+| 4 | `docs/project/GLM_PATCH_WORKFLOW_RULES_20260511.md` | Patch workflow (legacy) + Architecture Migration Gate |
+| 5 | `README_GLM_SANDBOX.md` | Описание sandbox, workflow, GLM разрешения/запреты |
+| 6 | `docs/project/REF_MAIN_GLM_07_REFACTOR_SPRINT_CHECKPOINT.md` | История рефакторинга main.js |
+| 7 | `docs/project/DOCS_SOURCE_OF_TRUTH_AUDIT_20260510.md` | Классификация всех документов по актуальности |
+| 8 | `docs/project/GLM_ROADMAP_20260510.md` | Перспективный план развития (Phase 0-4) |
+| 9 | `docs/project/four_elements_bot_roadmap_merged_glm.md` | Актуальный роадмап бота |
+| 10 | `docs/prompts/PROMPT_NEW_CHAT_GLM_FOUR_ELEMENTS_SANDBOX.txt` | Промпт для новой GLM-сессии |
 
 ---
 
