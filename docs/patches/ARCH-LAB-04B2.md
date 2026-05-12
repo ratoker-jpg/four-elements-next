@@ -3,7 +3,7 @@
 **Task ID**: ARCH-LAB-04B2
 **Date**: 2026-05-13
 **Branch**: `glm/arch-lab-04b2-movement-attack06-delegation`
-**PR**: TBD
+**PR**: #77
 **Roadmap ref**: ARCH-LAB-04 step 3 (ATTACK-06 callback contract)
 
 ## Summary
@@ -116,4 +116,4 @@ FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision(params)
 - `node --check src/systems/movement_system.js` — PASS
 - `node --check src/main.js` — PASS
 - `node --check src/config/runtime_flags.js` — PASS
-- `npm run test:e2e` — UNVERIFIED (no browser in CI environment)
+- `npm run test:e2e` — PASS (6/6, 33.4s)
