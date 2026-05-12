@@ -1,8 +1,8 @@
 # src/systems/ — Gameplay Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Skeleton — no modules extracted yet
-**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04
+**Status:** Active — 1 production module
+**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A complete)
 
 ## Purpose
 
@@ -46,6 +46,12 @@ All modules in this directory must:
 - Never call back into main.js functions directly — use FE_CORE bridge
 - Be testable in isolation with a mock game object
 
+## Production modules
+
+| Module | Lines | PR | Risk | Description |
+|--------|-------|-----|------|------------|
+| `command_system.js` | 196 | ARCH-LAB-04A | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
+
 ## Current contents
 
-None — directory is a skeleton placeholder awaiting ARCH-LAB-03 extraction.
+- `command_system.js` — pure data command API (ARCH-LAB-04A)
