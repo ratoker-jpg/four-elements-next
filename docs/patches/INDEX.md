@@ -68,3 +68,4 @@
 | ARCH-LAB-04B2 | 2026-05-13 | TBD | Movement ATTACK-06 decision delegation (shouldRequestAttackApproachRecovery, classifyBlocker, createAttackApproachRecoveryDecision) |
 | ARCH-LAB-04C1 | 2026-05-13 | #78 | Combat boundary — pure data contract (COMBAT_RESULTS, TARGET_KINDS, DAMAGE_REASONS, ATTACK_STATES, factories, predicates) |
 | ARCH-LAB-04C2 | 2026-05-13 | #79 | Combat target/range decision helpers (targetCenter, distanceToBuilding, isDeadBuilding + BUILDING_CENTER_OFFSET) |
+| ARCH-LAB-04C3 | 2026-05-13 | #80 | Combat target classification/attackability helpers (classifyHostileTarget, isAttackableEnemyBuilding) |

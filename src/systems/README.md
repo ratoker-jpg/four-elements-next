@@ -2,7 +2,7 @@
 
 **Owner:** ARCH-LAB (architecture migration)
 **Status:** Active — 3 production modules
-**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1, 04B2, 04C1, 04C2 complete)
+**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1, 04B2, 04C1, 04C2, 04C3 complete)
 
 ## Purpose
 
@@ -52,7 +52,7 @@ All modules in this directory must:
 |--------|-------|-----|------|------------|
 | `command_system.js` | 196 | #75 | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
 | `movement_system.js` | ~410 | #76+04B2 | Medium | Movement state/result/reason/recovery constants, factory functions, predicates, ATTACK-06 decision helpers |
-| `combat_system.js` | ~310 | #78+04C2 | Low-Medium | Combat result/target kind/damage reason/attack state constants, factory functions, predicates, target/range decision helpers |
+| `combat_system.js` | ~390 | #78+04C2+04C3 | Low-Medium | Combat result/target kind/damage reason/attack state constants, factory functions, predicates, target/range decision helpers, target classification/attackability helpers |
 
 ## ATTACK-06 decision delegation (ARCH-LAB-04B2)
 
@@ -114,8 +114,32 @@ available and fall back to identical inline logic when not.
 classifyAttackTarget, isAttackableTarget, isInRange,
 shouldClearAttackTarget, shouldClearAttackApproach, createAttackDecision.
 
+### 04C3 — Target classification/attackability helpers
+
+Two pure classification/attackability predicates, replacing legacy wrappers
+in main.js with delegation. main.js wrappers delegate to `FE_COMBAT_SYSTEM`
+when available and fall back to identical inline logic when not.
+
+- **`classifyHostileTarget(params)`** — classify what kind of hostile target an
+  entity is. Returns `'unit'`, `'building'`, or `null`.
+  Replaces `FE_PATCH_07BGetHostileLightTankTargetKind`.
+  Params: `{ isLightTank, attackerOwner, targetKind, targetOwner, targetHp }`.
+
+- **`isAttackableEnemyBuilding(params)`** — predicate: is the target an
+  attackable enemy building (building + enemy + alive)?
+  Replaces `FE_PATCH_06BIsAttackableEnemyBuilding`.
+  Params: `{ isBuilding, isEnemy, hp }`.
+
+main.js resolves closure-bound data (isLightTank, unitOwner, buildingOwner,
+isEnemyBuilding) into plain params before calling. The module never accesses
+game state, DOM, or pathfinding.
+
+**Not yet in 04C3** (deferred to 04C4+):
+FE_PATCH_08BTargetInRange, isInRange, shouldClearAttackTarget,
+shouldClearAttackApproach, createAttackDecision.
+
 ## Current contents
 
 - `command_system.js` — pure data command API (ARCH-LAB-04A)
 - `movement_system.js` — pure data movement API + ATTACK-06 decision helpers (ARCH-LAB-04B1 + 04B2)
-- `combat_system.js` — pure data combat contract + target/range decision helpers (ARCH-LAB-04C1 + 04C2)
+- `combat_system.js` — pure data combat contract + target/range decision helpers + target classification/attackability helpers (ARCH-LAB-04C1 + 04C2 + 04C3)

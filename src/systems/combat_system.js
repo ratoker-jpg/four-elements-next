@@ -1,4 +1,6 @@
 // Four Elements v0.4 module: combat system — pure data API.
+// ARCH-LAB-04C3: target classification/attackability helpers — classifyHostileTarget,
+//   isAttackableEnemyBuilding.
 // ARCH-LAB-04C2: target/range decision helpers — targetCenter, distanceToBuilding,
 //   isDeadBuilding + BUILDING_CENTER_OFFSET constant.
 // ARCH-LAB-04C1: combat boundary — first step of combat system separation.
@@ -292,6 +294,78 @@
     return params.destroyed === true || (params.hp || 0) <= 0;
   }
 
+  // ── Target classification/attackability helpers (ARCH-LAB-04C3) ──
+  // These pure functions classify targets and determine attackability.
+  // main.js wrappers delegate to them when FE_COMBAT_SYSTEM is available,
+  // falling back to identical inline logic when not.
+  // main.js resolves closure-bound data (isLightTank, unitOwner,
+  // buildingOwner, isEnemyBuilding) into plain params before calling.
+
+  /**
+   * Pure function: classify what kind of hostile target an entity is.
+   *
+   * Replaces FE_PATCH_07BGetHostileLightTankTargetKind in main.js.
+   * Returns 'unit', 'building', or null.
+   *
+   * Legacy behavior preserved exactly:
+   * 1. if !isLightTank → null
+   * 2. if (targetHp || 0) <= 0 → null (target is dead)
+   * 3. if attackerOwner === targetOwner → null (same team)
+   * 4. if targetKind === 'unit' → 'unit'
+   * 5. if targetKind === 'building' → 'building'
+   * 6. otherwise → null
+   *
+   * Owner defaults: (attackerOwner || 'player'), (targetOwner || 'player')
+   * match legacy unitOwner/buildingOwner default behavior.
+   *
+   * @param {Object} params
+   * @param {boolean} params.isLightTank — is the attacker a light tank?
+   * @param {string}  params.attackerOwner — attacker's resolved owner string
+   * @param {string}  params.targetKind — 'unit' or 'building' (or other)
+   * @param {string}  params.targetOwner — target's resolved owner string
+   * @param {number}  params.targetHp — target's hp (may be null/undefined)
+   * @returns {string|null} 'unit', 'building', or null
+   */
+  function classifyHostileTarget(params) {
+    if (!params || typeof params !== 'object') return null;
+    if (!params.isLightTank) return null;
+    if ((params.targetHp || 0) <= 0) return null;
+    var aOwner = String(params.attackerOwner || 'player');
+    var tOwner = String(params.targetOwner || 'player');
+    if (aOwner === tOwner) return null;
+    if (params.targetKind === TARGET_KINDS.UNIT) return TARGET_KINDS.UNIT;
+    if (params.targetKind === TARGET_KINDS.BUILDING) return TARGET_KINDS.BUILDING;
+    return null;
+  }
+
+  /**
+   * Pure predicate: is the target an attackable enemy building?
+   *
+   * Replaces FE_PATCH_06BIsAttackableEnemyBuilding in main.js.
+   * Returns true only if the target is a building, is enemy-owned,
+   * and has positive HP.
+   *
+   * Legacy behavior preserved exactly:
+   * 1. if !isBuilding → false
+   * 2. if !isEnemy → false
+   * 3. return (hp || 0) > 0
+   *
+   * The (hp || 0) > 0 pattern treats null/undefined/0/negative as
+   * not attackable, matching legacy.
+   *
+   * @param {Object} params
+   * @param {boolean} params.isBuilding — is the target a building?
+   * @param {boolean} params.isEnemy — is the target enemy-owned?
+   * @param {number}  params.hp — target's hp (may be null/undefined)
+   * @returns {boolean}
+   */
+  function isAttackableEnemyBuilding(params) {
+    if (!params || typeof params !== 'object') return false;
+    if (!params.isBuilding) return false;
+    if (!params.isEnemy) return false;
+    return (params.hp || 0) > 0;
+  }
+
   // ── Public API ──────────────────────────────────────────────────
 
   window.FE_COMBAT_SYSTEM = {
@@ -307,6 +381,8 @@
     isValidCombatResult: isValidCombatResult,
     targetCenter:        targetCenter,
     distanceToBuilding:  distanceToBuilding,
-    isDeadBuilding:      isDeadBuilding
+    isDeadBuilding:      isDeadBuilding,
+    classifyHostileTarget: classifyHostileTarget,
+    isAttackableEnemyBuilding: isAttackableEnemyBuilding
   };
 })();

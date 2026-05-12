@@ -938,6 +938,17 @@
   }
 
   function FE_PATCH_06BIsAttackableEnemyBuilding(target) {
+    // Legacy null guard — must precede delegation
+    if (!target) return false;
+    // ARCH-LAB-04C3: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.isAttackableEnemyBuilding === 'function') {
+      return window.FE_COMBAT_SYSTEM.isAttackableEnemyBuilding({
+        isBuilding: target.kind === 'building',
+        isEnemy: isEnemyBuilding(target),
+        hp: target.hp
+      });
+    }
+    // Legacy fallback — behavior-identical
     // PATCH-COMBAT-TARGETS-01: any enemy building with HP is attackable, not just hq_base.
     return !!(
       target &&
@@ -1381,8 +1392,19 @@
   }
 
   function FE_PATCH_07BGetHostileLightTankTargetKind(attacker, target) {
+    // Legacy guard — must precede delegation to preserve null contract
     if (!isLightTank(attacker) || !target) return null;
-
+    // ARCH-LAB-04C3: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.classifyHostileTarget === 'function') {
+      return window.FE_COMBAT_SYSTEM.classifyHostileTarget({
+        isLightTank: true,
+        attackerOwner: unitOwner(attacker),
+        targetKind: target.kind,
+        targetOwner: target.kind === 'building' ? buildingOwner(target) : unitOwner(target),
+        targetHp: target.hp
+      });
+    }
+    // Legacy fallback — behavior-identical
     // PATCH-COMBAT-TARGETS-01: any enemy unit with HP is a valid target.
     if (target.kind === 'unit' && unitOwner(target) !== unitOwner(attacker) && (target.hp || 0) > 0) {
       return 'unit';
