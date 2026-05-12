@@ -70,3 +70,4 @@
 | ARCH-LAB-04C2 | 2026-05-13 | #79 | Combat target/range decision helpers (targetCenter, distanceToBuilding, isDeadBuilding + BUILDING_CENTER_OFFSET) |
 | ARCH-LAB-04C3 | 2026-05-13 | #80 | Combat target classification/attackability helpers (classifyHostileTarget, isAttackableEnemyBuilding) |
 | ARCH-LAB-04C4 | 2026-05-13 | #81 | Combat range decision helper (isTargetInRange) |
+| ARCH-LAB-05A | 2026-05-13 | #82 | Enemy intel contract-only module — SCOUT_LIFECYCLE_STATES, INTEL_SOURCES, SCOUT_RETURN_REASONS, factories, validators |
