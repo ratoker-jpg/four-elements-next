@@ -1,42 +1,44 @@
-# src/game/ — Game State & Session
+# src/game/ — Game State & Data Factories
 
-**Owner:** ARCH-LAB (architecture migration)
-**Status:** Skeleton — no modules extracted yet
-**Roadmap step:** ARCH-LAB-02
+Ownership: game-state initialization, map-size configuration, and data
+factories used when starting or loading a game.
 
-## Purpose
+## Modules
 
-Game state initialisation, session management, and boot sequence.
-Will contain modules extracted from main.js that manage:
-
-- Game state object creation and reset
-- Map generation and setup
-- Faction assignment and game start
-- Win/loss conditions
-- Save/load session coordination
-
-## Planned modules (ARCH-LAB-02)
-
-| Module | Source zone | Description |
-|--------|-----------|-------------|
-| `game_state.js` | Z1–Z7 | Game object init, reset, map setup |
-| `boot.js` | Z1–Z3 | Boot sequence, asset loading, screen transitions |
+| File | Window global | Description |
+|------|---------------|-------------|
+| `game_state.js` | `window.FE_GAME_STATE` | `createBlankGame(sizeKey)` — returns a fresh game-state object for a new or loaded game. Depends on `window.FE_STANDALONE_CONSTANTS.MAP_SIZES`. |
 
 ## Dependencies
 
-- `src/config/*` — building/unit/faction definitions (already extracted)
-- `src/core/standalone_constants.js` — TILE_W, TILE_H, SAVE_KEY
-- `src/core/asset_loader.js` — sprite/animation loading
-- `src/ui/screen_manager.js` — menu screens
+- `window.FE_STANDALONE_CONSTANTS` (from `src/core/standalone_constants.js`) — must be loaded **before** `game_state.js`.
+
+## Consumers
+
+- `src/main.js` — `blankGame()` delegates to `FE_GAME_STATE.createBlankGame()`.
+- `src/core/save_manager.js` — receives `blankGame` callback via its `load()` API.
 
 ## Contract
 
-All modules in this directory must:
-- Register on `window.FE_MODULE_NAME` pattern
-- Accept dependencies via `window.FE_CORE` bridge — never import main.js
-- Be loadable before main.js in script order
-- Not depend on runtime DOM state at module-evaluation time
+`createBlankGame(sizeKey)` must return an object with this exact shape:
+
+```
+{
+  screen, paused, mapSize, mapW, mapH, time,
+  faction, factionWasRandom,
+  resources, enemyResources, camera,
+  terrain, minerals, units, buildings, obstacles,
+  territory, fogVisible, fogExplored,
+  messages, clickMarkers, dustParticles, combatFxParticles,
+  _sepTimer, _reactTimer, _saveTimer,
+  gameResult, gameResultReason, gameResultAt,
+  gameEnded, _enemyHqSeen
+}
+```
+
+If `window.FE_STANDALONE_CONSTANTS` is missing at load time, this module
+throws immediately rather than silently producing a wrong state.
 
 ## Current contents
 
-None — directory is a skeleton placeholder awaiting ARCH-LAB-02 extraction.
+- `game_state.js` — extracted in ARCH-LAB-02 from `src/main.js blankGame()`.
