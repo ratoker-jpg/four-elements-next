@@ -247,12 +247,14 @@
    */
   function distanceToBuilding(params) {
     if (!params || typeof params !== 'object') return Infinity;
-    var ux = _safeNum(params.unitX, NaN);
-    var uy = _safeNum(params.unitY, NaN);
-    var bx = _safeNum(params.buildingX, NaN);
-    var by = _safeNum(params.buildingY, NaN);
-    var bw = _safeNum(params.buildingW, NaN);
-    var bh = _safeNum(params.buildingH, NaN);
+    // Validate all coordinates with Number.isFinite — do NOT use _safeNum
+    // because _safeNum(v, NaN) returns (NaN || 0) === 0, masking invalid params.
+    var ux = Number(params.unitX);
+    var uy = Number(params.unitY);
+    var bx = Number(params.buildingX);
+    var by = Number(params.buildingY);
+    var bw = Number(params.buildingW);
+    var bh = Number(params.buildingH);
     if (!Number.isFinite(ux) || !Number.isFinite(uy) ||
         !Number.isFinite(bx) || !Number.isFinite(by) ||
         !Number.isFinite(bw) || !Number.isFinite(bh)) return Infinity;

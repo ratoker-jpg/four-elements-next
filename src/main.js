@@ -948,18 +948,19 @@
   }
 
   function FE_PATCH_06BTargetCenter(target) {
+    // Legacy null guard — must precede delegation to preserve null→null contract
+    if (!target) return null;
     // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
     if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.targetCenter === 'function') {
       return window.FE_COMBAT_SYSTEM.targetCenter({
-        targetKind: target ? target.kind : '',
-        x: target ? target.x : 0,
-        y: target ? target.y : 0,
-        w: target ? target.w : undefined,
-        h: target ? target.h : undefined
+        targetKind: target.kind,
+        x: target.x,
+        y: target.y,
+        w: target.w,
+        h: target.h
       });
     }
     // Legacy fallback — behavior-identical
-    if (!target) return null;
     if (target.kind === 'building') {
       return {
         x: target.x + (target.w || 1) / 2 - 0.5,
@@ -970,19 +971,20 @@
   }
 
   function FE_PATCH_06BDistanceToBuilding(unit, building) {
+    // Legacy missing guard — must precede delegation to preserve null→Infinity contract
+    if (!unit || !building) return Infinity;
     // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
     if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.distanceToBuilding === 'function') {
       return window.FE_COMBAT_SYSTEM.distanceToBuilding({
-        unitX: unit ? unit.x : undefined,
-        unitY: unit ? unit.y : undefined,
-        buildingX: building ? building.x : undefined,
-        buildingY: building ? building.y : undefined,
-        buildingW: building ? building.w : undefined,
-        buildingH: building ? building.h : undefined
+        unitX: unit.x,
+        unitY: unit.y,
+        buildingX: building.x,
+        buildingY: building.y,
+        buildingW: building.w,
+        buildingH: building.h
       });
     }
     // Legacy fallback — behavior-identical
-    if (!unit || !building) return Infinity;
     const ux = Math.round(unit.x);
     const uy = Math.round(unit.y);
     const left = Math.round(building.x);
