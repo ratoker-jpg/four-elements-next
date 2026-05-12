@@ -2928,11 +2928,20 @@
   }
 
   function FE_PATCH_08BTargetInRange(attacker, target) {
+    // ARCH-LAB-04C4: delegate to FE_COMBAT_SYSTEM.isTargetInRange if available.
+    // main.js precomputes targetKind, distance, and range; the module
+    // never accesses game state, UNIT_DEFS, DOM, or pathfinding.
     const targetKind = FE_PATCH_07BGetHostileLightTankTargetKind(attacker, target);
     if (!targetKind) return false;
-    return targetKind === 'building'
-      ? FE_PATCH_06BDistanceToBuilding(attacker, target) <= getLightTankCombatStats(attacker).range
-      : unitDistanceCells(attacker, target) <= getLightTankCombatStats(attacker).range;
+    var range = getLightTankCombatStats(attacker).range;
+    var distance = targetKind === 'building'
+      ? FE_PATCH_06BDistanceToBuilding(attacker, target)
+      : unitDistanceCells(attacker, target);
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.isTargetInRange === 'function') {
+      return window.FE_COMBAT_SYSTEM.isTargetInRange({ targetKind: targetKind, distance: distance, range: range });
+    }
+    // Legacy fallback — identical behavior
+    return distance <= range;
   }
 
   function FE_PATCH_08BUnitHasTarget(unit, target) {

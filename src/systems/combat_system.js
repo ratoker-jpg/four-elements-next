@@ -1,4 +1,5 @@
 // Four Elements v0.4 module: combat system — pure data API.
+// ARCH-LAB-04C4: range decision helper — isTargetInRange.
 // ARCH-LAB-04C3: target classification/attackability helpers — classifyHostileTarget,
 //   isAttackableEnemyBuilding.
 // ARCH-LAB-04C2: target/range decision helpers — targetCenter, distanceToBuilding,
@@ -366,6 +367,47 @@
     return (params.hp || 0) > 0;
   }
 
+  // ── Range decision helper (ARCH-LAB-04C4) ─────────────────────
+  // Pure predicate: is the target within attack range?
+  // main.js precomputes targetKind, distance, and range, then passes
+  // them as plain params. The module never accesses game state, UNIT_DEFS,
+  // DOM, or pathfinding.
+
+  /**
+   * Pure predicate: is the target within attack range?
+   *
+   * Replaces FE_PATCH_08BTargetInRange in main.js.
+   * Returns true only if targetKind is valid ('unit' or 'building'),
+   * both distance and range are finite numbers, and distance <= range.
+   *
+   * Legacy behavior preserved exactly:
+   * 1. if !params or not object → false
+   * 2. if targetKind is not 'unit' or 'building' → false
+   * 3. if distance is not finite → false
+   * 4. if range is not finite → false
+   * 5. return distance <= range
+   *
+   * IMPORTANT:
+   * - Uses <=, not <
+   * - Does NOT classify target — caller must provide targetKind
+   * - Does NOT compute distance — caller must provide distance
+   * - Does NOT read game, FE_CORE, UNIT_DEFS, DOM, canvas, pathfinding
+   *
+   * @param {Object} params
+   * @param {string} params.targetKind — 'unit' or 'building'
+   * @param {number} params.distance — precomputed distance to target
+   * @param {number} params.range — attacker's attack range
+   * @returns {boolean}
+   */
+  function isTargetInRange(params) {
+    if (!params || typeof params !== 'object') return false;
+    if (params.targetKind !== TARGET_KINDS.UNIT &&
+        params.targetKind !== TARGET_KINDS.BUILDING) return false;
+    if (!Number.isFinite(params.distance)) return false;
+    if (!Number.isFinite(params.range)) return false;
+    return params.distance <= params.range;
+  }
+
   // ── Public API ──────────────────────────────────────────────────
 
   window.FE_COMBAT_SYSTEM = {
@@ -383,6 +425,7 @@
     distanceToBuilding:  distanceToBuilding,
     isDeadBuilding:      isDeadBuilding,
     classifyHostileTarget: classifyHostileTarget,
-    isAttackableEnemyBuilding: isAttackableEnemyBuilding
+    isAttackableEnemyBuilding: isAttackableEnemyBuilding,
+    isTargetInRange: isTargetInRange
   };
 })();
