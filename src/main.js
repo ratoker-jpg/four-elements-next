@@ -948,6 +948,17 @@
   }
 
   function FE_PATCH_06BTargetCenter(target) {
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.targetCenter === 'function') {
+      return window.FE_COMBAT_SYSTEM.targetCenter({
+        targetKind: target ? target.kind : '',
+        x: target ? target.x : 0,
+        y: target ? target.y : 0,
+        w: target ? target.w : undefined,
+        h: target ? target.h : undefined
+      });
+    }
+    // Legacy fallback — behavior-identical
     if (!target) return null;
     if (target.kind === 'building') {
       return {
@@ -959,6 +970,18 @@
   }
 
   function FE_PATCH_06BDistanceToBuilding(unit, building) {
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.distanceToBuilding === 'function') {
+      return window.FE_COMBAT_SYSTEM.distanceToBuilding({
+        unitX: unit ? unit.x : undefined,
+        unitY: unit ? unit.y : undefined,
+        buildingX: building ? building.x : undefined,
+        buildingY: building ? building.y : undefined,
+        buildingW: building ? building.w : undefined,
+        buildingH: building ? building.h : undefined
+      });
+    }
+    // Legacy fallback — behavior-identical
     if (!unit || !building) return Infinity;
     const ux = Math.round(unit.x);
     const uy = Math.round(unit.y);
@@ -1001,6 +1024,15 @@
 
   // FE_PATCH_06C_BUILDING_DEATH_STATE_START
   function FE_PATCH_06CIsDeadBuilding(building) {
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.isDeadBuilding === 'function') {
+      return window.FE_COMBAT_SYSTEM.isDeadBuilding({
+        isBuilding: !!(building && building.kind === 'building'),
+        destroyed: building ? building.destroyed : undefined,
+        hp: building ? building.hp : undefined
+      });
+    }
+    // Legacy fallback — behavior-identical
     return !!(
       building &&
       building.kind === 'building' &&
