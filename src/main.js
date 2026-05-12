@@ -8444,14 +8444,39 @@ function handleCanvasRightClickCancel(e) {
     // ATTACK-06: for light_tank with active attack approach, try re-path before killing path.
     // recoverUnitPath default branch clears path and sets idle — this stalls attack_approach tanks
     // whose next waypoint is temporarily blocked by another tank.
-    if (unit.type === 'light_tank' && unit.attackApproachTargetId) {
+    // ARCH-LAB-04B2: decision delegated to FE_MOVEMENT_SYSTEM.shouldRequestAttackApproachRecovery
+    // and FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision; execution stays here.
+    var _a06UseMS = typeof FE_MOVEMENT_SYSTEM !== 'undefined' && FE_MOVEMENT_SYSTEM.shouldRequestAttackApproachRecovery;
+    var _a06ShouldRecover = _a06UseMS
+      ? FE_MOVEMENT_SYSTEM.shouldRequestAttackApproachRecovery({
+          unitType: unit.type, hasAttackApproachTarget: !!unit.attackApproachTargetId
+        })
+      : unit.type === 'light_tank' && !!unit.attackApproachTargetId;
+    if (_a06ShouldRecover) {
       var _a06Target = (typeof FE_PATCH_06BResolveApproachTarget === 'function')
         ? FE_PATCH_06BResolveApproachTarget(unit) : null;
       if (_a06Target && (_a06Target.hp || 0) > 0) {
         var _a06Now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
         var _a06LastRepath = unit._attack06LastRepathAt || 0;
-        if (_a06Now - _a06LastRepath >= 800) { // throttle: not every tick
-          unit._attack06LastRepathAt = _a06Now;
+        var _a06ShouldRepath;
+        if (_a06UseMS && FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision) {
+          var _a06Decision = FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision({
+            now: _a06Now, lastRepathAt: _a06LastRepath, throttleMs: 800
+          });
+          if (_a06Decision.updateLastRepathAt) {
+            unit._attack06LastRepathAt = _a06Now;
+          }
+          _a06ShouldRepath = _a06Decision.shouldAttemptRepath;
+        } else {
+          // Legacy fallback: FE_MOVEMENT_SYSTEM unavailable
+          if (_a06Now - _a06LastRepath >= 800) {
+            unit._attack06LastRepathAt = _a06Now;
+            _a06ShouldRepath = true;
+          } else {
+            _a06ShouldRepath = false;
+          }
+        }
+        if (_a06ShouldRepath) {
           if (typeof setLightTankAttackApproachGeneric === 'function' &&
               setLightTankAttackApproachGeneric(unit, _a06Target, { toast: false, marker: false })) {
             return true; // re-pathed successfully, attack order preserved
@@ -8510,29 +8535,72 @@ function updateUnitMovement(unit, dt) {
     // ATTACK-06: focused recovery for light_tank with active attack approach.
     // When next waypoint is blocked by another unit, re-path to attack target instead of
     // letting recoverUnitPath kill the path entirely.
-    if (isLightTank(unit) && unit.attackApproachTargetId && unit._blockedTimer > 0.5) {
+    // ARCH-LAB-04B2: decision delegated to FE_MOVEMENT_SYSTEM helpers;
+    // execution (setLightTankAttackApproachGeneric, telemetry) stays here.
+    var _a06UseMS = typeof FE_MOVEMENT_SYSTEM !== 'undefined' && FE_MOVEMENT_SYSTEM.shouldRequestAttackApproachRecovery;
+    var _a06ShouldRecover = _a06UseMS
+      ? FE_MOVEMENT_SYSTEM.shouldRequestAttackApproachRecovery({
+          unitType: unit.type, hasAttackApproachTarget: !!unit.attackApproachTargetId,
+          blockedTimer: unit._blockedTimer || 0
+        })
+      : isLightTank(unit) && !!unit.attackApproachTargetId && (unit._blockedTimer || 0) > 0.5;
+    if (_a06ShouldRecover) {
       var _a06BlkUnit = (typeof unitAt === 'function') ? unitAt(nx, ny, unit.id) : null;
-      var _a06BlkKind = _a06BlkUnit ? 'unit' : ((typeof buildingAt === 'function' && buildingAt(nx,ny)) ? 'building' : ((typeof mineAt === 'function' && mineAt(nx,ny)) ? 'mineral' : (isObstacleBlocked(nx,ny) ? 'obstacle' : 'unknown')));
+      var _a06BlkKind = (_a06UseMS && FE_MOVEMENT_SYSTEM.classifyBlocker)
+        ? FE_MOVEMENT_SYSTEM.classifyBlocker({
+            hasUnit: !!_a06BlkUnit,
+            hasBuilding: (typeof buildingAt === 'function') && !!buildingAt(nx, ny),
+            hasMineral: (typeof mineAt === 'function') && !!mineAt(nx, ny),
+            isObstacle: isObstacleBlocked(nx, ny)
+          })
+        : (_a06BlkUnit ? 'unit' : ((typeof buildingAt === 'function' && buildingAt(nx,ny)) ? 'building' : ((typeof mineAt === 'function' && mineAt(nx,ny)) ? 'mineral' : (isObstacleBlocked(nx,ny) ? 'obstacle' : 'unknown'))));
       var _a06Recovered = false;
       var _a06Reason = '';
       var _a06PathLenBefore = unit.path ? unit.path.length : 0;
       if (_a06BlkKind === 'unit') {
         var _a06Now2 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
         var _a06LastR2 = unit._attack06LastRepathAt || 0;
-        if (_a06Now2 - _a06LastR2 >= 800) {
-          unit._attack06LastRepathAt = _a06Now2;
-          var _a06Tgt2 = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(unit) : null;
-          if (_a06Tgt2 && (_a06Tgt2.hp || 0) > 0 &&
-              typeof setLightTankAttackApproachGeneric === 'function' &&
-              setLightTankAttackApproachGeneric(unit, _a06Tgt2, { toast: false, marker: false })) {
-            _a06Recovered = true;
-            _a06Reason = 'repath_success';
-            unit._blockedTimer = 0;
+        if (_a06UseMS && FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision) {
+          var _a06Decision2 = FE_MOVEMENT_SYSTEM.createAttackApproachRecoveryDecision({
+            blockerKind: _a06BlkKind,
+            now: _a06Now2,
+            lastRepathAt: _a06LastR2,
+            throttleMs: 800
+          });
+          if (_a06Decision2.updateLastRepathAt) {
+            unit._attack06LastRepathAt = _a06Now2;
+          }
+          if (_a06Decision2.shouldAttemptRepath) {
+            var _a06Tgt2 = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(unit) : null;
+            if (_a06Tgt2 && (_a06Tgt2.hp || 0) > 0 &&
+                typeof setLightTankAttackApproachGeneric === 'function' &&
+                setLightTankAttackApproachGeneric(unit, _a06Tgt2, { toast: false, marker: false })) {
+              _a06Recovered = true;
+              _a06Reason = 'repath_success';
+              unit._blockedTimer = 0;
+            } else {
+              _a06Reason = 'repath_failed';
+            }
           } else {
-            _a06Reason = 'repath_failed';
+            _a06Reason = _a06Decision2.reason; // 'throttled' or 'non_unit_blocker_...'
           }
         } else {
-          _a06Reason = 'throttled';
+          // Legacy fallback: FE_MOVEMENT_SYSTEM unavailable
+          if (_a06Now2 - _a06LastR2 >= 800) {
+            unit._attack06LastRepathAt = _a06Now2;
+            var _a06Tgt2 = (typeof FE_PATCH_06BResolveApproachTarget === 'function') ? FE_PATCH_06BResolveApproachTarget(unit) : null;
+            if (_a06Tgt2 && (_a06Tgt2.hp || 0) > 0 &&
+                typeof setLightTankAttackApproachGeneric === 'function' &&
+                setLightTankAttackApproachGeneric(unit, _a06Tgt2, { toast: false, marker: false })) {
+              _a06Recovered = true;
+              _a06Reason = 'repath_success';
+              unit._blockedTimer = 0;
+            } else {
+              _a06Reason = 'repath_failed';
+            }
+          } else {
+            _a06Reason = 'throttled';
+          }
         }
       } else {
         _a06Reason = 'non_unit_blocker_' + _a06BlkKind;

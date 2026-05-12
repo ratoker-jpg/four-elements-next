@@ -1,8 +1,8 @@
 # src/systems/ — Gameplay Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Active — 2 production modules
-**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1 complete)
+**Status:** Active — 2 production modules (04B2 adds decision helpers to movement_system)
+**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1, 04B2 complete)
 
 ## Purpose
 
@@ -50,10 +50,31 @@ All modules in this directory must:
 
 | Module | Lines | PR | Risk | Description |
 |--------|-------|-----|------|------------|
-| `command_system.js` | 196 | ARCH-LAB-04A | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
-| `movement_system.js` | 248 | ARCH-LAB-04B1 | Low | Movement state/result/reason/recovery constants, factory functions, predicates — pure data, zero game mutation |
+| `command_system.js` | 196 | #75 | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
+| `movement_system.js` | ~410 | #76+04B2 | Medium | Movement state/result/reason/recovery constants, factory functions, predicates, ATTACK-06 decision helpers |
+
+## ATTACK-06 decision delegation (ARCH-LAB-04B2)
+
+The ATTACK-06 coupling between movement code and command/combat execution
+has been broken by extracting pure decision logic into `movement_system.js`:
+
+- **`shouldRequestAttackApproachRecovery(params)`** — pure predicate: should a unit
+  be considered for ATTACK-06 recovery? Replaces the outer guard condition
+  (`isLightTank(unit) && unit.attackApproachTargetId && _blockedTimer > 0.5`).
+
+- **`classifyBlocker(params)`** — pure function: classify what's blocking a cell
+  into one of `'unit'|'building'|'mineral'|'obstacle'|'unknown'`. Preserves
+  exact legacy blockerKind values and priority order.
+
+- **`createAttackApproachRecoveryDecision(params)`** — pure function: make the
+  ATTACK-06 recovery decision based on blockerKind, throttle, and timing.
+  Returns `{ shouldAttemptRepath, reason, updateLastRepathAt }`.
+
+Execution (`setLightTankAttackApproachGeneric`, telemetry writes) stays in main.js.
+If `FE_MOVEMENT_SYSTEM` helpers are unavailable, main.js falls back to legacy
+inline logic with identical behavior.
 
 ## Current contents
 
 - `command_system.js` — pure data command API (ARCH-LAB-04A)
-- `movement_system.js` — pure data movement API (ARCH-LAB-04B1)
+- `movement_system.js` — pure data movement API + ATTACK-06 decision helpers (ARCH-LAB-04B1 + 04B2)

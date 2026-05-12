@@ -64,4 +64,5 @@
 | ARCH-LAB-02 | 2026-05-13 | #73 | Extract blankGame data factory into src/game/game_state.js |
 | ARCH-LAB-03 | 2026-05-13 | #74 | Extract pure geometry/math helpers into src/core/geometry.js |
 | ARCH-LAB-04A | 2026-05-13 | #75 | Command boundary — pure data command API (COMMAND_TYPES, factories, predicates) |
-| ARCH-LAB-04B1 | 2026-05-13 | TBD | Movement boundary — pure data movement API (MOVEMENT_STATES, RESULTS, REASONS, RECOVERY_REQUESTS, factories, predicates) |
+| ARCH-LAB-04B1 | 2026-05-13 | #76 | Movement boundary — pure data movement API (MOVEMENT_STATES, RESULTS, REASONS, RECOVERY_REQUESTS, factories, predicates) |
+| ARCH-LAB-04B2 | 2026-05-13 | TBD | Movement ATTACK-06 decision delegation (shouldRequestAttackApproachRecovery, classifyBlocker, createAttackApproachRecoveryDecision) |
