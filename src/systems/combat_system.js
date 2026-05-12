@@ -1,4 +1,6 @@
 // Four Elements v0.4 module: combat system — pure data API.
+// ARCH-LAB-04C2: target/range decision helpers — targetCenter, distanceToBuilding,
+//   isDeadBuilding + BUILDING_CENTER_OFFSET constant.
 // ARCH-LAB-04C1: combat boundary — first step of combat system separation.
 // Provides window.FE_COMBAT_SYSTEM with combat result, target kind,
 // damage reason, and attack state constants, plus factory functions and predicates.
@@ -181,17 +183,130 @@
     return true;
   }
 
+  // ── Target/range decision helpers (ARCH-LAB-04C2) ──────────────
+  // These pure functions encapsulate combat-adjacent geometry and
+  // state predicates. They replace inline logic in main.js wrapper
+  // functions, but execution (mutation, FX, pathfinding) stays in main.js.
+
+  /**
+   * Tile-center offset for building targets.
+   * Building center = position + size/2 - BUILDING_CENTER_OFFSET.
+   * Must remain 0.5 — changing this changes where shots aim.
+   */
+  var BUILDING_CENTER_OFFSET = 0.5;
+
+  /**
+   * Pure function: compute the center point of a target (unit or building).
+   *
+   * Replaces FE_PATCH_06BTargetCenter in main.js.
+   * For buildings: center = { x: x + (w||1)/2 - 0.5, y: y + (h||1)/2 - 0.5 }
+   * For non-buildings (units): center = { x, y }
+   *
+   * Do NOT require targetKind === 'unit' — legacy treats every
+   * non-building target as unit-like (returns { x, y }).
+   *
+   * @param {Object} params
+   * @param {string} params.targetKind — 'building' or any other value
+   * @param {number} params.x — target x coordinate
+   * @param {number} params.y — target y coordinate
+   * @param {number} [params.w] — building width (only used for buildings)
+   * @param {number} [params.h] — building height (only used for buildings)
+   * @returns {{ x: number, y: number }|null} center point, or null if params missing
+   */
+  function targetCenter(params) {
+    if (!params || typeof params !== 'object') return null;
+    if (params.targetKind === TARGET_KINDS.BUILDING) {
+      // (w || 1) and (h || 1) match legacy: 0/null/undefined all default to 1.
+      var w = Number.isFinite(params.w) && params.w > 0 ? Number(params.w) : 1;
+      var h = Number.isFinite(params.h) && params.h > 0 ? Number(params.h) : 1;
+      return {
+        x: _safeNum(params.x, 0) + w / 2 - BUILDING_CENTER_OFFSET,
+        y: _safeNum(params.y, 0) + h / 2 - BUILDING_CENTER_OFFSET
+      };
+    }
+    return { x: _safeNum(params.x, 0), y: _safeNum(params.y, 0) };
+  }
+
+  /**
+   * Pure function: compute Manhattan distance from a unit to a building
+   * bounding box. Returns 0 if the unit is inside the box.
+   *
+   * Replaces FE_PATCH_06BDistanceToBuilding in main.js.
+   * Uses Math.round on all coordinates before comparison (matching legacy).
+   * Building box: [buildingX, buildingX + buildingW - 1] x
+   *              [buildingY, buildingY + buildingH - 1]
+   *
+   * @param {Object} params
+   * @param {number} params.unitX — unit x coordinate
+   * @param {number} params.unitY — unit y coordinate
+   * @param {number} params.buildingX — building x coordinate (left)
+   * @param {number} params.buildingY — building y coordinate (top)
+   * @param {number} params.buildingW — building width in tiles
+   * @param {number} params.buildingH — building height in tiles
+   * @returns {number} Manhattan distance to building box, or Infinity if data missing
+   */
+  function distanceToBuilding(params) {
+    if (!params || typeof params !== 'object') return Infinity;
+    // Validate all coordinates with Number.isFinite — do NOT use _safeNum
+    // because _safeNum(v, NaN) returns (NaN || 0) === 0, masking invalid params.
+    var ux = Number(params.unitX);
+    var uy = Number(params.unitY);
+    var bx = Number(params.buildingX);
+    var by = Number(params.buildingY);
+    var bw = Number(params.buildingW);
+    var bh = Number(params.buildingH);
+    if (!Number.isFinite(ux) || !Number.isFinite(uy) ||
+        !Number.isFinite(bx) || !Number.isFinite(by) ||
+        !Number.isFinite(bw) || !Number.isFinite(bh)) return Infinity;
+
+    ux = Math.round(ux);
+    uy = Math.round(uy);
+    var left   = Math.round(bx);
+    var top    = Math.round(by);
+    var right  = Math.round(bx + bw - 1);
+    var bottom = Math.round(by + bh - 1);
+    var dx = ux < left ? left - ux : (ux > right ? ux - right : 0);
+    var dy = uy < top  ? top  - uy : (uy > bottom ? uy - bottom : 0);
+    return dx + dy;
+  }
+
+  /**
+   * Pure predicate: is the entity a dead building?
+   *
+   * Replaces FE_PATCH_06CIsDeadBuilding in main.js.
+   * A building is dead if it is a building AND either
+   * destroyed === true OR (hp || 0) <= 0.
+   *
+   * The (hp || 0) <= 0 pattern must be preserved exactly —
+   * it treats null/undefined/0/negative hp as dead.
+   *
+   * @param {Object} params
+   * @param {boolean} params.isBuilding — whether the entity is a building
+   * @param {boolean} [params.destroyed] — whether the building is marked destroyed
+   * @param {number}  [params.hp] — building HP (may be null/undefined)
+   * @returns {boolean}
+   */
+  function isDeadBuilding(params) {
+    if (!params || typeof params !== 'object') return false;
+    if (!params.isBuilding) return false;
+    return params.destroyed === true || (params.hp || 0) <= 0;
+  }
+
   // ── Public API ──────────────────────────────────────────────────
 
   window.FE_COMBAT_SYSTEM = {
-    COMBAT_RESULTS:     COMBAT_RESULTS,
-    TARGET_KINDS:       TARGET_KINDS,
-    DAMAGE_REASONS:     DAMAGE_REASONS,
-    ATTACK_STATES:      ATTACK_STATES,
-    createCombatResult: createCombatResult,
-    createDamageResult: createDamageResult,
-    createKillResult:   createKillResult,
-    isCombatResult:     isCombatResult,
-    isValidCombatResult:isValidCombatResult
+    COMBAT_RESULTS:      COMBAT_RESULTS,
+    TARGET_KINDS:        TARGET_KINDS,
+    DAMAGE_REASONS:      DAMAGE_REASONS,
+    ATTACK_STATES:       ATTACK_STATES,
+    BUILDING_CENTER_OFFSET: BUILDING_CENTER_OFFSET,
+    createCombatResult:  createCombatResult,
+    createDamageResult:  createDamageResult,
+    createKillResult:    createKillResult,
+    isCombatResult:      isCombatResult,
+    isValidCombatResult: isValidCombatResult,
+    targetCenter:        targetCenter,
+    distanceToBuilding:  distanceToBuilding,
+    isDeadBuilding:      isDeadBuilding
   };
 })();

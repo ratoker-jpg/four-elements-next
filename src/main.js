@@ -948,7 +948,19 @@
   }
 
   function FE_PATCH_06BTargetCenter(target) {
+    // Legacy null guard — must precede delegation to preserve null→null contract
     if (!target) return null;
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.targetCenter === 'function') {
+      return window.FE_COMBAT_SYSTEM.targetCenter({
+        targetKind: target.kind,
+        x: target.x,
+        y: target.y,
+        w: target.w,
+        h: target.h
+      });
+    }
+    // Legacy fallback — behavior-identical
     if (target.kind === 'building') {
       return {
         x: target.x + (target.w || 1) / 2 - 0.5,
@@ -959,7 +971,20 @@
   }
 
   function FE_PATCH_06BDistanceToBuilding(unit, building) {
+    // Legacy missing guard — must precede delegation to preserve null→Infinity contract
     if (!unit || !building) return Infinity;
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.distanceToBuilding === 'function') {
+      return window.FE_COMBAT_SYSTEM.distanceToBuilding({
+        unitX: unit.x,
+        unitY: unit.y,
+        buildingX: building.x,
+        buildingY: building.y,
+        buildingW: building.w,
+        buildingH: building.h
+      });
+    }
+    // Legacy fallback — behavior-identical
     const ux = Math.round(unit.x);
     const uy = Math.round(unit.y);
     const left = Math.round(building.x);
@@ -1001,6 +1026,15 @@
 
   // FE_PATCH_06C_BUILDING_DEATH_STATE_START
   function FE_PATCH_06CIsDeadBuilding(building) {
+    // ARCH-LAB-04C2: delegate to FE_COMBAT_SYSTEM if available
+    if (window.FE_COMBAT_SYSTEM && typeof window.FE_COMBAT_SYSTEM.isDeadBuilding === 'function') {
+      return window.FE_COMBAT_SYSTEM.isDeadBuilding({
+        isBuilding: !!(building && building.kind === 'building'),
+        destroyed: building ? building.destroyed : undefined,
+        hp: building ? building.hp : undefined
+      });
+    }
+    // Legacy fallback — behavior-identical
     return !!(
       building &&
       building.kind === 'building' &&
