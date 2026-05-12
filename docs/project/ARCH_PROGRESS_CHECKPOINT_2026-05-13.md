@@ -49,11 +49,11 @@ Additionally, 6 architecture/docs PRs were merged earlier:
 
 - **E2E smoke baseline exists** — 6 Playwright specs covering boot, menu, faction select, game start, enemy bot alive, and bot AI behavior scenarios. Every merge-back PR runs these tests.
 - **Module ownership skeleton exists** — 6 ownership READMEs define which system owns which zone of main.js. The `src/systems/` and `src/ai/` directories have clear READMEs.
-- **Game state factory extracted** — `src/game/game_state.js` provides `blankGame()` with delegation in main.js via `FE_PATCH_06BCreateGame`.
-- **Geometry helpers extracted** — `src/core/geometry.js` provides `pointDistance`, `clampPointToMap`, `cellCenter`, `gridSnap` with delegation in main.js.
+- **Game state factory extracted** — `src/game/game_state.js` exposes `window.FE_GAME_STATE.createBlankGame(sizeKey)`. `blankGame()` in `src/main.js` delegates to `FE_GAME_STATE.createBlankGame(sizeKey)`.
+- **Geometry helpers extracted** — `src/core/geometry.js` provides `clamp`, `dist`, `rectsOverlap`, `safeNum`, `formatTime`, `normalizeVec` with delegation in main.js.
 - **Command system exists** — `src/systems/command_system.js` provides COMMAND_TYPES, command factories, and predicates. Contract-only, not yet wired for delegation.
 - **Movement system exists** — `src/systems/movement_system.js` provides MOVEMENT_STATES, RESULTS, REASONS, RECOVERY_REQUESTS, factories, predicates. ATTACK-06 decision delegation is wired through two main.js wrapper functions.
-- **Combat system exists and is wired through safe wrappers** — `src/systems/combat_system.js` provides COMBAT_RESULTS, TARGET_KINDS, DAMAGE_REASONS, ATTACK_STATES, factories, predicates, plus 4 pure decision helpers (targetCenter, distanceToBuilding, isDeadBuilding, classifyHostileTarget, isAttackableEnemyBuilding, isTargetInRange). Six wrapper functions in main.js delegate to these helpers with legacy fallbacks.
+- **Combat system exists and is wired through safe wrappers** — `src/systems/combat_system.js` provides combat contracts plus six pure helpers/predicates: `targetCenter`, `distanceToBuilding`, `isDeadBuilding`, `classifyHostileTarget`, `isAttackableEnemyBuilding`, `isTargetInRange`. Six wrapper functions in main.js delegate to these helpers with legacy fallbacks.
 - **Enemy intel contract exists** — `src/ai/enemy_intel.js` provides SCOUT_LIFECYCLE_STATES, INTEL_SOURCES, SCOUT_RETURN_REASONS, createEnemyKnowledgeShell, createEnemyIntelSnapshot, isValidEnemyKnowledge, isValidEnemyIntelSnapshot. Contract-only, not yet wired for delegation.
 - **04C pure combat-helper phase is verified by Codex QA** — all four 04C PRs passed syntax checks, E2E tests, and Codex review.
 - **Main.js is still large**, but key contracts now exist that define the boundary for each system. The responsibility reduction is real even if the line count has not shrunk significantly yet.
@@ -161,7 +161,7 @@ Instead, use these metrics:
 
 | Metric | Why it matters |
 |--------|---------------|
-| Completed large blocks | Shows real structural progress (4 of 8 done) |
+| Completed large blocks | Shows real structural progress (4 blocks done, 1 mostly done, 1 started, 3 not started) |
 | Completed contracts | Shows API boundary definition progress |
 | Number of safe runtime delegations | Shows actual wiring progress (6 wrappers in main.js) |
 | Main.js responsibility reduction | Shows how many zones have an owner system |
