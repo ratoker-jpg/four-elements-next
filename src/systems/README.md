@@ -1,8 +1,8 @@
 # src/systems/ — Gameplay Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Active — 1 production module
-**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A complete)
+**Status:** Active — 2 production modules
+**Roadmap step:** ARCH-LAB-03, ARCH-LAB-04 (04A, 04B1 complete)
 
 ## Purpose
 
@@ -51,7 +51,9 @@ All modules in this directory must:
 | Module | Lines | PR | Risk | Description |
 |--------|-------|-----|------|------------|
 | `command_system.js` | 196 | ARCH-LAB-04A | Low | Command type constants, factory functions, predicates — pure data, zero game mutation |
+| `movement_system.js` | 248 | ARCH-LAB-04B1 | Low | Movement state/result/reason/recovery constants, factory functions, predicates — pure data, zero game mutation |
 
 ## Current contents
 
 - `command_system.js` — pure data command API (ARCH-LAB-04A)
+- `movement_system.js` — pure data movement API (ARCH-LAB-04B1)
