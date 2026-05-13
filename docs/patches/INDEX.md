@@ -78,3 +78,4 @@
 | ARCH-AI-05C-DESIGN | 2026-05-13 | #89 | Enemy tank decision / Priority Stack migration design |
 | ARCH-AI-05C1 | 2026-05-14 | #90 | Tank decider contract/rule update — enums, stand_and_fight_near_home rule, factory, validators |
 | ARCH-AI-05C2B | 2026-05-14 | #91 | Tank decider gated telemetry — perRuleNameCounts, _tankDeciderLastRuleName, manual QA path |
+| ARCH-AI-05C3 | 2026-05-14 | #92 | Tank decider enable by default — FE_TANK_DECIDER_ENABLED=true, intel-rally safety guard in evaluateDefendHq |

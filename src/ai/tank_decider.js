@@ -1,5 +1,5 @@
 /**
- * ARCH-AI-01 / ARCH-AI-05C1: Tank Decider — Priority Stack decision layer for enemy light_tank.
+ * ARCH-AI-01 / ARCH-AI-05C1 / ARCH-AI-05C3: Tank Decider — Priority Stack decision layer for enemy light_tank.
  *
  * Pure decision logic:
  *   - no side effects
@@ -22,6 +22,11 @@
  *   - Replaced magic numbers with TANK_DECIDER_CONSTANTS references
  *   - Replaced string literals with enum references
  *   - FE_TANK_DECIDER_ENABLED remains false — no runtime behavior change
+ *
+ * 05C3 changes:
+ *   - Added intel-rally safety guard in evaluateDefendHq:
+ *     tanks with _attack11IntelRally are not recalled for base defense
+ *   - FE_TANK_DECIDER_ENABLED is now true by default (runtime_flags.js)
  */
 (function () {
   'use strict';
@@ -157,6 +162,7 @@
    * Conditions:
    *   - There are player threats near enemy HQ (threatsNearHome)
    *   - Tank is near home OR has no active attack order
+   *   - Tank is not intel-rally (ATTACK-11) — do not recall rally tanks
    *   - Tank is not wave-locked (ATTACK-10)
    *   - Bot is not on hq_push (ATTACK-04)
    *   - Tank is not already fighting near home (stand-and-fight)
@@ -168,6 +174,10 @@
     var homeBase = ctx.homeBase;
     var botState = ctx.botState;
     var helpers  = ctx.helpers;
+
+    // Intel-rally tanks are gathering for an attack wave — do not recall for base defense.
+    // This prevents defend_hq from pulling tanks that are committed to an intel-based rally.
+    if (tank._attack11IntelRally) return null;
 
     // Wave-locked tanks are on a committed attack wave — do not recall.
     if (tank._attack10WaveLocked) return null;

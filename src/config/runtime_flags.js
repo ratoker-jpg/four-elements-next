@@ -104,11 +104,13 @@ window.FE_SCOUT_DIR_MAP = [3, 2, 1, 0, 7, 6, 5, 4];
 // See: docs/project/ARCH_LAB_01_SKELETON_CONTRACTS.md §5
 window.FE_UNIT_CONTROLLER_ENABLED = false;
 
-// ARCH-AI-01: Tank Decider — Priority Stack decision layer for enemy light_tank.
+// ARCH-AI-01 / ARCH-AI-05C3: Tank Decider — Priority Stack decision layer for enemy light_tank.
 // When true, enemy light_tank decisions go through tank_decider.js instead of
-// legacy updateEnemyBot cascade. Default false — legacy behavior is 1:1 preserved.
+// legacy updateEnemyBot cascade. Default true since 05C3 — legacy fallback remains active
+// for tanks not managed by the decider (idle result, suppressLegacyOrders=false).
 // Runtime toggle: window.FE_TANK_DECIDER_ENABLED = true/false in browser console.
-window.FE_TANK_DECIDER_ENABLED = false;
+// Rollback: set to false to restore 1:1 legacy behavior.
+window.FE_TANK_DECIDER_ENABLED = true;
 window.FE_BUILDER_FORCE_DIR = null;
 window.FE_HARVESTER_FORCE_DIR = null;
 window.FE_LIGHT_TANK_FORCE_DIR = null;
