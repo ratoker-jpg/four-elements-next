@@ -83,7 +83,7 @@
   /**
    * createAttackDecisionResult(props)
    * Creates an ATTACK-12 result object with the exact shape from
-   * FE_ATTACK12EvaluateAttackDecision. All 20 fields, no fields invented
+   * FE_ATTACK12EvaluateAttackDecision. full ATTACK-12 result shape, no fields invented
    * or omitted, no defaults changed.
    */
   function createAttackDecisionResult(props) {
@@ -184,7 +184,7 @@
    *   minAttackTanks: number,
    *   forceAdvantage: number
    * }
-   * @returns {Object} — 20-field decision result matching FE_ATTACK12EvaluateAttackDecision return
+   * @returns {Object} — full ATTACK-12 result shape matching FE_ATTACK12EvaluateAttackDecision return
    */
   function evaluateAttackDecision(intel, tankStatuses, now, options) {
     var opts = options || {};
