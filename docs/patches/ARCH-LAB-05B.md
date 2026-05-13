@@ -30,21 +30,21 @@ to `FE_ENEMY_TARGETING`. Runtime behavior is unchanged. 05B2 may audit and wire 
 | Function | Mirrors | Notes |
 |----------|---------|-------|
 | `createAttackTargetResult(props)` | ATTACK-11 return shape | 7 fields: targetX, targetY, targetSource, targetReason, intelFreshnessSec, playerHqSeen, playerHqEstimateAvailable |
-| `createAttackDecisionResult(props)` | ATTACK-12 return shape | 20 fields matching `FE_ATTACK12EvaluateAttackDecision` return exactly |
+| `createAttackDecisionResult(props)` | ATTACK-12 return shape | full ATTACK-12 result shape matching `FE_ATTACK12EvaluateAttackDecision` return exactly |
 
 ### Pure decision functions
 
 | Function | Mirrors | Params | Notes |
 |----------|---------|--------|-------|
 | `chooseIntelTarget(intel, now)` | `FE_ATTACK11ChooseIntelTarget()` | `intel` (game.enemyIntel), `now` (game.time) | Returns same 7-field object or null. Confirmed HQ has priority over estimate. All strings and calculations preserved exactly. |
-| `evaluateAttackDecision(intel, tankStatuses, now, options)` | `FE_ATTACK12EvaluateAttackDecision(enemyTanks, now)` | `intel`, `tankStatuses` (pre-computed array), `now`, `options` | Returns same 20-field object. `tankStatuses` entries: `{isAlive, isIntelRally, isWaveLocked, hasAttackTargetId, hasAttackApproachTargetId}`. `options`: `{attack11DispatchSource, maxIntelAgeSec, minAttackTanks, forceAdvantage}`. |
+| `evaluateAttackDecision(intel, tankStatuses, now, options)` | `FE_ATTACK12EvaluateAttackDecision(enemyTanks, now)` | `intel`, `tankStatuses` (pre-computed array), `now`, `options` | Returns the full ATTACK-12 result shape. `tankStatuses` entries: `{isAlive, isIntelRally, isWaveLocked, hasAttackTargetId, hasAttackApproachTargetId}`. `options`: `{attack11DispatchSource, maxIntelAgeSec, minAttackTanks, forceAdvantage}`. |
 
 ### Validators
 
 | Function | Returns | Style |
 |----------|---------|-------|
 | `isValidAttackTargetResult(obj)` | `true` or descriptive string error | Same pattern as combat_system/enemy_intel validators |
-| `isValidAttackDecisionResult(obj)` | `true` or descriptive string error | Checks all 20 fields including type checks |
+| `isValidAttackDecisionResult(obj)` | `true` or descriptive string error | Checks the full ATTACK-12 result shape including type checks |
 
 ## What was NOT added (explicitly excluded)
 
@@ -128,7 +128,7 @@ to `FE_ENEMY_TARGETING`. Runtime behavior is unchanged. 05B2 may audit and wire 
 
 ### ATTACK-12 result shape (evaluateAttackDecision)
 
-All 20 fields match FE_ATTACK12EvaluateAttackDecision return exactly:
+The full ATTACK-12 result shape matches FE_ATTACK12EvaluateAttackDecision return exactly:
 attackAllowed, decision, reason, readyEnemyTanks, assignableEnemyTanks,
 skippedAssignedAttackTargetCount, skippedAttackApproachCount,
 knownPlayerLightTanks, knownPlayerHarvesters, playerHqSeen,
