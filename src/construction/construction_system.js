@@ -41,10 +41,11 @@
   });
 
   // ── Building HP defaults ─────────────────────────────────────
-  // Default HP values for building types. These are baseline values;
+  // Default HP values for building types. These mirror the current
+  // runtime baseline in main.js, not invented new values.
   // buildings.js may override them with specific hp fields.
-  var DEFAULT_BUILDING_HP    = 500;
-  var HQ_HP                  = 500;
+  var DEFAULT_BUILDING_HP    = 320;
+  var HQ_HP                  = 1000;
 
   // ── Refund rate defaults ─────────────────────────────────────
   // Fraction of energy cost refunded when a building is cancelled/destroyed.

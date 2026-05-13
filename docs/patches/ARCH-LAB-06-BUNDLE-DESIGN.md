@@ -1,7 +1,7 @@
 # ARCH-LAB-06-BUNDLE — Economy / Production / Construction Pure Contracts
 
 **Date:** 2026-05-14
-**PR:** #96
+**PR:** #97
 **Branch:** glm/arch-lab-06-bundle-contracts
 **Scope:** Pure contract modules + config enrichment + deterministic tests. No runtime behavior changes.
 **Risk:** LOW — new modules load but are not called by runtime logic
@@ -75,8 +75,8 @@ Constants:
 - `BUILDING_STATES` — { ACTIVE, DAMAGED, DESTROYED, PLANNED }
 - `CONSTRUCTION_STATES` — { NOT_STARTED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED }
 - `BUILD_ORDER_STATES` — { PENDING, ASSIGNED, BUILDING, DONE, FAILED }
-- `DEFAULT_BUILDING_HP` = 500
-- `HQ_HP` = 500
+- `DEFAULT_BUILDING_HP` = 320
+- `HQ_HP` = 1000
 - `DEFAULT_CANCEL_REFUND_RATE` = 0.75
 - `DEFAULT_DESTROY_REFUND_RATE` = 0.0
 
@@ -170,7 +170,7 @@ Three new script tags added before `src/main.js`:
 
 ## 6. Verification
 
-Expected changed files (10):
+Expected changed files (9):
 
 ```text
 src/economy/economy_system.js           (NEW)

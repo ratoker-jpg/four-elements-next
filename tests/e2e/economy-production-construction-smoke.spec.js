@@ -420,8 +420,8 @@ test('FE_CONSTRUCTION_SYSTEM has correct constants and factory shapes', async ({
   expect(result.constructionStates,'CONSTRUCTION_STATES should have all keys').toBe(true);
   expect(result.buildOrderStates,  'BUILD_ORDER_STATES should have all keys').toBe(true);
 
-  expect(result.hpDefaults.defaultHp,  'DEFAULT_BUILDING_HP should be 500').toBe(500);
-  expect(result.hpDefaults.hqHp,       'HQ_HP should be 500').toBe(500);
+  expect(result.hpDefaults.defaultHp,  'DEFAULT_BUILDING_HP should be 320').toBe(320);
+  expect(result.hpDefaults.hqHp,       'HQ_HP should be 1000').toBe(1000);
   expect(result.hpDefaults.cancelRate, 'DEFAULT_CANCEL_REFUND_RATE should be 0.75').toBe(0.75);
   expect(result.hpDefaults.destroyRate,'DEFAULT_DESTROY_REFUND_RATE should be 0').toBe(0);
 
@@ -457,7 +457,7 @@ test('Construction factory functions produce valid objects', async ({ page }) =>
     var orderValid = cs.isValidBuildOrderState(order);
 
     var constrState = cs.createConstructionState({
-      state: 'in_progress', progress: 0.6, currentHp: 300, maxHp: 500, buildingType: 'separator'
+      state: 'in_progress', progress: 0.6, currentHp: 192, maxHp: 320, buildingType: 'separator'
     });
 
     return { costResult, costValid, order, orderValid, constrState };
@@ -474,8 +474,8 @@ test('Construction factory functions produce valid objects', async ({ page }) =>
 
   expect(result.constrState.state,    'construction state should be in_progress').toBe('in_progress');
   expect(result.constrState.progress, 'construction progress should be 0.6').toBeCloseTo(0.6);
-  expect(result.constrState.currentHp,'construction currentHp should be 300').toBe(300);
-  expect(result.constrState.maxHp,    'construction maxHp should be 500').toBe(500);
+  expect(result.constrState.currentHp,'construction currentHp should be 192').toBe(192);
+  expect(result.constrState.maxHp,    'construction maxHp should be 320').toBe(320);
 });
 
 // ---------------------------------------------------------------------------
@@ -550,7 +550,7 @@ test('FE_BUILDINGS separator has enriched fields matching economy constants', as
   expect(result.hasSep, 'FE_BUILDINGS.separator should exist').toBe(true);
   expect(result.desc.includes('15'), 'separator desc should say 15 not 20').toBe(true);
   expect(result.desc.includes('20'), 'separator desc should NOT say 20').toBe(false);
-  expect(result.hp,       'separator hp should be 500').toBe(500);
+  expect(result.hp,       'separator hp should be 320').toBe(320);
   expect(result.powerMw,  'separator powerMw should be 4').toBe(4);
   expect(result.separatorInputMinerals, 'separator separatorInputMinerals should be 15').toBe(15);
   expect(result.separatorOutputEnergy,  'separator separatorOutputEnergy should be 10').toBe(10);
