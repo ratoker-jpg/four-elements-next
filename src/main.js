@@ -7486,6 +7486,7 @@ function updateEnemyBot(dt) {
           enabled: true, lastAt: 0, evaluated: 0, applied: 0, skipped: 0,
           lastDecision: null,
           perRuleCounts: { defend_hq: 0, retreat: 0, keep_attacking: 0, idle: 0 },
+          perRuleNameCounts: { defend_hq_if_base_threatened: 0, stand_and_fight_near_home: 0, retreat_if_losing_or_overextended: 0, keep_attacking_valid_current_target: 0, idle_fallback: 0 },
           suppressedLegacyBlocks: 0, errors: []
         };
       }
@@ -7602,6 +7603,7 @@ function updateEnemyBot(dt) {
             FE_PATCH_08BCommandEnemyTankAttack(_tdTank, _tdTarget, state, 'defend');
             _tdTank._tankDeciderManagedAt = _tdNow;
             _tdTank._tankDeciderLastAction = 'defend_hq';
+            _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
             _tdTelm.applied++;
             _tdTelm.perRuleCounts.defend_hq = (_tdTelm.perRuleCounts.defend_hq || 0) + 1;
           }
@@ -7617,18 +7619,26 @@ function updateEnemyBot(dt) {
           }
           _tdTank._tankDeciderManagedAt = _tdNow;
           _tdTank._tankDeciderLastAction = 'retreat';
+          _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
           _tdTelm.applied++;
           _tdTelm.perRuleCounts.retreat = (_tdTelm.perRuleCounts.retreat || 0) + 1;
         } else if (_tdResult.action === 'keep_attacking') {
           // Current attack order is valid — just mark as managed to prevent legacy overwrite.
           _tdTank._tankDeciderManagedAt = _tdNow;
           _tdTank._tankDeciderLastAction = 'keep_attacking';
+          _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
           _tdTelm.applied++;
           _tdTelm.perRuleCounts.keep_attacking = (_tdTelm.perRuleCounts.keep_attacking || 0) + 1;
         }
         // idle: don't mark as managed — let legacy handle it.
         if (_tdResult.action === 'idle') {
           _tdTelm.perRuleCounts.idle = (_tdTelm.perRuleCounts.idle || 0) + 1;
+        }
+
+        // ARCH-AI-05C2B: per-rule-name telemetry (distinguishes e.g. stand_and_fight_near_home
+        // from keep_attacking_valid_current_target even though both have action=keep_attacking).
+        if (_tdResult.ruleName && _tdTelm.perRuleNameCounts) {
+          _tdTelm.perRuleNameCounts[_tdResult.ruleName] = (_tdTelm.perRuleNameCounts[_tdResult.ruleName] || 0) + 1;
         }
 
         _tdTelm.lastDecision = {
@@ -7646,6 +7656,7 @@ function updateEnemyBot(dt) {
           enabled: false, lastAt: 0, evaluated: 0, applied: 0, skipped: 0,
           lastDecision: null,
           perRuleCounts: { defend_hq: 0, retreat: 0, keep_attacking: 0, idle: 0 },
+          perRuleNameCounts: { defend_hq_if_base_threatened: 0, stand_and_fight_near_home: 0, retreat_if_losing_or_overextended: 0, keep_attacking_valid_current_target: 0, idle_fallback: 0 },
           suppressedLegacyBlocks: 0, errors: []
         };
       } else if (game && game._tankDecider01) {
