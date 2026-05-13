@@ -2718,6 +2718,11 @@
   // Runtime-only enemy vision/memory shell. This patch observes and remembers;
   // it intentionally does not change current bot defend/attack decisions yet.
   function FE_PATCH_10BCreateEnemyKnowledge() {
+    // ARCH-LAB-05A2: delegate to FE_ENEMY_INTEL factory if available
+    if (window.FE_ENEMY_INTEL && typeof window.FE_ENEMY_INTEL.createEnemyKnowledgeShell === 'function') {
+      return window.FE_ENEMY_INTEL.createEnemyKnowledgeShell();
+    }
+    // Legacy fallback — preserve exact shape if module missing
     return {
       updatedAt: 0,
       visibleUnitIds: [],
@@ -3721,46 +3726,52 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   // Init game.enemyIntel if not present. Returns the intel object.
   function FE_INTEL01Init(g) {
     if (g.enemyIntel) return g.enemyIntel;
-    g.enemyIntel = {
-      playerHqSeen: false,
-      playerHqX: null,
-      playerHqY: null,
-      playerHqCenterX: null,
-      playerHqCenterY: null,
-      // BOT-INTEL-01B: estimate fields from scout target metadata (not confirmed visual).
-      playerHqEstimateX: null,
-      playerHqEstimateY: null,
-      playerHqEstimateCenterX: null,
-      playerHqEstimateCenterY: null,
-      playerHqEstimateSource: '',
-      lastPlayerHqEstimateAt: 0,
-      lastScoutSweepDoneAt: 0,
-      lastUsefulIntelAt: 0,
-      seenPlayerUnitsCount: 0,
-      seenPlayerBuildingsCount: 0,
-      knownPlayerUnitsByType: {
-        harvester: 0,
-        builder: 0,
-        light_tank: 0,
-        scout: 0,
-        other: 0
-      },
-      knownPlayerBuildingsByType: {
-        hq_base: 0,
-        units_factory: 0,
-        separator: 0,
-        minerals_storage: 0,
-        energy_storage: 0,
-        elements_storage: 0,
-        power_plant: 0,
-        energy_reactor: 0,
-        repair_center: 0,
-        defense_tower: 0,
-        other: 0
-      },
-      nearestKnownPlayerTankDist: -1,
-      intelSource: 'scout'
-    };
+    // ARCH-LAB-05A2: delegate to FE_ENEMY_INTEL factory if available
+    if (window.FE_ENEMY_INTEL && typeof window.FE_ENEMY_INTEL.createEnemyIntelSnapshot === 'function') {
+      g.enemyIntel = window.FE_ENEMY_INTEL.createEnemyIntelSnapshot();
+    } else {
+      // Legacy fallback — preserve exact shape if module missing
+      g.enemyIntel = {
+        playerHqSeen: false,
+        playerHqX: null,
+        playerHqY: null,
+        playerHqCenterX: null,
+        playerHqCenterY: null,
+        // BOT-INTEL-01B: estimate fields from scout target metadata (not confirmed visual).
+        playerHqEstimateX: null,
+        playerHqEstimateY: null,
+        playerHqEstimateCenterX: null,
+        playerHqEstimateCenterY: null,
+        playerHqEstimateSource: '',
+        lastPlayerHqEstimateAt: 0,
+        lastScoutSweepDoneAt: 0,
+        lastUsefulIntelAt: 0,
+        seenPlayerUnitsCount: 0,
+        seenPlayerBuildingsCount: 0,
+        knownPlayerUnitsByType: {
+          harvester: 0,
+          builder: 0,
+          light_tank: 0,
+          scout: 0,
+          other: 0
+        },
+        knownPlayerBuildingsByType: {
+          hq_base: 0,
+          units_factory: 0,
+          separator: 0,
+          minerals_storage: 0,
+          energy_storage: 0,
+          elements_storage: 0,
+          power_plant: 0,
+          energy_reactor: 0,
+          repair_center: 0,
+          defense_tower: 0,
+          other: 0
+        },
+        nearestKnownPlayerTankDist: -1,
+        intelSource: 'scout'
+      };
+    }
     return g.enemyIntel;
   }
 
