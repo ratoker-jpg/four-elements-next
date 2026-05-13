@@ -4018,6 +4018,9 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   function FE_ATTACK11ChooseIntelTarget() {
     var intel = game && game.enemyIntel;
     var now = game ? (game.time || 0) : 0;
+    if (window.FE_ENEMY_TARGETING && typeof window.FE_ENEMY_TARGETING.chooseIntelTarget === 'function') {
+      return window.FE_ENEMY_TARGETING.chooseIntelTarget(game && game.enemyIntel, game ? (game.time || 0) : 0);
+    }
     if (!intel) return null;
 
     // Priority 1: Confirmed player HQ from scout visual.
@@ -4059,6 +4062,30 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
   function FE_ATTACK12EvaluateAttackDecision(enemyTanks, now) {
     var intel = game && game.enemyIntel;
     var _a12Attack11Ds = game && game._botAttack11 ? (game._botAttack11.dispatchSource || '') : '';
+    if (window.FE_ENEMY_TARGETING && typeof window.FE_ENEMY_TARGETING.evaluateAttackDecision === 'function') {
+      var _a12TankStatuses = [];
+      for (var _a12tsi = 0; _a12tsi < (enemyTanks || []).length; _a12tsi++) {
+        var _a12tsu = enemyTanks[_a12tsi];
+        _a12TankStatuses.push({
+          isAlive: !!_a12tsu && (_a12tsu.hp || 0) > 0,
+          isIntelRally: !!(_a12tsu && _a12tsu._attack11IntelRally),
+          isWaveLocked: !!(_a12tsu && typeof FE_ATTACK10IsWaveLocked === 'function' && FE_ATTACK10IsWaveLocked(_a12tsu)),
+          hasAttackTargetId: !!(_a12tsu && _a12tsu.attackTargetId),
+          hasAttackApproachTargetId: !!(_a12tsu && _a12tsu.attackApproachTargetId)
+        });
+      }
+      return window.FE_ENEMY_TARGETING.evaluateAttackDecision(
+        intel,
+        _a12TankStatuses,
+        now,
+        {
+          attack11DispatchSource: game && game._botAttack11 ? (game._botAttack11.dispatchSource || '') : '',
+          maxIntelAgeSec: FE_ATTACK12_MAX_INTEL_AGE_SEC,
+          minAttackTanks: FE_ATTACK12_MIN_ATTACK_TANKS,
+          forceAdvantage: FE_ATTACK12_FORCE_ADVANTAGE
+        }
+      );
+    }
 
     // Count ready enemy tanks: alive, not wave-locked, not on intel rally.
     // BOT-ATTACK-12A: also count assignable (subset without active attack orders).

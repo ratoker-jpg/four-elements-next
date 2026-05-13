@@ -73,3 +73,4 @@
 | ARCH-LAB-05A | 2026-05-13 | #82 | Enemy intel contract-only module — SCOUT_LIFECYCLE_STATES, INTEL_SOURCES, SCOUT_RETURN_REASONS, factories, validators |
 | ARCH-LAB-05A2 | 2026-05-13 | TBD | Enemy intel factory delegation — wire FE_PATCH_10BCreateEnemyKnowledge and FE_INTEL01Init to FE_ENEMY_INTEL factories |
 | ARCH-LAB-05B | 2026-05-13 | #86 | Enemy targeting contract + pure decision functions — ATTACK_TARGET_SOURCES, ATTACK_DECISION_RESULTS, ATTACK_DELAY_REASONS, ATTACK12_DEFAULTS, chooseIntelTarget, evaluateAttackDecision, factories, validators |
+| ARCH-LAB-05B2 | 2026-05-13 | TBD | Wire FE_ATTACK11ChooseIntelTarget and FE_ATTACK12EvaluateAttackDecision to FE_ENEMY_TARGETING with legacy fallbacks preserved |
