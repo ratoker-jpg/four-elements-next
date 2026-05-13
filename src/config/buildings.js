@@ -4,40 +4,50 @@
 window.FE_BUILDINGS = {
     separator: {
       name:'Сепаратор', costEnergy:30, buildTime:25, asset:'separator',
-      desc:'Перерабатывает 20 сырья в 10 энергии и 1 элемент фракции.'
+      desc:'Перерабатывает 15 сырья в 10 энергии и 1 элемент фракции.',
+      hp:500, powerMw:4,
+      separatorInputMinerals:15, separatorOutputEnergy:10, separatorOutputElement:1, separatorCycleSeconds:6.0
     },
     minerals_storage: {
       name:'Склад сырья', costEnergy:35, buildTime:20, asset:'minerals_storage',
-      storageBonus:{ minerals:200 }, desc:'Увеличивает лимит сырья на 200.'
+      storageBonus:{ minerals:200 }, desc:'Увеличивает лимит сырья на 200.',
+      hp:500, powerMw:1
     },
     energy_storage: {
       name:'Склад энергии', costEnergy:45, buildTime:22, asset:'energy_storage',
-      storageBonus:{ energy:300 }, desc:'Увеличивает лимит энергии на 300.'
+      storageBonus:{ energy:300 }, desc:'Увеличивает лимит энергии на 300.',
+      hp:500, powerMw:1
     },
     elements_storage: {
       name:'Склад элементов', costEnergy:50, buildTime:24, asset:'elements_storage',
       storageBonus:{ purple:20, greenEl:20, cyanEl:20, yellowEl:20 },
-      desc:'Увеличивает лимит каждого элемента на 20.'
+      desc:'Увеличивает лимит каждого элемента на 20.',
+      hp:500, powerMw:1
     },
     power_plant: {
       name:'Электростанция', costEnergy:35, buildTime:25, asset:'power_plant',
-      desc:'Заложена под будущую энергосистему.'
+      desc:'Заложена под будущую энергосистему.',
+      hp:500, powerMw:20
     },
     energy_reactor: {
       name:'Энергореактор', costEnergy:45, buildTime:35, asset:'energy_reactor',
-      desc:'Заложен под будущую продвинутую энергосистему.'
+      desc:'Заложен под будущую продвинутую энергосистему.',
+      hp:500, powerMw:40
     },
     units_factory: {
       name:'Фабрика юнитов', costEnergy:55, buildTime:40, asset:'units_factory',
-      desc:'Производит строителей и сборщиков за элементы фракции.'
+      desc:'Производит строителей и сборщиков за элементы фракции.',
+      hp:500, powerMw:5
     },
     repair_center: {
       name:'Ремонтный центр', costEnergy:160, buildTime:35, asset:'repair_center',
-      desc:'Заложен под будущий ремонт юнитов.'
+      desc:'Заложен под будущий ремонт юнитов.',
+      hp:500, powerMw:3
     },
     defense_tower: {
       name:'Защитная башня', costEnergy:180, buildTime:30, asset:'defense_tower',
-      desc:'Заложена под будущую оборону.'
+      desc:'Заложена под будущую оборону.',
+      hp:400, powerMw:5
     }
   };
 
