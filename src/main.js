@@ -3395,7 +3395,10 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (_owner !== 'enemy') continue;
       // ARCH-AI-01: Decider-managed tanks do not need invariant repair — decider
       // does not create invariant violations.
-      if (u._tankDeciderManagedAt && (_tdGNow9 - u._tankDeciderManagedAt) < 2000) continue;
+      if (u._tankDeciderManagedAt && (_tdGNow9 - u._tankDeciderManagedAt) < 2000) {
+        if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
+        continue;
+      }
       if (!u.attackApproachTargetId) continue;
       if (String(u.command || '').toLowerCase() !== 'attack') continue;
       // Проверяем что target жив
@@ -5179,7 +5182,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     for (const unit of enemyUnits) {
       // ARCH-AI-01: Skip decider-managed tanks from pressureTarget defend override.
       if (unit._tankDeciderManagedAt && (_tdGNow5 - unit._tankDeciderManagedAt) < 2000) {
-        if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+        if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
         continue;
       }
       issued = FE_PATCH_08BCommandEnemyTankAttack(unit, threat, state, 'defend') || issued;
@@ -6097,7 +6100,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // ARCH-AI-01: Do not reassign decider-managed tanks.
     var _tdGNow3 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (unit._tankDeciderManagedAt && (_tdGNow3 - unit._tankDeciderManagedAt) < 2000) {
-      if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+      if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
       return false;
     }
     const id = FE_10D1_getObjectId(target);
@@ -6142,7 +6145,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // ARCH-AI-01: Do not redirect decider-managed tanks.
     var _tdGNow4 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (unit._tankDeciderManagedAt && (_tdGNow4 - unit._tankDeciderManagedAt) < 2000) {
-      if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+      if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
       return false;
     }
     // ATTACK-10: wave-locked units must not be redirected by autopilot/patrol/strength-wait.
@@ -6528,7 +6531,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // ARCH-AI-01: Do not clear attack orders for decider-managed tanks.
     var _tdGNow = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (unit._tankDeciderManagedAt && (_tdGNow - unit._tankDeciderManagedAt) < 2000) {
-      if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+      if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
       return;
     }
     // ATTACK-10: do not clear attack order for wave-locked units — they stay on target.
@@ -6554,7 +6557,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     // ARCH-AI-01: Do not return decider-managed tanks to HQ (unless decider decided retreat).
     var _tdGNow2 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (unit._tankDeciderManagedAt && (_tdGNow2 - unit._tankDeciderManagedAt) < 2000 && unit._tankDeciderLastAction !== 'retreat') {
-      if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+      if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
       return false;
     }
     // ATTACK-10: wave-locked units must not be pulled back to HQ.
@@ -6637,7 +6640,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
 
       // ARCH-AI-01: Do not suppress attack orders for decider-managed tanks.
       if (u._tankDeciderManagedAt && (_tdGNow8 - u._tankDeciderManagedAt) < 2000) {
-        if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+        if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
         continue;
       }
 
@@ -6880,7 +6883,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (!unit) continue;
       // ARCH-AI-01: Skip decider-managed tanks from legacy retreat overwrite.
       if (unit._tankDeciderManagedAt && (_tdGNow6 - unit._tankDeciderManagedAt) < 2000) {
-        if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+        if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
         continue;
       }
       const attacking = FE_10H1_hasActiveAttackOrder(unit);
@@ -6940,7 +6943,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       if (!unit) continue;
       // ARCH-AI-01: Skip decider-managed tanks from legacy defend overwrite.
       if (unit._tankDeciderManagedAt && (_tdGNow7 - unit._tankDeciderManagedAt) < 2000) {
-        if (typeof game !== 'undefined' && game && game._tankDecider01) game._tankDecider01.suppressedLegacyBlocks++;
+        if (typeof game !== 'undefined' && game && game._tankDecider01) { game._tankDecider01.suppressedLegacyBlocks++; game._tankDecider01.suppressedLegacyBlocksTotal++; }
         continue;
       }
       if (FE_10H1_isRetreating(unit)) continue;
@@ -7487,7 +7490,11 @@ function updateEnemyBot(dt) {
           lastDecision: null,
           perRuleCounts: { defend_hq: 0, retreat: 0, keep_attacking: 0, idle: 0 },
           perRuleNameCounts: { defend_hq_if_base_threatened: 0, stand_and_fight_near_home: 0, retreat_if_losing_or_overextended: 0, keep_attacking_valid_current_target: 0, idle_fallback: 0 },
-          suppressedLegacyBlocks: 0, errors: []
+          suppressedLegacyBlocks: 0,
+          suppressedLegacyBlocksTotal: 0,
+          managedPerTick: 0,
+          legacyPerTick: 0,
+          errors: []
         };
       }
       var _tdTelm = game._tankDecider01;
@@ -7496,6 +7503,9 @@ function updateEnemyBot(dt) {
       _tdTelm.evaluated = 0;
       _tdTelm.applied = 0;
       _tdTelm.skipped = 0;
+      // ARCH-AI-05C4: Per-tick managed/legacy counters — reset each tick.
+      _tdTelm.managedPerTick = 0;
+      _tdTelm.legacyPerTick = 0;
 
       var _tdEnemyHQ = homeBase;
       var _tdThreatsNearHome = [];
@@ -7606,6 +7616,7 @@ function updateEnemyBot(dt) {
             _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
             _tdTelm.applied++;
             _tdTelm.perRuleCounts.defend_hq = (_tdTelm.perRuleCounts.defend_hq || 0) + 1;
+            _tdTelm.managedPerTick++;  // ARCH-AI-05C4
           }
         } else if (_tdResult.action === 'retreat') {
           var _tdRetreated = false;
@@ -7622,6 +7633,7 @@ function updateEnemyBot(dt) {
           _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
           _tdTelm.applied++;
           _tdTelm.perRuleCounts.retreat = (_tdTelm.perRuleCounts.retreat || 0) + 1;
+          _tdTelm.managedPerTick++;  // ARCH-AI-05C4
         } else if (_tdResult.action === 'keep_attacking') {
           // Current attack order is valid — just mark as managed to prevent legacy overwrite.
           _tdTank._tankDeciderManagedAt = _tdNow;
@@ -7629,10 +7641,12 @@ function updateEnemyBot(dt) {
           _tdTank._tankDeciderLastRuleName = _tdResult.ruleName || '';
           _tdTelm.applied++;
           _tdTelm.perRuleCounts.keep_attacking = (_tdTelm.perRuleCounts.keep_attacking || 0) + 1;
+          _tdTelm.managedPerTick++;  // ARCH-AI-05C4
         }
         // idle: don't mark as managed — let legacy handle it.
         if (_tdResult.action === 'idle') {
           _tdTelm.perRuleCounts.idle = (_tdTelm.perRuleCounts.idle || 0) + 1;
+          _tdTelm.legacyPerTick++;  // ARCH-AI-05C4
         }
 
         // ARCH-AI-05C2B: per-rule-name telemetry (distinguishes e.g. stand_and_fight_near_home
@@ -7657,10 +7671,16 @@ function updateEnemyBot(dt) {
           lastDecision: null,
           perRuleCounts: { defend_hq: 0, retreat: 0, keep_attacking: 0, idle: 0 },
           perRuleNameCounts: { defend_hq_if_base_threatened: 0, stand_and_fight_near_home: 0, retreat_if_losing_or_overextended: 0, keep_attacking_valid_current_target: 0, idle_fallback: 0 },
-          suppressedLegacyBlocks: 0, errors: []
+          suppressedLegacyBlocks: 0,
+          suppressedLegacyBlocksTotal: 0,
+          managedPerTick: 0,
+          legacyPerTick: 0,
+          errors: []
         };
       } else if (game && game._tankDecider01) {
         game._tankDecider01.enabled = false;
+        game._tankDecider01.managedPerTick = 0;
+        game._tankDecider01.legacyPerTick = 0;
       }
     }
 
