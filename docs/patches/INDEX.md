@@ -75,3 +75,4 @@
 | ARCH-LAB-05B | 2026-05-13 | #86 | Enemy targeting contract + pure decision functions — ATTACK_TARGET_SOURCES, ATTACK_DECISION_RESULTS, ATTACK_DELAY_REASONS, ATTACK12_DEFAULTS, chooseIntelTarget, evaluateAttackDecision, factories, validators |
 | ARCH-LAB-05B2 | 2026-05-13 | TBD | Wire FE_ATTACK11ChooseIntelTarget and FE_ATTACK12EvaluateAttackDecision to FE_ENEMY_TARGETING with legacy fallbacks preserved |
 | ARCH-LAB-05B3 | 2026-05-13 | TBD | Remove FE_ATTACK11/12 legacy fallbacks and keep thin FE_ENEMY_TARGETING runtime wrappers |
+| ARCH-AI-05C-DESIGN | 2026-05-13 | TBD | Enemy tank decision / Priority Stack migration design |
