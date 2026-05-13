@@ -77,3 +77,4 @@
 | ARCH-LAB-05B3 | 2026-05-14 | #88 | Enemy targeting fallback cleanup — remove legacy fallback from ATTACK11/12 wrappers, first main.js-reducing architecture PR (-125 lines) |
 | ARCH-AI-05C-DESIGN | 2026-05-13 | #89 | Enemy tank decision / Priority Stack migration design |
 | ARCH-AI-05C1 | 2026-05-14 | #90 | Tank decider contract/rule update — enums, stand_and_fight_near_home rule, factory, validators |
+| ARCH-AI-05C2B | 2026-05-14 | #91 | Tank decider gated telemetry — perRuleNameCounts, _tankDeciderLastRuleName, manual QA path |
