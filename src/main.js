@@ -1705,10 +1705,9 @@
   function createBuilding(type,x,y,complete=false, owner='player') {
     const [w,h] = BUILDING_SIZE[type] || [2,2];
     const def = BUILDINGS[type] || {};
-    const hp =
-      type === 'hq_base' ? 1000 :
-      type === 'defense_tower' ? 420 :
-      320;
+    const hp = type === 'hq_base'
+      ? FE_CONSTRUCTION_SYSTEM.HQ_HP
+      : (BUILDINGS[type]?.hp || FE_CONSTRUCTION_SYSTEM.DEFAULT_BUILDING_HP);
 
     return {
       id:uid(type),
@@ -2051,22 +2050,18 @@
     return next - old;
   }
 
-  // POWER-SYSTEM-01A: HQ power increased from 10 to 15 MW so starter workers +
-  // separator + factory fit within HQ capacity without immediate power_plant.
-  // Baseline: 2 harvester (2) + 1 builder (1) + separator (4) + factory (5) = 12 MW <= 15 MW.
-  const FE_POWER_01A_HQ_MW = 15;
-  // POWER-SYSTEM-01A: each active unit consumes 1 MW of power (upkeep).
-  const FE_POWER_01A_UNIT_MW = 1;
+  // POWER-SYSTEM-01A fallback defaults now live in FE_ECONOMY_SYSTEM constants.
+  // ARCH-LAB-06B: removed local FE_POWER_01A_HQ_MW / FE_POWER_01A_UNIT_MW; powerConfig() uses module constants.
   // POWER-SYSTEM-01A: enemy should build power_plant when usage >= 80% of capacity.
   const FE_POWER_01A_ENEMY_POWER_PLANT_THRESHOLD = 0.8;
 
   function powerConfig() {
     return {
-      hqMw: Number.isFinite(window.FE_POWER_HQ_MW) ? window.FE_POWER_HQ_MW : FE_POWER_01A_HQ_MW,
+      hqMw: Number.isFinite(window.FE_POWER_HQ_MW) ? window.FE_POWER_HQ_MW : FE_ECONOMY_SYSTEM.HQ_POWER_SUPPLY_MW,
       powerPlantMw: Number.isFinite(window.FE_POWER_PLANT_MW) ? window.FE_POWER_PLANT_MW : 20,
       separatorMw: Number.isFinite(window.FE_SEPARATOR_ACTIVE_POWER_MW) ? window.FE_SEPARATOR_ACTIVE_POWER_MW : 4,
       factoryMw: Number.isFinite(window.FE_UNITS_FACTORY_ACTIVE_POWER_MW) ? window.FE_UNITS_FACTORY_ACTIVE_POWER_MW : 5,
-      unitMw: Number.isFinite(window.FE_POWER_UNIT_MW) ? window.FE_POWER_UNIT_MW : FE_POWER_01A_UNIT_MW,
+      unitMw: Number.isFinite(window.FE_POWER_UNIT_MW) ? window.FE_POWER_UNIT_MW : FE_ECONOMY_SYSTEM.DEFAULT_UNIT_UPKEEP_MW,
     };
   }
 
@@ -2282,13 +2277,9 @@
   }
 
   // PATCH-09B2-ECONOMY-BASELINE-FIX: separator formula baseline is 15 raw minerals -> 10 energy + 1 faction element.
+  // ARCH-LAB-06B: delegates to FE_ECONOMY_SYSTEM.canRunSeparatorCycle().
   function canRunSeparatorCycle() {
-    const elKey = factionElementKey();
-    return (
-      game.resources.minerals >= 15 &&
-      resourceSpace('energy') >= 10 &&
-      resourceSpace(elKey) >= 1
-    );
+    return FE_ECONOMY_SYSTEM.canRunSeparatorCycle(game.resources, getStorageLimits(), factionElementKey());
   }
 
 
@@ -2411,12 +2402,12 @@
     // Если энергия/элементы забиты или мощности не хватает, переработка ставится на паузу.
     if (activeSepCount && canRunSeparatorCycle()) {
       game._sepTimer += dt * activeSepCount;
-      if (game._sepTimer >= 6.0) {
+      if (game._sepTimer >= FE_ECONOMY_SYSTEM.SEPARATOR_CYCLE_SECONDS) {
         game._sepTimer = 0;
         if (canRunSeparatorCycle()) {
-          addResource('minerals', -15);
-          addResource('energy', 10);
-          addResource(factionElementKey(), 1);
+          addResource('minerals', -FE_ECONOMY_SYSTEM.SEPARATOR_INPUT_MINERALS);
+          addResource('energy', FE_ECONOMY_SYSTEM.SEPARATOR_OUTPUT_ENERGY);
+          addResource(factionElementKey(), FE_ECONOMY_SYSTEM.SEPARATOR_OUTPUT_ELEMENT);
         }
       }
     }
@@ -10737,49 +10728,14 @@ function debugLog(event, payload={}) {
   }
   // BOT-BRAIN-01_PRIORITY_DECISION_LOOP_END
 
+  // ARCH-LAB-06B: getBuildCost delegates to FE_CONSTRUCTION_SYSTEM.
   function getBuildCost(type) {
-    const def = BUILDINGS[type] || {};
-    const cost = {};
-
-    // В текущей v0.4 здания строятся за энергию.
-    if (typeof def.cost === 'number') {
-      cost.energy = def.cost;
-    }
-
-    if (typeof def.costEnergy === 'number') cost.energy = def.costEnergy;
-    if (typeof def.energy === 'number') cost.energy = def.energy;
-    if (typeof def.energyCost === 'number') cost.energy = def.energyCost;
-
-    if (typeof def.minerals === 'number') cost.minerals = def.minerals;
-    if (typeof def.mineralCost === 'number') cost.minerals = def.mineralCost;
-
-    if (def.cost && typeof def.cost === 'object') {
-      for (const [k, v] of Object.entries(def.cost)) {
-        if (typeof v === 'number') cost[k] = v;
-      }
-    }
-
-    return cost;
+    return FE_CONSTRUCTION_SYSTEM.getBuildCost(type);
   }
 
+  // ARCH-LAB-06B: canAffordBuild delegates to FE_CONSTRUCTION_SYSTEM.
   function canAffordBuild(type) {
-    const cost = getBuildCost(type);
-
-    for (const [resource, amount] of Object.entries(cost)) {
-      const have = game.resources?.[resource] || 0;
-
-      if (have < amount) {
-        return {
-          ok:false,
-          resource,
-          amount,
-          have,
-          cost
-        };
-      }
-    }
-
-    return {ok:true, cost};
+    return FE_CONSTRUCTION_SYSTEM.canAffordBuildDetailed(type, game.resources);
   }
 
   function spendBuildCost(type) {
@@ -11107,15 +11063,14 @@ function logBuilderState(unit, reason='tick') {
     return cost;
   }
 
+  // ARCH-LAB-06B: refund calculation delegates to FE_CONSTRUCTION_SYSTEM;
+  // mutation (changeResource, debugLog) remains in main.js.
   function refundCostByRate(cost, rate, reason, extra={}) {
-    const refunded = {};
+    const result = FE_CONSTRUCTION_SYSTEM.calculateMultiResourceRefund(cost, rate);
+    const refunded = result.refunded;
 
-    for (const [resource, amount] of Object.entries(cost || {})) {
-      if (!amount) continue;
-      const refund = Math.max(0, Math.floor(amount * rate));
-      if (!refund) continue;
+    for (const [resource, refund] of Object.entries(refunded)) {
       changeResource(resource, refund);
-      refunded[resource] = refund;
     }
 
     debugLog('construction_partial_refund', {

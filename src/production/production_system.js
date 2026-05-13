@@ -1,5 +1,5 @@
 // Four Elements v0.4 module: production system — pure data API.
-// ARCH-LAB-06-BUNDLE: production contract — production states, unit types,
+// ARCH-LAB-06-BUNDLE + 06B: production contract — production states, unit types,
 //   factory queue constants, queue items, validators, affordability, timing.
 // Provides window.FE_PRODUCTION_SYSTEM with production/unit constants,
 // factory functions, and predicates.
@@ -33,7 +33,8 @@
 
   // ── Factory queue constants ──────────────────────────────────
   // Limits and defaults for the factory production queue.
-  var MAX_QUEUE_SIZE            = 5;    // max items in a single factory queue
+  var MAX_QUEUE_SIZE            = 5;    // max items in a single factory queue (generic contract limit)
+  var PLAYER_FACTORY_MAX_QUEUE  = 2;    // actual runtime queue limit for player factories
   var DEFAULT_PRODUCTION_SPEED  = 1.0;  // multiplier (1.0 = normal speed)
   var CANCEL_REFUND_RATE        = 0.75; // fraction of cost refunded on cancel
 
@@ -150,11 +151,14 @@
   /**
    * Pure predicate: can the player afford to produce a unit?
    * Reads unit cost from FE_UNITS config and checks against resource snapshot.
+   * If elKey is provided, checks only that specific faction element.
+   * If elKey is omitted, checks all element types (at least one must be sufficient).
    * @param {string} unitType — one of UNIT_TYPES values
    * @param {Object} snapshot — resource snapshot (from FE_ECONOMY_SYSTEM)
+   * @param {string} [elKey]  — optional faction element key (e.g. 'cyanEl') for faction-specific check
    * @returns {boolean}
    */
-  function canAffordUnit(unitType, snapshot) {
+  function canAffordUnit(unitType, snapshot, elKey) {
     if (!unitType || typeof unitType !== 'string') return false;
     if (!snapshot || typeof snapshot !== 'object') return false;
     var units = window.FE_UNITS;
@@ -163,16 +167,21 @@
     // Units cost elements (purple by default — the primary element type).
     // In the current economy, costElement is the number of faction elements required.
     if (costElement > 0) {
-      // Check all element types — player needs at least one type with enough
-      var elementFields = ['purple', 'greenEl', 'cyanEl', 'yellowEl'];
-      var canAffordAny = false;
-      for (var i = 0; i < elementFields.length; i++) {
-        if (_safeNum(snapshot[elementFields[i]], 0) >= costElement) {
-          canAffordAny = true;
-          break;
+      if (elKey && typeof elKey === 'string') {
+        // Faction-specific check: only the specified element type must be sufficient.
+        if (_safeNum(snapshot[elKey], 0) < costElement) return false;
+      } else {
+        // Check all element types — player needs at least one type with enough
+        var elementFields = ['purple', 'greenEl', 'cyanEl', 'yellowEl'];
+        var canAffordAny = false;
+        for (var i = 0; i < elementFields.length; i++) {
+          if (_safeNum(snapshot[elementFields[i]], 0) >= costElement) {
+            canAffordAny = true;
+            break;
+          }
         }
+        if (!canAffordAny) return false;
       }
-      if (!canAffordAny) return false;
     }
     return true;
   }
@@ -211,6 +220,7 @@
     PRODUCTION_STATES:       PRODUCTION_STATES,
     UNIT_TYPES:              UNIT_TYPES,
     MAX_QUEUE_SIZE:          MAX_QUEUE_SIZE,
+    PLAYER_FACTORY_MAX_QUEUE: PLAYER_FACTORY_MAX_QUEUE,
     DEFAULT_PRODUCTION_SPEED:DEFAULT_PRODUCTION_SPEED,
     CANCEL_REFUND_RATE:      CANCEL_REFUND_RATE,
     createProductionQueueItem:  createProductionQueueItem,

@@ -1,5 +1,5 @@
 // Four Elements v0.4 module: construction system — pure data API.
-// ARCH-LAB-06-BUNDLE: construction contract — building states, construction
+// ARCH-LAB-06-BUNDLE + 06B: construction contract — building states, construction
 //   states, build order states, HP defaults, refund rates, factories,
 //   validators, affordability, refund calculation, completion check.
 // Provides window.FE_CONSTRUCTION_SYSTEM with construction/building constants,
@@ -227,6 +227,101 @@
     return constructionState.state === CONSTRUCTION_STATES.COMPLETED;
   }
 
+  // ── Wrapper delegation helpers (ARCH-LAB-06B) ────────────────
+  // These functions replicate the exact normalization logic from main.js
+  // so that main.js can become a thin wrapper. All are pure — no mutation.
+
+  /**
+   * Extract build cost from a building definition.
+   * Mirrors main.js getBuildCost(type) exactly: checks multiple field names
+   * for backward compatibility with different config formats.
+   * @param {string} buildingType — building type key from FE_BUILDINGS
+   * @returns {Object} cost object, e.g. { energy: 30 } or { energy: 30, minerals: 10 }
+   */
+  function getBuildCost(buildingType) {
+    if (!buildingType || typeof buildingType !== 'string') return {};
+    var buildings = window.FE_BUILDINGS;
+    if (!buildings || !buildings[buildingType]) return {};
+    var def = buildings[buildingType];
+    var cost = {};
+
+    // In v0.4, buildings cost energy. Multiple field names are checked
+    // for backward compatibility with different config formats.
+    if (typeof def.cost === 'number') cost.energy = def.cost;
+    if (typeof def.costEnergy === 'number') cost.energy = def.costEnergy;
+    if (typeof def.energy === 'number') cost.energy = def.energy;
+    if (typeof def.energyCost === 'number') cost.energy = def.energyCost;
+    if (typeof def.minerals === 'number') cost.minerals = def.minerals;
+    if (typeof def.mineralCost === 'number') cost.minerals = def.mineralCost;
+
+    // If cost is an object, copy numeric entries.
+    if (def.cost && typeof def.cost === 'object') {
+      var costKeys = Object.keys(def.cost);
+      for (var i = 0; i < costKeys.length; i++) {
+        var k = costKeys[i];
+        if (typeof def.cost[k] === 'number') cost[k] = def.cost[k];
+      }
+    }
+
+    return cost;
+  }
+
+  /**
+   * Detailed affordability check for building construction.
+   * Mirrors main.js canAffordBuild(type) result shape exactly:
+   *   success: { ok: true,  cost }
+   *   failure: { ok: false, resource, amount, have, cost }
+   * @param {string} buildingType — building type key from FE_BUILDINGS
+   * @param {Object} resources    — current resource amounts { energy, minerals, ... }
+   * @returns {Object} affordability result
+   */
+  function canAffordBuildDetailed(buildingType, resources) {
+    var cost = getBuildCost(buildingType);
+    var res = resources && typeof resources === 'object' ? resources : {};
+    var costKeys = Object.keys(cost);
+    for (var i = 0; i < costKeys.length; i++) {
+      var resource = costKeys[i];
+      var amount = cost[resource];
+      var have = _safeNum(res[resource], 0);
+      if (have < amount) {
+        return { ok: false, resource: resource, amount: amount, have: have, cost: cost };
+      }
+    }
+    return { ok: true, cost: cost };
+  }
+
+  /**
+   * Calculate refund amounts for multiple resources at a given rate.
+   * Pure — no mutation. Returns the refund breakdown.
+   * Mirrors the calculation loop in main.js refundCostByRate() without the
+   * changeResource/debugLog side effects.
+   * @param {Object} cost — cost object, e.g. { energy: 30, minerals: 10 }
+   * @param {number} rate — refund rate (0..1)
+   * @returns {Object} { refunded: { resource: amount, ... }, total: number }
+   */
+  function calculateMultiResourceRefund(cost, rate) {
+    var refunded = {};
+    var total = 0;
+    var r = _safeNum(rate, DEFAULT_CANCEL_REFUND_RATE);
+    if (r < 0) r = 0;
+    if (r > 1) r = 1;
+
+    if (!cost || typeof cost !== 'object') return { refunded: refunded, total: 0 };
+
+    var keys = Object.keys(cost);
+    for (var i = 0; i < keys.length; i++) {
+      var resource = keys[i];
+      var amount = cost[resource];
+      if (!amount) continue;
+      var refund = Math.max(0, Math.floor(amount * r));
+      if (!refund) continue;
+      refunded[resource] = refund;
+      total += refund;
+    }
+
+    return { refunded: refunded, total: total };
+  }
+
   // ── Public API ───────────────────────────────────────────────
 
   window.FE_CONSTRUCTION_SYSTEM = {
@@ -244,6 +339,9 @@
     isValidBuildOrderState:   isValidBuildOrderState,
     canAffordBuild:           canAffordBuild,
     calculateRefund:          calculateRefund,
-    isConstructionComplete:   isConstructionComplete
+    isConstructionComplete:   isConstructionComplete,
+    getBuildCost:             getBuildCost,
+    canAffordBuildDetailed:   canAffordBuildDetailed,
+    calculateMultiResourceRefund: calculateMultiResourceRefund
   };
 })();
