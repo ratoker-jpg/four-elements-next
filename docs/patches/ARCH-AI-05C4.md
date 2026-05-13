@@ -168,8 +168,8 @@ game._tankDecider01.legacyPerTick    // should be > 0 if some tanks fall through
 | Metric | Value |
 |--------|-------|
 | Before | 15,650 |
-| After | TBD (after edit, telemetry additions ~20 lines net) |
-| Delta | ~+20 |
+| After | 15,670 |
+| Delta | +20 |
 
 ---
 
