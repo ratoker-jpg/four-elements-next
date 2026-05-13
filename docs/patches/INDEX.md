@@ -73,6 +73,7 @@
 | ARCH-LAB-05A | 2026-05-13 | #82 | Enemy intel contract-only module — SCOUT_LIFECYCLE_STATES, INTEL_SOURCES, SCOUT_RETURN_REASONS, factories, validators |
 | ARCH-LAB-05A2 | 2026-05-13 | TBD | Enemy intel factory delegation — wire FE_PATCH_10BCreateEnemyKnowledge and FE_INTEL01Init to FE_ENEMY_INTEL factories |
 | ARCH-LAB-05B | 2026-05-13 | #86 | Enemy targeting contract + pure decision functions — ATTACK_TARGET_SOURCES, ATTACK_DECISION_RESULTS, ATTACK_DELAY_REASONS, ATTACK12_DEFAULTS, chooseIntelTarget, evaluateAttackDecision, factories, validators |
-| ARCH-LAB-05B2 | 2026-05-13 | TBD | Wire FE_ATTACK11ChooseIntelTarget and FE_ATTACK12EvaluateAttackDecision to FE_ENEMY_TARGETING with legacy fallbacks preserved |
-| ARCH-LAB-05B3 | 2026-05-13 | TBD | Remove FE_ATTACK11/12 legacy fallbacks and keep thin FE_ENEMY_TARGETING runtime wrappers |
-| ARCH-AI-05C-DESIGN | 2026-05-13 | TBD | Enemy tank decision / Priority Stack migration design |
+| ARCH-LAB-05B2 | 2026-05-14 | #87 | Enemy targeting runtime wiring — delegation wrappers in main.js with legacy fallback, comments fix in enemy_targeting.js |
+| ARCH-LAB-05B3 | 2026-05-14 | #88 | Enemy targeting fallback cleanup — remove legacy fallback from ATTACK11/12 wrappers, first main.js-reducing architecture PR (-125 lines) |
+| ARCH-AI-05C-DESIGN | 2026-05-13 | #89 | Enemy tank decision / Priority Stack migration design |
+| ARCH-AI-05C1 | 2026-05-14 | #90 | Tank decider contract/rule update — enums, stand_and_fight_near_home rule, factory, validators |
