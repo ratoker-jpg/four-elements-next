@@ -1,4 +1,4 @@
-// ARCH-LAB-06-BUNDLE — Economy / Production / Construction deterministic smoke test
+// ARCH-LAB-06-BUNDLE + 06B — Economy / Production / Construction deterministic smoke test
 //
 // Verifies that the economy_system, production_system, and construction_system
 // contract modules load correctly, expose expected APIs, and produce correct
@@ -654,4 +654,279 @@ test('Production calculateProductionTime returns correct values from config', as
   expect(result.lightTankTime,  'light_tank production time should be 35').toBe(35);
   expect(result.unknownTime,    'unknown unit type time should be 0').toBe(0);
   expect(result.doubleSpeed,    'light_tank at 2x speed should be 17.5').toBeCloseTo(17.5);
+});
+
+// ---------------------------------------------------------------------------
+// Test 16: ARCH-LAB-06B — FE_ECONOMY_SYSTEM.canRunSeparatorCycle
+// ---------------------------------------------------------------------------
+
+test('Economy canRunSeparatorCycle returns correct results', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var eco = window.FE_ECONOMY_SYSTEM;
+
+    // All conditions met: minerals >= 15, energy space >= 10, element space >= 1
+    var canRunHappy = eco.canRunSeparatorCycle(
+      { minerals: 100, energy: 50, cyanEl: 5 },
+      { minerals: 200, energy: 300, cyanEl: 20 },
+      'cyanEl'
+    );
+
+    // Not enough minerals
+    var noMinerals = eco.canRunSeparatorCycle(
+      { minerals: 5, energy: 50, cyanEl: 5 },
+      { minerals: 200, energy: 300, cyanEl: 20 },
+      'cyanEl'
+    );
+
+    // Energy storage full (no room for +10)
+    var energyFull = eco.canRunSeparatorCycle(
+      { minerals: 100, energy: 295, cyanEl: 5 },
+      { minerals: 200, energy: 300, cyanEl: 20 },
+      'cyanEl'
+    );
+
+    // Element storage full (no room for +1)
+    var elementFull = eco.canRunSeparatorCycle(
+      { minerals: 100, energy: 50, cyanEl: 20 },
+      { minerals: 200, energy: 300, cyanEl: 20 },
+      'cyanEl'
+    );
+
+    // Exact boundary: minerals=15, energy space=10, element space=1
+    var exactBoundary = eco.canRunSeparatorCycle(
+      { minerals: 15, energy: 290, cyanEl: 19 },
+      { minerals: 200, energy: 300, cyanEl: 20 },
+      'cyanEl'
+    );
+
+    // Invalid inputs
+    var nullResources = eco.canRunSeparatorCycle(null, { energy: 300 }, 'cyanEl');
+    var nullLimits = eco.canRunSeparatorCycle({ minerals: 100 }, null, 'cyanEl');
+    var nullElKey = eco.canRunSeparatorCycle({ minerals: 100 }, { energy: 300 }, null);
+
+    return { canRunHappy, noMinerals, energyFull, elementFull, exactBoundary,
+             nullResources, nullLimits, nullElKey };
+  });
+
+  expect(result.canRunHappy,   'should run when all conditions met').toBe(true);
+  expect(result.noMinerals,    'should NOT run without enough minerals').toBe(false);
+  expect(result.energyFull,    'should NOT run when energy storage is full').toBe(false);
+  expect(result.elementFull,   'should NOT run when element storage is full').toBe(false);
+  expect(result.exactBoundary, 'should run at exact boundary values').toBe(true);
+  expect(result.nullResources, 'should NOT run with null resources').toBe(false);
+  expect(result.nullLimits,    'should NOT run with null limits').toBe(false);
+  expect(result.nullElKey,     'should NOT run with null elKey').toBe(false);
+});
+
+// ---------------------------------------------------------------------------
+// Test 17: ARCH-LAB-06B — FE_CONSTRUCTION_SYSTEM.getBuildCost
+// ---------------------------------------------------------------------------
+
+test('Construction getBuildCost returns correct cost objects', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var cs = window.FE_CONSTRUCTION_SYSTEM;
+
+    // Known building types
+    var separatorCost = cs.getBuildCost('separator');
+    var factoryCost   = cs.getBuildCost('units_factory');
+    var towerCost     = cs.getBuildCost('defense_tower');
+
+    // Unknown type
+    var unknownCost = cs.getBuildCost('nonexistent_building');
+
+    // Invalid input
+    var nullCost = cs.getBuildCost(null);
+    var emptyCost = cs.getBuildCost('');
+
+    return { separatorCost, factoryCost, towerCost, unknownCost, nullCost, emptyCost };
+  });
+
+  expect(result.separatorCost.energy, 'separator should cost 30 energy').toBe(30);
+  expect(result.factoryCost.energy,   'units_factory should cost 55 energy').toBe(55);
+  expect(result.towerCost.energy,     'defense_tower should cost 180 energy').toBe(180);
+
+  expect(Object.keys(result.unknownCost).length, 'unknown building should have empty cost').toBe(0);
+  expect(Object.keys(result.nullCost).length,    'null input should return empty cost').toBe(0);
+  expect(Object.keys(result.emptyCost).length,   'empty string should return empty cost').toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// Test 18: ARCH-LAB-06B — FE_CONSTRUCTION_SYSTEM.canAffordBuildDetailed
+// ---------------------------------------------------------------------------
+
+test('Construction canAffordBuildDetailed returns correct result shape', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var cs = window.FE_CONSTRUCTION_SYSTEM;
+
+    // Can afford
+    var affordResult = cs.canAffordBuildDetailed('separator', { energy: 100 });
+
+    // Cannot afford
+    var failResult = cs.canAffordBuildDetailed('separator', { energy: 5 });
+
+    // Unknown building
+    var unknownResult = cs.canAffordBuildDetailed('nonexistent', { energy: 100 });
+
+    return { affordResult, failResult, unknownResult };
+  });
+
+  // Success case
+  expect(result.affordResult.ok, 'should afford separator with 100 energy').toBe(true);
+  expect(result.affordResult.cost.energy, 'success cost.energy should be 30').toBe(30);
+
+  // Failure case
+  expect(result.failResult.ok, 'should NOT afford separator with 5 energy').toBe(false);
+  expect(result.failResult.resource, 'fail resource should be energy').toBe('energy');
+  expect(result.failResult.amount, 'fail amount should be 30').toBe(30);
+  expect(result.failResult.have, 'fail have should be 5').toBe(5);
+  expect(result.failResult.cost.energy, 'fail cost.energy should be 30').toBe(30);
+
+  // Unknown building — cost is empty, so ok=true (no resources to check)
+  expect(result.unknownResult.ok, 'unknown building should have empty cost so ok=true').toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// Test 19: ARCH-LAB-06B — FE_CONSTRUCTION_SYSTEM.calculateMultiResourceRefund
+// ---------------------------------------------------------------------------
+
+test('Construction calculateMultiResourceRefund returns correct refund', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var cs = window.FE_CONSTRUCTION_SYSTEM;
+
+    // Single resource refund at 75%
+    var single75 = cs.calculateMultiResourceRefund({ energy: 30 }, 0.75);
+
+    // Multi-resource refund at 75%
+    var multi75 = cs.calculateMultiResourceRefund({ energy: 100, minerals: 50 }, 0.75);
+
+    // Zero rate
+    var zeroRate = cs.calculateMultiResourceRefund({ energy: 30 }, 0);
+
+    // Default rate (0.75)
+    var defaultRate = cs.calculateMultiResourceRefund({ energy: 30 });
+
+    // Empty cost
+    var emptyCost = cs.calculateMultiResourceRefund({}, 0.75);
+
+    // Null cost
+    var nullCost = cs.calculateMultiResourceRefund(null, 0.75);
+
+    return { single75, multi75, zeroRate, defaultRate, emptyCost, nullCost };
+  });
+
+  expect(result.single75.refunded.energy, '75% of 30 energy should be 22').toBe(22);
+  expect(result.single75.total, 'total should be 22').toBe(22);
+
+  expect(result.multi75.refunded.energy, '75% of 100 energy should be 75').toBe(75);
+  expect(result.multi75.refunded.minerals, '75% of 50 minerals should be 37').toBe(37);
+  expect(result.multi75.total, 'total should be 112').toBe(112);
+
+  expect(result.zeroRate.refunded.energy, '0% refund should have no energy').toBe(undefined);
+  expect(result.zeroRate.total, '0% total should be 0').toBe(0);
+
+  expect(result.defaultRate.refunded.energy, 'default rate 75% of 30 should be 22').toBe(22);
+
+  expect(Object.keys(result.emptyCost.refunded).length, 'empty cost should have no refunds').toBe(0);
+  expect(Object.keys(result.nullCost.refunded).length, 'null cost should have no refunds').toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// Test 20: ARCH-LAB-06B — HP constants and config values remain correct
+// ---------------------------------------------------------------------------
+
+test('Building HP constants remain 1000 / 420 / 320 after 06B delegation', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var cs = window.FE_CONSTRUCTION_SYSTEM;
+    var buildings = window.FE_BUILDINGS;
+    return {
+      hqHp: cs.HQ_HP,
+      defaultHp: cs.DEFAULT_BUILDING_HP,
+      defenseTowerHp: buildings && buildings.defense_tower ? buildings.defense_tower.hp : null,
+      separatorHp: buildings && buildings.separator ? buildings.separator.hp : null,
+      factoryHp: buildings && buildings.units_factory ? buildings.units_factory.hp : null
+    };
+  });
+
+  expect(result.hqHp, 'HQ_HP should be 1000').toBe(1000);
+  expect(result.defaultHp, 'DEFAULT_BUILDING_HP should be 320').toBe(320);
+  expect(result.defenseTowerHp, 'defense_tower hp should be 420').toBe(420);
+  expect(result.separatorHp, 'separator hp should be 320').toBe(320);
+  expect(result.factoryHp, 'units_factory hp should be 320').toBe(320);
+});
+
+// ---------------------------------------------------------------------------
+// Test 21: ARCH-LAB-06B — Separator constants and PLAYER_FACTORY_MAX_QUEUE
+// ---------------------------------------------------------------------------
+
+test('Separator constants remain 15/10/1/6.0 and PLAYER_FACTORY_MAX_QUEUE is 2', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var eco = window.FE_ECONOMY_SYSTEM;
+    var prod = window.FE_PRODUCTION_SYSTEM;
+    return {
+      inputMinerals: eco.SEPARATOR_INPUT_MINERALS,
+      outputEnergy: eco.SEPARATOR_OUTPUT_ENERGY,
+      outputElement: eco.SEPARATOR_OUTPUT_ELEMENT,
+      cycleSeconds: eco.SEPARATOR_CYCLE_SECONDS,
+      playerQueueMax: prod.PLAYER_FACTORY_MAX_QUEUE,
+      canRunSeparatorCycleExists: typeof eco.canRunSeparatorCycle === 'function',
+      unitUpkeepMw: eco.DEFAULT_UNIT_UPKEEP_MW
+    };
+  });
+
+  expect(result.inputMinerals, 'SEPARATOR_INPUT_MINERALS should be 15').toBe(15);
+  expect(result.outputEnergy, 'SEPARATOR_OUTPUT_ENERGY should be 10').toBe(10);
+  expect(result.outputElement, 'SEPARATOR_OUTPUT_ELEMENT should be 1').toBe(1);
+  expect(result.cycleSeconds, 'SEPARATOR_CYCLE_SECONDS should be 6.0').toBe(6.0);
+  expect(result.playerQueueMax, 'PLAYER_FACTORY_MAX_QUEUE should be 2').toBe(2);
+  expect(result.canRunSeparatorCycleExists, 'canRunSeparatorCycle should be a function').toBe(true);
+  expect(result.unitUpkeepMw, 'DEFAULT_UNIT_UPKEEP_MW should be 1').toBe(1);
+});
+
+// ---------------------------------------------------------------------------
+// Test 22: ARCH-LAB-06B — canAffordUnit with elKey parameter
+// ---------------------------------------------------------------------------
+
+test('Production canAffordUnit with elKey checks faction-specific element', async ({ page }) => {
+  await page.goto('/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  const result = await page.evaluate(() => {
+    var prod = window.FE_PRODUCTION_SYSTEM;
+
+    // Player has cyanEl but not purple — light_tank costs 2 elements
+    var snapshot = { minerals: 500, energy: 500, purple: 0, greenEl: 0, cyanEl: 10, yellowEl: 0 };
+
+    // Without elKey: checks all elements, should find cyanEl=10 >= 2
+    var withoutElKey = prod.canAffordUnit('light_tank', snapshot);
+
+    // With elKey='cyanEl': checks cyanEl=10 >= 2
+    var withCyanEl = prod.canAffordUnit('light_tank', snapshot, 'cyanEl');
+
+    // With elKey='purple': checks purple=0 < 2
+    var withPurple = prod.canAffordUnit('light_tank', snapshot, 'purple');
+
+    return { withoutElKey, withCyanEl, withPurple };
+  });
+
+  expect(result.withoutElKey, 'without elKey should find cyanEl sufficient').toBe(true);
+  expect(result.withCyanEl, 'with cyanEl should be affordable').toBe(true);
+  expect(result.withPurple, 'with purple should NOT be affordable').toBe(false);
 });

@@ -83,3 +83,4 @@
 | ARCH-AI-05C5 | 2026-05-14 | #94 | Selective legacy FE_10H1 cleanup — remove FE_DEFENSE_RETREAT01ShouldStandAndFight, FE_10H1_getEnemyTanks, unused constants, _botDefenseRetreat01 telemetry (-68 lines) |
 | ARCH-AI-05C6 | 2026-05-14 | #95 | AI/tank_decider boundary checkpoint — stop AI cleanup here, defer FE_10H1 phase ownership migration, move next to economy/production/construction |
 | ARCH-LAB-06-BUNDLE | 2026-05-14 | #97 | Economy/production/construction pure contract modules + config enrichment + deterministic tests |
+| ARCH-LAB-06B | 2026-05-14 | #98 | Economy/construction wrapper delegation — main.js -45 lines |

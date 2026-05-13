@@ -1,5 +1,5 @@
 // Four Elements v0.4 module: economy system — pure data API.
-// ARCH-LAB-06-BUNDLE: economy contract — resource types, power states,
+// ARCH-LAB-06-BUNDLE + 06B: economy contract — resource types, power states,
 //   separator states, snapshots, validators, affordability, capacity, cycle.
 // Provides window.FE_ECONOMY_SYSTEM with resource/power/separator constants,
 // factory functions, and predicates.
@@ -52,6 +52,7 @@
   var DEFAULT_ENERGY_CAP    = 300;
   var DEFAULT_ELEMENT_CAP   = 20;
   var HQ_POWER_SUPPLY_MW    = 15;    // matches FE_POWER_HQ_MW in runtime_flags.js
+  var DEFAULT_UNIT_UPKEEP_MW = 1;    // matches FE_POWER_UNIT_MW in runtime_flags.js
 
   // ── Internal helpers ─────────────────────────────────────────
 
@@ -242,6 +243,37 @@
     return _safeNum(separatorState.cycleProgress, 0) >= 1.0;
   }
 
+  /**
+   * Pure predicate: can a separator cycle run right now?
+   * Checks that minerals are sufficient for input and that energy/element
+   * storage has enough remaining capacity for output.
+   * Mirrors main.js canRunSeparatorCycle() logic exactly.
+   * @param {Object} resources — current resource amounts { minerals, energy, ... }
+   * @param {Object} limits    — storage capacity limits { minerals, energy, ... }
+   * @param {string} elKey     — faction element key (e.g. 'cyanEl')
+   * @returns {boolean}
+   */
+  function canRunSeparatorCycle(resources, limits, elKey) {
+    if (!resources || typeof resources !== 'object') return false;
+    if (!limits || typeof limits !== 'object') return false;
+    if (!elKey || typeof elKey !== 'string') return false;
+
+    // Minerals must be sufficient for input.
+    if (_safeNum(resources.minerals, 0) < SEPARATOR_INPUT_MINERALS) return false;
+
+    // Energy storage must have room for output.
+    var energyCap = limits.energy != null ? limits.energy : Infinity;
+    var energySpace = Math.max(0, energyCap - _safeNum(resources.energy, 0));
+    if (energySpace < SEPARATOR_OUTPUT_ENERGY) return false;
+
+    // Faction element storage must have room for output.
+    var elCap = limits[elKey] != null ? limits[elKey] : Infinity;
+    var elSpace = Math.max(0, elCap - _safeNum(resources[elKey], 0));
+    if (elSpace < SEPARATOR_OUTPUT_ELEMENT) return false;
+
+    return true;
+  }
+
   // ── Public API ───────────────────────────────────────────────
 
   window.FE_ECONOMY_SYSTEM = {
@@ -263,6 +295,8 @@
     isValidPowerStateSnapshot: isValidPowerStateSnapshot,
     canAffordResource:         canAffordResource,
     calculateRemainingCapacity:calculateRemainingCapacity,
-    isSeparatorCycleReady:     isSeparatorCycleReady
+    isSeparatorCycleReady:     isSeparatorCycleReady,
+    DEFAULT_UNIT_UPKEEP_MW:    DEFAULT_UNIT_UPKEEP_MW,
+    canRunSeparatorCycle:      canRunSeparatorCycle
   };
 })();
