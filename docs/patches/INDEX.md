@@ -80,3 +80,4 @@
 | ARCH-AI-05C2B | 2026-05-14 | #91 | Tank decider gated telemetry — perRuleNameCounts, _tankDeciderLastRuleName, manual QA path |
 | ARCH-AI-05C3 | 2026-05-14 | #92 | Tank decider enable by default — FE_TANK_DECIDER_ENABLED=true, intel-rally safety guard in evaluateDefendHq |
 | ARCH-AI-05C4 | 2026-05-14 | #93 | Tank decider telemetry instrumentation — suppressedLegacyBlocksTotal, managedPerTick, legacyPerTick + deterministic decider-smoke test |
+| ARCH-AI-05C5 | 2026-05-14 | #94 | Selective legacy FE_10H1 cleanup — remove FE_DEFENSE_RETREAT01ShouldStandAndFight, FE_10H1_getEnemyTanks, unused constants, _botDefenseRetreat01 telemetry (-68 lines) |
