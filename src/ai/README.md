@@ -1,7 +1,7 @@
 # src/ai/ — AI & Decision Systems
 
 **Owner:** ARCH-LAB (architecture migration)
-**Status:** Partial — tank_decider.js extracted (ARCH-AI-01), enemy_intel.js contract (ARCH-LAB-05A)
+**Status:** Partial — tank_decider.js extracted (ARCH-AI-01), enemy_intel.js contract (ARCH-LAB-05A), enemy_targeting.js contract+pure-decisions (ARCH-LAB-05B)
 **Roadmap step:** ARCH-LAB-02, ARCH-LAB-05
 
 ## Purpose
@@ -15,7 +15,8 @@ main.js Z13 (5 255 lines, 34% of main.js — the single largest zone).
 | Module | Lines | PR | Description |
 |--------|-------|-----|-------------|
 | `tank_decider.js` | 276 | #67 | Priority Stack decision layer for enemy light_tank (ARCH-AI-01 MVP) |
-| `enemy_intel.js` | 198 | TBD | Pure data/contract: constants, factories, validators for enemy intel (ARCH-LAB-05A) |
+| `enemy_intel.js` | 198 | #82 | Pure data/contract: constants, factories, validators for enemy intel (ARCH-LAB-05A); factory delegation wired (05A2) |
+| `enemy_targeting.js` | ~260 | TBD | Pure constants, factories, validators, and pure decision functions for enemy attack targeting (ARCH-LAB-05B); runtime-unwired |
 
 ## Planned modules
 
@@ -34,7 +35,7 @@ main.js Z13 (5 255 lines, 34% of main.js — the single largest zone).
 | `enemy_scout.js` | Z13 partial | ~500 | Scout dispatch, observation, cooldown, intel collection |
 | `enemy_attack.js` | Z13 partial | ~600 | Attack wave composition, dispatch, group movement |
 | `enemy_intel.js` | Z13 partial | ~300 | Intel persistence, player strength estimation — contract-only (05A), full extraction later |
-| `targeting.js` | Z7 partial | ~300 | Target selection, threat assessment, attack priority |
+| `targeting.js` | Z7 partial | ~300 | Target selection, threat assessment, attack priority — now enemy_targeting.js (05B contract+pure-decisions) |
 
 ## Dependencies
 
@@ -64,4 +65,5 @@ When a module passes all acceptance criteria, its flag is flipped to
 ## Current contents
 
 - `tank_decider.js` — extracted and active (ARCH-AI-01)
-- `enemy_intel.js` — contract-only (ARCH-LAB-05A); constants, factories, validators; not wired to main.js yet
+- `enemy_intel.js` — contract-only (ARCH-LAB-05A); factory delegation wired (05A2); constants, factories, validators
+- `enemy_targeting.js` — contract + pure decision functions (ARCH-LAB-05B); runtime-unwired; contains ATTACK-11/12 pure decision logic mirrors; no main.js changes
