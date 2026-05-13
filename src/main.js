@@ -2552,12 +2552,6 @@
   var FE_ATTACK12_MIN_ATTACK_TANKS = 2;
   var FE_ATTACK12_FORCE_ADVANTAGE = 1;
 
-  // BOT-DEFENSE-RETREAT-01: stand-and-fight guard constants.
-  // When enemy tank is near home, has a valid target in/near range, and player
-  // pressure is near base, the tank should fight instead of oscillating retreat.
-  var FE_DEFENSE_RETREAT_01_NEAR_HOME_RADIUS = 6;   // tiles from home to count as "near base"
-  var FE_DEFENSE_RETREAT_01_NEAR_RANGE_MARGIN = 2;   // tiles beyond attack range for "almost in range"
-
   const FE_10I1_BOT_BEHAVIOR_PROFILES = {
     normal: {
       checkIntervalMs: 1200,
@@ -6698,11 +6692,6 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     return null;
   }
 
-  function FE_10H1_getEnemyTanks() {
-    if (typeof FE_PATCH_08BEnemyCombatUnits === 'function') return FE_PATCH_08BEnemyCombatUnits();
-    return [];
-  }
-
   function FE_10H1_isScout(unit) {
     // BOT-SCOUT-01: actual scout unit type is always a scout.
     return !!unit && (unit.type === 'scout' || unit._fe10c1Role === 'scout' || unit._scouting === true);
@@ -6730,51 +6719,6 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
       s === 'attack' ||
       s.includes('attack')
     );
-  }
-
-  // BOT-DEFENSE-RETREAT-01: stand-and-fight guard.
-  // Returns true if this tank should keep fighting instead of retreating/reassigning.
-  // Conditions: near home, player pressure near base, valid current target in/near range.
-  function FE_DEFENSE_RETREAT01ShouldStandAndFight(unit, state, threats, now) {
-    if (!unit || !state || !threats || threats.length === 0) return false;
-    // 1. Tank must have an active attack/approach target.
-    var _currentTarget = (typeof FE_PATCH_06BResolveAttackTarget === 'function')
-      ? FE_PATCH_06BResolveAttackTarget(unit) : null;
-    if (!_currentTarget && typeof FE_PATCH_06BResolveApproachTarget === 'function') {
-      _currentTarget = FE_PATCH_06BResolveApproachTarget(unit);
-    }
-    if (!_currentTarget) return false;
-    // 2. Target must be alive.
-    if ((_currentTarget.hp || 0) <= 0) return false;
-    // 3. Tank must be near home.
-    var _distToHome = (typeof unitDistanceCells === 'function')
-      ? unitDistanceCells(unit, { x: state.homeX, y: state.homeY }) : Infinity;
-    if (_distToHome > FE_DEFENSE_RETREAT_01_NEAR_HOME_RADIUS) return false;
-    // 4. Current target must be in range or almost in range.
-    var _stats = (typeof getLightTankCombatStats === 'function') ? getLightTankCombatStats(unit) : null;
-    if (!_stats) return false;
-    var _tDist = (typeof unitDistanceCells === 'function') ? unitDistanceCells(unit, _currentTarget) : Infinity;
-    if (_tDist > _stats.range + FE_DEFENSE_RETREAT_01_NEAR_RANGE_MARGIN) return false;
-    // All conditions met — tank should stand and fight.
-    // Update telemetry.
-    var _g = (typeof FE_10H1_getGameObject === 'function') ? FE_10H1_getGameObject() : null;
-    if (_g) {
-      if (!_g._botDefenseRetreat01) {
-        _g._botDefenseRetreat01 = {
-          standAndFightGuardCount: 0,
-          lastStandAndFightAt: 0,
-          lastGuardUnitId: null,
-          lastGuardTargetDist: -1,
-          lastGuardDistToHome: -1
-        };
-      }
-      _g._botDefenseRetreat01.standAndFightGuardCount = (_g._botDefenseRetreat01.standAndFightGuardCount || 0) + 1;
-      _g._botDefenseRetreat01.lastStandAndFightAt = now || 0;
-      _g._botDefenseRetreat01.lastGuardUnitId = unit.id || null;
-      _g._botDefenseRetreat01.lastGuardTargetDist = _tDist;
-      _g._botDefenseRetreat01.lastGuardDistToHome = _distToHome;
-    }
-    return true;
   }
 
   function FE_10H1_clearAttackOrder(unit) {
@@ -6875,7 +6819,6 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
     let moved = 0;
     let skippedScout = 0;
     let skippedBusy = 0;
-    let standAndFightSkipped = 0;
 
     var _tdGNow6 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     for (let i = 0; i < enemyTanks.length; i++) {
@@ -6896,13 +6839,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         skippedBusy++;
         continue;
       }
-      // BOT-DEFENSE-RETREAT-01: stand-and-fight guard.
-      // If tank is near home, has a valid target in/near range, and player
-      // pressure is near base, skip clearing the attack order.
-      if (attacking && FE_DEFENSE_RETREAT01ShouldStandAndFight(unit, state, threats, now)) {
-        standAndFightSkipped++;
-        continue;
-      }
+
       if (attacking) {
         FE_10H1_clearAttackOrder(unit);
         cleared++;
@@ -6952,12 +6889,7 @@ function FE_PATCH_08BAttackTarget(state, enemyUnits) {
         skippedScout++;
         continue;
       }
-      // BOT-DEFENSE-RETREAT-01: stand-and-fight guard.
-      // If tank already has a valid attack order on a nearby target near home,
-      // don't reassign it to the primaryThreat — let it keep fighting.
-      if (FE_10H1_hasActiveAttackOrder(unit) && FE_DEFENSE_RETREAT01ShouldStandAndFight(unit, state, threats, now)) {
-        continue;
-      }
+
       const ok = FE_PATCH_08BCommandEnemyTankAttack(unit, primaryThreat, state, 'defend');
       if (ok) {
         unit._fe10h1Role = 'defend_hq';
