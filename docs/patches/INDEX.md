@@ -84,3 +84,4 @@
 | ARCH-AI-05C6 | 2026-05-14 | #95 | AI/tank_decider boundary checkpoint — stop AI cleanup here, defer FE_10H1 phase ownership migration, move next to economy/production/construction |
 | ARCH-LAB-06-BUNDLE | 2026-05-14 | #97 | Economy/production/construction pure contract modules + config enrichment + deterministic tests |
 | ARCH-LAB-06B | 2026-05-14 | #98 | Economy/construction wrapper delegation — main.js -45 lines |
+| FEN-01 | 2026-05-15 | TBD | FE Next scaffold + map/camera/HQ/HUD/unit movement — isolated fe-next/ directory |

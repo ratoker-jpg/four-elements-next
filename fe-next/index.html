@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Four Elements Next — FEN-01 Scaffold</title>
+  <style>
+    :root {
+      --sand-1:#efd79a; --sand-2:#d9b66f; --sand-3:#b9823e;
+      --panel-dark:#27190c; --panel-mid:#5a3a17; --panel-light:#c89a4b;
+      --gold:#ffd66c; --white:#fff3d7;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html, body {
+      width:100%; height:100%; overflow:hidden;
+      background:#171008; color:var(--white);
+      font-family:"Trebuchet MS", Arial, sans-serif;
+      touch-action:none; cursor:default;
+    }
+    #app {
+      position:relative; width:100vw; height:100vh; overflow:hidden;
+      background:#191108;
+    }
+    canvas {
+      position:absolute; inset:0; width:100%; height:100%;
+      image-rendering:auto; background:#d3ad69;
+    }
+    #hud {
+      position:absolute; top:12px; left:12px; z-index:15;
+      user-select:none;
+      border-radius:12px;
+      background:
+        radial-gradient(circle at 9% 0%, rgba(255,217,112,.18), transparent 34%),
+        linear-gradient(180deg, rgba(73,43,15,.95), rgba(17,10,5,.93));
+      border:1px solid rgba(255,214,118,.5);
+      box-shadow:0 14px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      padding:14px 18px 16px;
+      min-width:320px;
+      color:var(--white);
+      font-size:14px;
+    }
+    #hud h3 {
+      font-size:16px; color:var(--gold); margin-bottom:8px;
+      text-shadow:0 2px 0 rgba(0,0,0,.5);
+    }
+    .hud-row {
+      display:flex; gap:12px; align-items:center;
+      min-height:26px; margin-bottom:4px;
+    }
+    .hud-item {
+      display:flex; align-items:center; gap:5px;
+      font-weight:800; color:#ffe28f;
+    }
+    .hud-label { color:#d8bb80; font-size:12px; font-weight:900; }
+    .hud-val { color:#ffe897; font-size:15px; font-weight:950; }
+
+    #selection-info {
+      position:absolute; left:12px; bottom:12px; z-index:15;
+      display:none; user-select:none;
+      border-radius:14px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,202,83,.13), transparent 38%),
+        linear-gradient(180deg, rgba(67,39,14,.96), rgba(19,11,5,.94));
+      border:1px solid rgba(255,213,116,.5);
+      box-shadow:0 14px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+      padding:14px 18px 16px;
+      min-width:220px;
+      font-size:14px;
+    }
+    #selection-info h4 {
+      font-size:15px; color:var(--gold); margin-bottom:6px;
+    }
+    #selection-info .sel-row {
+      color:#e4c48b; font-weight:800; margin-bottom:3px;
+    }
+
+    #help-text {
+      position:absolute; right:12px; top:12px; z-index:15;
+      font-size:12px; line-height:1.5; color:#f7d99a;
+      background:rgba(39,24,9,.84);
+      border:1px solid rgba(255,211,116,.4);
+      border-radius:12px; padding:10px 12px;
+      max-width:280px; user-select:none; opacity:.88;
+    }
+    #help-text b { color:#ffe28b; font-weight:950; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <h3>Four Elements Next</h3>
+    <div class="hud-row">
+      <div class="hud-item"><span class="hud-label">Сырьё</span><span class="hud-val" id="hud-minerals">0</span></div>
+      <div class="hud-item"><span class="hud-label">Энергия</span><span class="hud-val" id="hud-energy">160</span></div>
+    </div>
+    <div class="hud-row">
+      <div class="hud-item"><span class="hud-label">Время</span><span class="hud-val" id="hud-time">0:00</span></div>
+    </div>
+  </div>
+
+  <div id="selection-info">
+    <h4 id="sel-title">—</h4>
+    <div class="sel-row" id="sel-type"></div>
+    <div class="sel-row" id="sel-pos"></div>
+  </div>
+
+  <div id="help-text">
+    <b>Камера:</b> WASD / колёсико зажать<br>
+    <b>Zoom:</b> колесо мыши<br>
+    <b>ЛКМ:</b> выбрать юнит<br>
+    <b>ПКМ:</b> двигать юнит
+  </div>
+</div>
+
+<script src="src/core/constants.js"></script>
+<script src="src/core/coordinates.js"></script>
+<script src="src/game/state.js"></script>
+<script src="src/render/renderer.js"></script>
+<script src="src/input/input.js"></script>
+<script src="src/ui/hud.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
