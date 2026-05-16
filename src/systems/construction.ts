@@ -1,0 +1,153 @@
+import { HQ_FOOTPRINT } from '../core/constants.js';
+import { BUILDING_DEFINITIONS } from '../config/buildings.js';
+import type {
+  BuildingPlacement,
+  BuildingType,
+  BuilderPlacement,
+  ConstructionSitePlacement,
+  MapData,
+} from '../game/map-types.js';
+import type { EconomyState } from './economy.js';
+
+export const BUILDER_CONTROL_COST = 1;
+export const AUTO_BUILD_MAX_RADIUS = 15;
+
+export type ConstructionFailureReason = 'busy' | 'insufficient-matter' | 'no-placement';
+
+export interface ConstructionCommandResult {
+  ok: boolean;
+  reason?: ConstructionFailureReason;
+  buildingType: BuildingType;
+  site?: ConstructionSitePlacement;
+}
+
+export interface ConstructionTickResult {
+  completedBuildings: BuildingPlacement[];
+}
+
+export function startConstruction(
+  map: MapData,
+  economy: EconomyState,
+  buildingType: BuildingType,
+): ConstructionCommandResult {
+  const builder = map.builders[0];
+  if (!builder) {
+    return { ok: false, reason: 'no-placement', buildingType };
+  }
+
+  if (builder.busy) {
+    return { ok: false, reason: 'busy', buildingType };
+  }
+
+  const definition = BUILDING_DEFINITIONS[buildingType];
+  if (economy.resources.matter < definition.costMatter) {
+    return { ok: false, reason: 'insufficient-matter', buildingType };
+  }
+
+  const placement = findAutoPlacement(map, builder);
+  if (!placement) {
+    return { ok: false, reason: 'no-placement', buildingType };
+  }
+
+  economy.resources.matter -= definition.costMatter;
+  builder.busy = true;
+
+  const site: ConstructionSitePlacement = {
+    tx: placement.tx,
+    ty: placement.ty,
+    type: buildingType,
+    elapsed: 0,
+    duration: definition.buildTimeSeconds,
+    progress: 0,
+  };
+  map.constructionSites.push(site);
+
+  return { ok: true, buildingType, site };
+}
+
+export function tickConstruction(map: MapData, dt: number): ConstructionTickResult {
+  const completedBuildings: BuildingPlacement[] = [];
+
+  for (let index = map.constructionSites.length - 1; index >= 0; index--) {
+    const site = map.constructionSites[index]!;
+    site.elapsed += dt;
+    site.progress = Math.min(site.elapsed / site.duration, 1);
+
+    if (site.elapsed < site.duration) continue;
+
+    const building: BuildingPlacement = {
+      tx: site.tx,
+      ty: site.ty,
+      type: site.type,
+    };
+    map.buildings.push(building);
+    completedBuildings.push(building);
+    map.constructionSites.splice(index, 1);
+  }
+
+  if (map.constructionSites.length === 0) {
+    for (const builder of map.builders) {
+      builder.busy = false;
+    }
+  }
+
+  return { completedBuildings };
+}
+
+export function canAffordBuilding(economy: EconomyState, buildingType: BuildingType): boolean {
+  return economy.resources.matter >= BUILDING_DEFINITIONS[buildingType].costMatter;
+}
+
+export function findAutoPlacement(
+  map: MapData,
+  builder: BuilderPlacement,
+  maxRadius: number = AUTO_BUILD_MAX_RADIUS,
+): { tx: number; ty: number } | null {
+  const occupied = buildOccupiedTileSet(map);
+
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (let ty = builder.ty - radius; ty <= builder.ty + radius; ty++) {
+      for (let tx = builder.tx - radius; tx <= builder.tx + radius; tx++) {
+        const onRing = Math.max(Math.abs(tx - builder.tx), Math.abs(ty - builder.ty)) === radius;
+        if (!onRing) continue;
+        if (!isTileBuildable(map, occupied, tx, ty)) continue;
+        return { tx, ty };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function buildOccupiedTileSet(map: MapData): Set<string> {
+  const occupied = new Set<string>();
+
+  for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+    for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+      occupied.add(`${map.hq.tx + dx},${map.hq.ty + dy}`);
+    }
+  }
+
+  for (const building of map.buildings) {
+    occupied.add(`${building.tx},${building.ty}`);
+  }
+  for (const site of map.constructionSites) {
+    occupied.add(`${site.tx},${site.ty}`);
+  }
+  for (const resource of map.resources) {
+    occupied.add(`${resource.tx},${resource.ty}`);
+  }
+  for (const decor of map.decor) {
+    occupied.add(`${decor.tx},${decor.ty}`);
+  }
+  for (const builder of map.builders) {
+    occupied.add(`${builder.tx},${builder.ty}`);
+  }
+
+  return occupied;
+}
+
+function isTileBuildable(map: MapData, occupied: Set<string>, tx: number, ty: number): boolean {
+  if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return false;
+  return !occupied.has(`${tx},${ty}`);
+}

@@ -32,12 +32,13 @@ export type ReadonlyControlState = Readonly<ControlState>;
 export function createControlState(
   _relayCount: number,
   relayOnlineCount: number,
+  used: number = 0,
 ): ControlState {
   const current = HQ_CONTROL + relayOnlineCount * RELAY_CONTROL;
   return {
     current: Math.min(current, CONTROL_CAP_MVP),
     cap: CONTROL_CAP_MVP,
-    used: 0, // No units in NEXT-04
+    used,
   };
 }
 

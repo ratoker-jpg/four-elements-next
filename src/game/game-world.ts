@@ -4,13 +4,16 @@ import { ASSET_MANIFEST, MAP_SIZE_STANDARD, MAP_SIZE_LARGE } from '../core/const
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import { generateMap } from './mapgen.js';
-import type { MapData, FactionId } from './map-types.js';
+import type { MapData, FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
 import {
   createEconomyState,
   tickEconomy,
   getFactionElement,
+  applyCompletedBuildingToEconomy,
+  getSeparatorPositions,
+  getStorageCount,
   type EconomyState,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
@@ -18,6 +21,7 @@ import {
   createPowerState,
   tickPower,
   isBuildingOnline,
+  addBuildingToPowerState,
   type PowerState,
   type ReadonlyPowerState,
 } from '../systems/power.js';
@@ -27,6 +31,13 @@ import {
   type ControlState,
   type ReadonlyControlState,
 } from '../systems/control.js';
+import { BUILDING_DEFINITIONS } from '../config/buildings.js';
+import {
+  BUILDER_CONTROL_COST,
+  startConstruction,
+  tickConstruction,
+  type ConstructionCommandResult,
+} from '../systems/construction.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
@@ -43,20 +54,25 @@ export class GameWorld {
   private power: PowerState;
   private control: ControlState;
   private animFrameId: number | null = null;
-  private lastTime: number = 0;
+  private lastTime = 0;
   private keys = new Set<string>();
   private isPanning = false;
   private panStartX = 0;
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
+  private constructionStatusMessage = 'Строитель готов к строительству.';
 
-  /** Callbacks invoked each frame for HUD updates. */
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
   onPowerUpdate?: (state: ReadonlyPowerState) => void;
   onControlUpdate?: (state: ReadonlyControlState) => void;
+  onConstructionUpdate?: (state: {
+    builderBusy: boolean;
+    matter: number;
+    statusMessage: string;
+    sites: ReadonlyArray<ConstructionSitePlacement>;
+  }) => void;
 
-  // Bound handlers for cleanup
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
   private boundMouseDown: (e: MouseEvent) => void;
@@ -71,7 +87,6 @@ export class GameWorld {
     if (!ctx) throw new Error('Cannot get 2D context');
     this.ctx = ctx;
 
-    // Resolve "random" faction immediately at game start
     const factions: FactionId[] = ['cyan', 'green', 'yellow', 'purple'];
     const resolvedFaction: FactionId = faction === 'random'
       ? factions[Math.floor(Math.random() * factions.length)]!
@@ -81,32 +96,24 @@ export class GameWorld {
     this.assets = new AssetStore();
     this.map = generateMap(size, size, resolvedFaction);
 
-    // Build economy state from building placements
-    const separatorPositions = this.map.buildings
-      .filter((b) => b.type === 'separator')
-      .map((b) => ({ tx: b.tx, ty: b.ty }));
-    const storageCount = this.map.buildings.filter((b) => b.type === 'storage').length;
+    const separatorPositions = getSeparatorPositions(this.map.buildings);
+    const storageCount = getStorageCount(this.map.buildings);
     this.economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
 
-    // Build power state from buildings + HQ
     this.power = createPowerState(this.map.hq, this.map.buildings);
 
-    // Build control state from online Command Relays
     const relayOnlineCount = this.power.buildings.filter(
       (b) => b.type === 'command-relay' && b.online,
     ).length;
     this.control = createControlState(
       this.map.buildings.filter((b) => b.type === 'command-relay').length,
       relayOnlineCount,
+      this.map.builders.length * BUILDER_CONTROL_COST,
     );
 
-    const hqScreen = tileToScreen(
-      this.map.hq.tx + 1.5,
-      this.map.hq.ty + 1.5,
-    );
+    const hqScreen = tileToScreen(this.map.hq.tx + 1.5, this.map.hq.ty + 1.5);
     this.camera = new Camera(hqScreen.x, hqScreen.y);
 
-    // Bind event handlers
     this.boundKeyDown = this.onKeyDown.bind(this);
     this.boundKeyUp = this.onKeyUp.bind(this);
     this.boundMouseDown = this.onMouseDown.bind(this);
@@ -131,6 +138,8 @@ export class GameWorld {
 
     this.onResize();
     this.lastTime = performance.now();
+    this.publishUiState();
+    this.publishTestHooks();
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -139,6 +148,7 @@ export class GameWorld {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
     }
+
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('keyup', this.boundKeyUp);
     this.canvas.removeEventListener('mousedown', this.boundMouseDown);
@@ -147,7 +157,7 @@ export class GameWorld {
     this.canvas.removeEventListener('wheel', this.boundWheel);
     window.removeEventListener('resize', this.boundResize);
     this.keys.clear();
-    // Clean up testing hooks
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__cameraPos;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,12 +166,34 @@ export class GameWorld {
     delete (window as any).__powerState;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__controlState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__constructionState;
+
+    if (import.meta.env.MODE === 'test') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__constructionTest;
+    }
   }
 
-  /** Read-only accessors for HUD and tests. */
   getEconomyState(): ReadonlyEconomyState { return this.economy; }
   getPowerState(): ReadonlyPowerState { return this.power; }
   getControlState(): ReadonlyControlState { return this.control; }
+
+  startConstruction(buildingType: BuildingType): ConstructionCommandResult {
+    const result = startConstruction(this.map, this.economy, buildingType);
+    this.constructionStatusMessage = this.resolveConstructionMessage(result);
+    this.publishUiState();
+    return result;
+  }
+
+  private debugSetMatter(value: number): void {
+    this.economy.resources.matter = Math.max(0, Math.min(value, this.economy.resources.matterCap));
+    this.publishUiState();
+  }
+
+  private debugAdvanceConstruction(seconds: number): void {
+    this.update(seconds);
+  }
 
   private loop(now: number): void {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
@@ -172,7 +204,6 @@ export class GameWorld {
   }
 
   private update(dt: number): void {
-    // Camera input
     let dx = 0;
     let dy = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy -= 1;
@@ -181,28 +212,45 @@ export class GameWorld {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
 
-    // Power tick
+    const constructionResult = tickConstruction(this.map, dt);
+    for (const building of constructionResult.completedBuildings) {
+      applyCompletedBuildingToEconomy(this.economy, building);
+      addBuildingToPowerState(this.power, building);
+      const definition = BUILDING_DEFINITIONS[building.type];
+      this.constructionStatusMessage = `${definition.label} построен. Строитель свободен.`;
+    }
+
     tickPower(this.power);
 
-    // Control tick — recalculate based on online relays
     const relayOnlineCount = this.power.buildings.filter(
       (b) => b.type === 'command-relay' && b.online,
     ).length;
     tickControl(this.control, relayOnlineCount);
 
-    // Economy tick — build separator online map from power state
     const separatorOnlineMap = new Map<string, boolean>();
     for (const sep of this.economy.separators) {
       separatorOnlineMap.set(`${sep.tx},${sep.ty}`, isBuildingOnline(this.power, sep.tx, sep.ty));
     }
     tickEconomy(this.economy, dt, separatorOnlineMap);
 
-    // Notify HUDs
+    this.publishUiState();
+
+    this.publishTestHooks();
+  }
+
+  private publishUiState(): void {
     this.onEconomyUpdate?.(this.economy);
     this.onPowerUpdate?.(this.power);
     this.onControlUpdate?.(this.control);
+    this.onConstructionUpdate?.({
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      matter: this.economy.resources.matter,
+      statusMessage: this.constructionStatusMessage,
+      sites: this.map.constructionSites,
+    });
+  }
 
-    // Expose testing hooks (cleaned up in destroy)
+  private publishTestHooks(): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -240,6 +288,42 @@ export class GameWorld {
       cap: this.control.cap,
       used: this.control.used,
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__constructionState = {
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      builders: this.map.builders.map((builder) => ({
+        tx: builder.tx,
+        ty: builder.ty,
+        busy: builder.busy,
+      })),
+      sites: this.map.constructionSites.map((site) => ({
+        tx: site.tx,
+        ty: site.ty,
+        type: site.type,
+        progress: site.progress,
+      })),
+      statusMessage: this.constructionStatusMessage,
+    };
+
+    if (import.meta.env.MODE === 'test') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__constructionTest = {
+        setMatter: (value: number) => this.debugSetMatter(value),
+        advanceConstruction: (seconds: number) => this.debugAdvanceConstruction(seconds),
+        startConstruction: (buildingType: BuildingType) => this.startConstruction(buildingType),
+      };
+    }
+  }
+
+  private resolveConstructionMessage(result: ConstructionCommandResult): string {
+    if (result.ok && result.site) {
+      const definition = BUILDING_DEFINITIONS[result.buildingType];
+      return `${definition.label} строится на (${result.site.tx}, ${result.site.ty}).`;
+    }
+
+    if (result.reason === 'busy') return 'Строитель уже занят.';
+    if (result.reason === 'insufficient-matter') return 'Недостаточно материи для строительства.';
+    return 'Не удалось найти место для строительства.';
   }
 
   private onKeyDown(e: KeyboardEvent): void { this.keys.add(e.code); }

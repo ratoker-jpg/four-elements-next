@@ -2,7 +2,7 @@
 
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
-import type { HqPlacement, FactionId } from '../game/map-types.js';
+import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
 
@@ -289,4 +289,86 @@ export function renderCommandRelay(
     ctx.textBaseline = 'middle';
     ctx.fillText('OFF', cv.x, cv.y - 11 * z - 10 * z);
   }
+}
+
+export function renderBuilder(
+  ctx: CanvasRenderingContext2D,
+  builder: BuilderPlacement,
+  camera: Camera,
+): void {
+  const scr = tileToScreen(builder.tx + 0.5, builder.ty + 0.5);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+  const height = 8 * z;
+
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z * 0.72,
+    '#6f7e8c',
+    '#4e5b66',
+    builder.busy ? '#d68f3e' : '#9ad8ff',
+    height,
+    'BLD',
+    true,
+  );
+
+  ctx.fillStyle = builder.busy ? '#ffdc73' : '#d9f4ff';
+  ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(builder.busy ? 'WORK' : 'IDLE', cv.x, cv.y - height - 10 * z);
+}
+
+export function renderConstructionSite(
+  ctx: CanvasRenderingContext2D,
+  site: ConstructionSitePlacement,
+  camera: Camera,
+): void {
+  const scr = tileToScreen(site.tx + 0.5, site.ty + 0.5);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+  const hw = (TILE_W / 2) * z * 0.82;
+  const hh = (TILE_H / 2) * z * 0.82;
+  const platformY = cv.y - 3 * z;
+
+  ctx.beginPath();
+  ctx.moveTo(cv.x, platformY - hh);
+  ctx.lineTo(cv.x + hw, platformY);
+  ctx.lineTo(cv.x, platformY + hh);
+  ctx.lineTo(cv.x - hw, platformY);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(155, 104, 43, 0.85)';
+  ctx.fill();
+  ctx.strokeStyle = '#f0c96a';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255, 232, 155, 0.75)';
+  ctx.lineWidth = Math.max(1, z);
+  ctx.beginPath();
+  ctx.moveTo(cv.x - hw * 0.45, platformY - hh * 0.2);
+  ctx.lineTo(cv.x + hw * 0.45, platformY + hh * 0.2);
+  ctx.moveTo(cv.x - hw * 0.45, platformY + hh * 0.2);
+  ctx.lineTo(cv.x + hw * 0.45, platformY - hh * 0.2);
+  ctx.stroke();
+
+  const barW = 28 * z;
+  const barH = 4 * z;
+  const barX = cv.x - barW / 2;
+  const barY = platformY - hh - 12 * z;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = '#ffdc73';
+  ctx.fillRect(barX, barY, barW * site.progress, barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  ctx.fillStyle = '#fff3d7';
+  ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SITE', cv.x, platformY - hh - 21 * z);
 }

@@ -205,6 +205,71 @@ html, body {
 
 /* ── Economy HUD ─────────────────────────────────────────────────── */
 
+.build-menu {
+  position: absolute;
+  right: calc(1rem * var(--ui-scale));
+  bottom: calc(1rem * var(--ui-scale));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(0.5rem * var(--ui-scale));
+}
+
+.build-menu__toggle {
+  width: auto;
+  min-width: calc(220px * var(--ui-scale));
+}
+
+.build-menu__panel {
+  width: min(calc(360px * var(--ui-scale)), 88vw);
+  display: none;
+  flex-direction: column;
+  gap: calc(0.5rem * var(--ui-scale));
+  padding: calc(0.9rem * var(--ui-scale));
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(64, 41, 17, 0.94), rgba(28, 18, 8, 0.96)),
+    var(--panel);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.build-menu[data-open="true"] .build-menu__panel {
+  display: flex;
+}
+
+.build-menu__title {
+  font-size: calc(1rem * var(--ui-scale));
+  font-weight: 900;
+  color: var(--title);
+}
+
+.build-menu__hint {
+  color: var(--text-muted);
+  font-size: calc(0.8rem * var(--ui-scale));
+  line-height: 1.35;
+}
+
+.build-menu__option {
+  min-height: calc(40px * var(--ui-scale));
+  font-size: calc(0.9rem * var(--ui-scale));
+}
+
+.build-menu__status {
+  min-height: calc(2.2rem * var(--ui-scale));
+  padding: calc(0.55rem * var(--ui-scale)) calc(0.7rem * var(--ui-scale));
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  font-size: calc(0.8rem * var(--ui-scale));
+  line-height: 1.35;
+}
+
+.build-menu__status[data-tone="error"] {
+  color: #ffb39d;
+}
+
 .economy-hud {
   position: absolute;
   top: 0;

@@ -43,6 +43,21 @@ export interface BuildingPlacement {
   type: BuildingType;
 }
 
+export interface BuilderPlacement {
+  tx: number;
+  ty: number;
+  busy: boolean;
+}
+
+export interface ConstructionSitePlacement {
+  tx: number;
+  ty: number;
+  type: BuildingType;
+  elapsed: number;
+  duration: number;
+  progress: number;
+}
+
 export interface MapData {
   width: number;
   height: number;
@@ -51,6 +66,8 @@ export interface MapData {
   resources: ResourcePlacement[];
   decor: DecorPlacement[];
   buildings: BuildingPlacement[];
+  builders: BuilderPlacement[];
+  constructionSites: ConstructionSitePlacement[];
 }
 
 /** Asset key mapping for resource types. */
