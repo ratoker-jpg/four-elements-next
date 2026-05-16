@@ -25,6 +25,6 @@ export interface GameScreenData {
 /** A screen module that can be mounted and unmounted by the ScreenManager. */
 export interface Screen {
   readonly id: ScreenId;
-  mount(container: HTMLElement, data: ScreenTransitionData): void;
+  mount(container: HTMLElement, data: ScreenTransitionData): void | Promise<void>;
   unmount(): void;
 }
