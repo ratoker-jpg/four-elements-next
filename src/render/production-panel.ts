@@ -45,6 +45,28 @@ function getDisabledReason(
   return null;
 }
 
+function createRenderKey(state: ProductionPanelState): string {
+  const activeElement = state.economy.resources.elements[state.economy.faction];
+  const factoryKey = state.factories.map((factory) => {
+    const online = isBuildingOnline(state.power, factory.tx, factory.ty) ? '1' : '0';
+    const queueKey = factory.queue.map((item) => [
+      item.unitType,
+      Math.floor(item.progress * 100),
+      item.completed ? '1' : '0',
+    ].join(':')).join(',');
+    return `${factory.tx},${factory.ty},${online},${queueKey}`;
+  }).join('|');
+
+  return [
+    state.factories.length,
+    Math.floor(state.economy.resources.matter),
+    activeElement,
+    state.control.current,
+    state.control.used,
+    factoryKey,
+  ].join('|');
+}
+
 export function createProductionPanel(
   onProduce: (factoryTx: number, factoryTy: number, unitType: ProducibleUnitType) => void,
 ): {
@@ -86,6 +108,8 @@ export function createProductionPanel(
   factoryList.className = 'production-panel__list';
   panel.appendChild(factoryList);
 
+  let lastRenderKey = '';
+
   const update = (state: ProductionPanelState): void => {
     const hasFactories = state.factories.length > 0;
     root.dataset.visible = hasFactories ? 'true' : 'false';
@@ -96,7 +120,12 @@ export function createProductionPanel(
     }
     applyOpenState();
 
-    // Rebuild factory list
+    const nextRenderKey = createRenderKey(state);
+    if (nextRenderKey === lastRenderKey) return;
+    lastRenderKey = nextRenderKey;
+
+    // Rebuild factory list only when the visible production state actually changes.
+    // Rebuilding every animation frame detaches buttons between pointerdown/click.
     factoryList.innerHTML = '';
 
     for (const factory of state.factories) {
