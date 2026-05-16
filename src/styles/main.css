@@ -1,14 +1,18 @@
 :root {
   --ui-scale: 1;
-  --bg: #0d0d1a;
-  --bg-surface: #1a1a2e;
-  --text: #e0e0e0;
-  --text-muted: #888;
-  --accent: #4fc3f7;
-  --btn-bg: #2a2a4a;
-  --btn-hover: #3a3a5a;
-  --btn-disabled: #1a1a2e;
-  --btn-active: #4fc3f7;
+  --bg: #171008;
+  --bg-deep: #0f0a05;
+  --panel: rgba(43, 28, 12, 0.92);
+  --panel-border: rgba(240, 201, 106, 0.42);
+  --text: #fff3d7;
+  --text-muted: #d9b578;
+  --title: #ffdc73;
+  --accent: #f0c96a;
+  --accent-cyan: #6fd1f5;
+  --btn-bg: linear-gradient(180deg, #70451c, #3d260e);
+  --btn-hover: linear-gradient(180deg, #95622b, #573512);
+  --btn-disabled: linear-gradient(180deg, #3c3025, #231a12);
+  --btn-active: #f0c96a;
 }
 
 *, *::before, *::after {
@@ -23,7 +27,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: "Trebuchet MS", Arial, system-ui, sans-serif;
   font-size: calc(16px * var(--ui-scale));
 }
 
@@ -40,39 +44,67 @@ html, body {
   width: 100%;
   height: 100%;
   gap: calc(1rem * var(--ui-scale));
+  background:
+    radial-gradient(circle at 50% 32%, rgba(122, 77, 29, 0.32), rgba(23, 16, 8, 0.72) 42%, rgba(10, 7, 4, 0.96) 100%),
+    linear-gradient(135deg, #211409 0%, #0f0a05 100%);
+}
+
+.menu-card {
+  width: min(460px, 92vw);
+  padding: calc(2.3rem * var(--ui-scale)) calc(2.5rem * var(--ui-scale));
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(86, 54, 20, 0.92), rgba(37, 22, 8, 0.96)),
+    var(--panel);
+  box-shadow: 0 20px 58px rgba(0, 0, 0, 0.58), inset 0 0 0 1px rgba(255, 232, 155, 0.08);
+  text-align: center;
+  transform: scale(var(--ui-scale));
+  transform-origin: center center;
 }
 
 .screen__title {
-  font-size: calc(2.5rem * var(--ui-scale));
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.05em;
-  margin-bottom: calc(1rem * var(--ui-scale));
+  font-size: calc(2.35rem * var(--ui-scale));
+  font-weight: 900;
+  color: var(--title);
+  letter-spacing: 0.02em;
+  margin-bottom: calc(0.35rem * var(--ui-scale));
+  text-shadow: 0 3px 0 #603400, 0 0 16px rgba(255, 190, 55, 0.25);
+}
+
+.screen__subtitle {
+  margin-bottom: calc(1.25rem * var(--ui-scale));
+  color: var(--text-muted);
+  font-size: calc(0.92rem * var(--ui-scale));
 }
 
 .screen__heading {
-  font-size: calc(1.5rem * var(--ui-scale));
-  font-weight: 600;
-  margin-bottom: calc(0.5rem * var(--ui-scale));
+  font-size: calc(1.65rem * var(--ui-scale));
+  font-weight: 900;
+  color: var(--title);
+  margin-bottom: calc(1rem * var(--ui-scale));
+  text-shadow: 0 2px 0 #4c2600;
 }
 
 .screen__menu {
   display: flex;
   flex-direction: column;
-  gap: calc(0.5rem * var(--ui-scale));
-  min-width: calc(220px * var(--ui-scale));
+  gap: calc(0.65rem * var(--ui-scale));
+  min-width: calc(240px * var(--ui-scale));
 }
 
 .screen__section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(0.5rem * var(--ui-scale));
+  gap: calc(0.75rem * var(--ui-scale));
+  margin-bottom: calc(1rem * var(--ui-scale));
 }
 
 .screen__label {
   font-size: calc(1rem * var(--ui-scale));
   color: var(--text-muted);
+  font-weight: 800;
 }
 
 .screen__scale-group {
@@ -81,55 +113,78 @@ html, body {
 }
 
 .btn {
-  padding: calc(0.6rem * var(--ui-scale)) calc(1.2rem * var(--ui-scale));
-  font-size: calc(1rem * var(--ui-scale));
-  font-family: inherit;
-  background: var(--btn-bg);
-  color: var(--text);
-  border: 1px solid #444;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  text-align: center;
   width: 100%;
+  min-height: calc(46px * var(--ui-scale));
+  padding: calc(0.65rem * var(--ui-scale)) calc(1.2rem * var(--ui-scale));
+  border: 1px solid rgba(255, 220, 115, 0.28);
+  border-radius: 10px;
+  background: var(--btn-bg);
+  color: #ffd782;
+  box-shadow: 0 5px 0 rgba(37, 18, 2, 0.62), inset 0 1px 0 rgba(255, 238, 186, 0.12);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: calc(1.05rem * var(--ui-scale));
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+}
+
+.btn small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(255, 243, 215, 0.72);
+  font-size: calc(0.75rem * var(--ui-scale));
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .btn:hover:not(:disabled) {
   background: var(--btn-hover);
-  border-color: var(--accent);
+  border-color: rgba(255, 232, 155, 0.72);
+  color: #fff6b8;
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(37, 18, 2, 0.62);
 }
 
 .btn:disabled {
   background: var(--btn-disabled);
-  color: var(--text-muted);
+  color: #9b8f7c;
   cursor: not-allowed;
-  border-color: #333;
+  border-color: rgba(255, 220, 115, 0.12);
+  box-shadow: none;
 }
 
 .btn--back {
-  background: transparent;
-  border-color: #555;
   margin-top: calc(0.5rem * var(--ui-scale));
-}
-
-.btn--back:hover {
-  border-color: var(--accent);
+  background: linear-gradient(180deg, #3a2c1e, #21170e);
+  color: var(--text-muted);
 }
 
 .btn--scale {
   width: auto;
-  min-width: calc(60px * var(--ui-scale));
+  min-width: calc(66px * var(--ui-scale));
 }
 
 .btn--active {
   background: var(--btn-active);
-  color: #000;
+  color: #2a1704;
   border-color: var(--btn-active);
-  font-weight: 600;
 }
+
+.btn--faction-cyan { border-color: rgba(111, 209, 245, 0.58); }
+.btn--faction-green { border-color: rgba(98, 208, 107, 0.58); }
+.btn--faction-yellow { border-color: rgba(242, 215, 92, 0.58); }
+.btn--faction-purple { border-color: rgba(200, 122, 232, 0.58); }
 
 .screen--game {
   position: relative;
+  background: var(--bg-deep);
 }
 
 .screen__canvas {
@@ -138,17 +193,6 @@ html, body {
   left: 0;
   width: 100%;
   height: 100%;
-}
-
-.screen__overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--text-muted);
-  font-size: calc(1.1rem * var(--ui-scale));
-  pointer-events: none;
-  text-align: center;
 }
 
 .screen__back-btn {
