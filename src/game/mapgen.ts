@@ -1,5 +1,6 @@
 /** Procedural map generator. Pure function, deterministic with seed. */
 
+import { getBuildingFootprint } from '../config/buildings.js';
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../core/constants.js';
 import type {
   MapData,
@@ -11,7 +12,6 @@ import type {
   BuilderPlacement,
 } from './map-types.js';
 
-// Simple deterministic PRNG (mulberry32)
 function mulberry32(seed: number): () => number {
   let s = seed | 0;
   return () => {
@@ -32,7 +32,7 @@ export function generateMap(
   const terrain = generateTerrain(width, height, rand);
   const occupied = createOccupiedSet(width, height);
   const hq = placeHq(width, height, faction, occupied);
-  const buildings = placeBuildings(hq, occupied);
+  const buildings = placeBuildings(width, height, hq, occupied);
   const builders = placeBuildersNearHq(width, height, hq, occupied);
   const resources = placeResources(width, height, hq, rand, occupied);
   const decor = placeDecor(width, height, hq, rand, occupied);
@@ -51,7 +51,6 @@ export function generateMap(
 }
 
 function generateTerrain(w: number, h: number, rand: () => number): TerrainType[][] {
-  // Phase 1: random assignment
   const grid: TerrainType[][] = [];
   for (let y = 0; y < h; y++) {
     const row: TerrainType[] = [];
@@ -64,7 +63,6 @@ function generateTerrain(w: number, h: number, rand: () => number): TerrainType[
     grid.push(row);
   }
 
-  // Phase 2: one smoothing pass — if 3+ of 4 neighbors are same variant, switch
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const neighbors: TerrainType[] = [grid[y - 1]![x]!, grid[y + 1]![x]!, grid[y]![x - 1]!, grid[y]![x + 1]!];
@@ -94,6 +92,26 @@ function markOccupied(occupied: Set<string>, tx: number, ty: number, size: numbe
   }
 }
 
+function isAreaAvailable(
+  width: number,
+  height: number,
+  occupied: ReadonlySet<string>,
+  tx: number,
+  ty: number,
+  size: number,
+): boolean {
+  if (tx < 0 || ty < 0) return false;
+  if (tx + size > width || ty + size > height) return false;
+
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
+    }
+  }
+
+  return true;
+}
+
 function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>): MapData['hq'] {
   const tx = Math.max(0, Math.min(w - HQ_FOOTPRINT, 4));
   const ty = Math.max(0, Math.min(h - HQ_FOOTPRINT, 4));
@@ -101,33 +119,26 @@ function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>
   return { tx, ty, faction };
 }
 
-/** Pre-place one Separator, one Storage, one Power Plant, one Command Relay adjacent to HQ. */
-function placeBuildings(hq: MapData['hq'], occupied: Set<string>): BuildingPlacement[] {
-  const buildings: BuildingPlacement[] = [];
+function placeBuildings(
+  width: number,
+  height: number,
+  hq: MapData['hq'],
+  occupied: Set<string>,
+): BuildingPlacement[] {
+  const buildings: BuildingPlacement[] = [
+    { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty, type: 'separator' },
+    { tx: hq.tx, ty: hq.ty + HQ_FOOTPRINT, type: 'storage' },
+    { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty + HQ_FOOTPRINT, type: 'power-plant' },
+    { tx: hq.tx, ty: hq.ty - getBuildingFootprint('command-relay'), type: 'command-relay' },
+  ];
 
-  // Separator: just east of HQ (1×1 footprint)
-  const sepTx = hq.tx + HQ_FOOTPRINT;
-  const sepTy = hq.ty;
-  markOccupied(occupied, sepTx, sepTy, 1);
-  buildings.push({ tx: sepTx, ty: sepTy, type: 'separator' });
-
-  // Storage: south of Separator (1×1 footprint)
-  const stoTx = sepTx;
-  const stoTy = sepTy + 1;
-  markOccupied(occupied, stoTx, stoTy, 1);
-  buildings.push({ tx: stoTx, ty: stoTy, type: 'storage' });
-
-  // Power Plant: south of HQ (1×1 footprint)
-  const ppTx = hq.tx + 1;
-  const ppTy = hq.ty + HQ_FOOTPRINT;
-  markOccupied(occupied, ppTx, ppTy, 1);
-  buildings.push({ tx: ppTx, ty: ppTy, type: 'power-plant' });
-
-  // Command Relay: east of Power Plant (1×1 footprint)
-  const crTx = ppTx + 1;
-  const crTy = ppTy;
-  markOccupied(occupied, crTx, crTy, 1);
-  buildings.push({ tx: crTx, ty: crTy, type: 'command-relay' });
+  for (const building of buildings) {
+    const footprint = getBuildingFootprint(building.type);
+    if (!isAreaAvailable(width, height, occupied, building.tx, building.ty, footprint)) {
+      throw new Error(`Failed to place initial building: ${building.type}`);
+    }
+    markOccupied(occupied, building.tx, building.ty, footprint);
+  }
 
   return buildings;
 }
@@ -163,7 +174,8 @@ function placeBuildersNearHq(
 }
 
 function placeResources(
-  w: number, h: number,
+  w: number,
+  h: number,
   hq: MapData['hq'],
   rand: () => number,
   occupied: Set<string>,
@@ -193,7 +205,6 @@ function placeResources(
   placeNear('medium', 8, 16, 3);
   placeNear('large', 14, 22, 2);
 
-  // Infinite deposit at/near center
   let infPlaced = false;
   for (let attempts = 0; attempts < 100 && !infPlaced; attempts++) {
     const tx = Math.floor(center + (rand() - 0.5) * 4);
@@ -209,7 +220,8 @@ function placeResources(
 }
 
 function placeDecor(
-  w: number, h: number,
+  w: number,
+  h: number,
   hq: MapData['hq'],
   rand: () => number,
   occupied: Set<string>,

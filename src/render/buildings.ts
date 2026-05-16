@@ -1,9 +1,10 @@
-/** Building rendering: faction HQ, Separator, Storage, Power Plant, Command Relay with geometric fallbacks. */
+/** Building rendering: faction HQ, civil buildings, builder, and construction sites. */
 
+import { getBuildingFootprint } from '../config/buildings.js';
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
-import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
+import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
 import type { Camera } from './camera.js';
 
 const HQ_ASSET_KEYS: Record<FactionId, string> = {
@@ -13,9 +14,6 @@ const HQ_ASSET_KEYS: Record<FactionId, string> = {
   purple: 'hq_purple',
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
-/** Dim a hex color by multiplying RGB channels by a factor (0..1). */
 function dimColor(hex: string, factor: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -26,22 +24,35 @@ function dimColor(hex: string, factor: number): string {
   return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`;
 }
 
+function getFootprintCenter(tx: number, ty: number, footprint: number): { tx: number; ty: number } {
+  return {
+    tx: tx + footprint / 2,
+    ty: ty + footprint / 2,
+  };
+}
+
 function drawIsoBox(
   ctx: CanvasRenderingContext2D,
-  cx: number, cy: number, z: number,
-  rightFace: string, leftFace: string, topFace: string,
-  bHeight: number, label: string, online: boolean,
+  cx: number,
+  cy: number,
+  zoom: number,
+  rightFace: string,
+  leftFace: string,
+  topFace: string,
+  boxHeight: number,
+  label: string,
+  online: boolean,
+  footprint: number = 1,
 ): void {
-  const hw = (TILE_W / 2) * z;
-  const hh = (TILE_H / 2) * z;
+  const hw = (TILE_W / 2) * footprint * zoom;
+  const hh = (TILE_H / 2) * footprint * zoom;
   const dim = online ? 1 : 0.45;
 
-  // Right face
   ctx.beginPath();
   ctx.moveTo(cx + hw, cy);
   ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx + hw, cy - bHeight);
+  ctx.lineTo(cx, cy + hh - boxHeight);
+  ctx.lineTo(cx + hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = dimColor(rightFace, dim);
   ctx.fill();
@@ -49,12 +60,11 @@ function drawIsoBox(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Left face
   ctx.beginPath();
   ctx.moveTo(cx - hw, cy);
   ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.lineTo(cx, cy + hh - boxHeight);
+  ctx.lineTo(cx - hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = dimColor(leftFace, dim);
   ctx.fill();
@@ -62,12 +72,11 @@ function drawIsoBox(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Top face
   ctx.beginPath();
-  ctx.moveTo(cx, cy - bHeight - hh);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.lineTo(cx, cy - bHeight + hh);
-  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.moveTo(cx, cy - boxHeight - hh);
+  ctx.lineTo(cx + hw, cy - boxHeight);
+  ctx.lineTo(cx, cy - boxHeight + hh);
+  ctx.lineTo(cx - hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = dimColor(topFace, dim);
   ctx.fill();
@@ -75,15 +84,12 @@ function drawIsoBox(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Label
   ctx.fillStyle = online ? '#1a1a1a' : '#555';
-  ctx.font = `${7 * z}px "Segoe UI", system-ui, sans-serif`;
+  ctx.font = `${7 * zoom}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, cx, cy - bHeight);
+  ctx.fillText(label, cx, cy - boxHeight);
 }
-
-// ── HQ ───────────────────────────────────────────────────────────────
 
 export function renderHq(
   ctx: CanvasRenderingContext2D,
@@ -112,20 +118,20 @@ export function renderHq(
 
 function renderHqFallback(
   ctx: CanvasRenderingContext2D,
-  cx: number, cy: number,
+  cx: number,
+  cy: number,
   z: number,
 ): void {
   const s = HQ_FOOTPRINT;
   const hw = (TILE_W / 2) * s * z;
   const hh = (TILE_H / 2) * s * z;
-  const bHeight = 18 * z;
+  const boxHeight = 18 * z;
 
-  // Right face
   ctx.beginPath();
   ctx.moveTo(cx + hw, cy);
   ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx + hw, cy - bHeight);
+  ctx.lineTo(cx, cy + hh - boxHeight);
+  ctx.lineTo(cx + hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = '#a07830';
   ctx.fill();
@@ -133,12 +139,11 @@ function renderHqFallback(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Left face
   ctx.beginPath();
   ctx.moveTo(cx - hw, cy);
   ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.lineTo(cx, cy + hh - boxHeight);
+  ctx.lineTo(cx - hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = '#8b6820';
   ctx.fill();
@@ -146,12 +151,11 @@ function renderHqFallback(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Top face
   ctx.beginPath();
-  ctx.moveTo(cx, cy - bHeight - hh);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.lineTo(cx, cy - bHeight + hh);
-  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.moveTo(cx, cy - boxHeight - hh);
+  ctx.lineTo(cx + hw, cy - boxHeight);
+  ctx.lineTo(cx, cy - boxHeight + hh);
+  ctx.lineTo(cx - hw, cy - boxHeight);
   ctx.closePath();
   ctx.fillStyle = HQ_COLOR;
   ctx.fill();
@@ -159,39 +163,48 @@ function renderHqFallback(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Label
   ctx.fillStyle = '#3a2400';
   ctx.font = `${10 * z}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('HQ', cx, cy - bHeight);
+  ctx.fillText('HQ', cx, cy - boxHeight);
 }
-
-// ── Separator ────────────────────────────────────────────────────────
 
 export function renderSeparator(
   ctx: CanvasRenderingContext2D,
-  tx: number, ty: number,
+  tx: number,
+  ty: number,
   camera: Camera,
   active: boolean,
   progress: number,
   online: boolean,
 ): void {
-  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const footprint = getBuildingFootprint('separator');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+  const boxHeight = 12 * z;
 
-  const bHeight = 12 * z;
-  drawIsoBox(ctx, cv.x, cv.y, z,
-    '#3a6b8c', '#2c5570', active ? '#4a9ac2' : '#3a7a9a',
-    bHeight, 'SEP', online);
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z,
+    '#3a6b8c',
+    '#2c5570',
+    active ? '#4a9ac2' : '#3a7a9a',
+    boxHeight,
+    'SEP',
+    online,
+    footprint,
+  );
 
-  // Progress bar (only visible when progress > 0 and online)
   if (online && progress > 0) {
-    const barW = 24 * z;
+    const barW = 28 * z;
     const barH = 4 * z;
     const barX = cv.x - barW / 2;
-    const barY = cv.y - bHeight - ((TILE_H / 2) * z) - 8 * z;
+    const barY = cv.y - boxHeight - ((TILE_H / 2) * footprint * z) - 8 * z;
 
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(barX, barY, barW, barH);
@@ -204,90 +217,111 @@ export function renderSeparator(
     ctx.strokeRect(barX, barY, barW, barH);
   }
 
-  // Offline indicator
   if (!online) {
     ctx.fillStyle = '#ff4444';
     ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('OFF', cv.x, cv.y - bHeight - 10 * z);
+    ctx.fillText('OFF', cv.x, cv.y - boxHeight - 10 * z);
   }
 }
-
-// ── Storage ──────────────────────────────────────────────────────────
 
 export function renderStorage(
   ctx: CanvasRenderingContext2D,
-  tx: number, ty: number,
+  tx: number,
+  ty: number,
   camera: Camera,
   online: boolean,
 ): void {
-  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const footprint = getBuildingFootprint('storage');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+  const boxHeight = 10 * z;
 
-  drawIsoBox(ctx, cv.x, cv.y, z,
-    '#6b5a3a', '#554828', '#8b7a50',
-    10 * z, 'STO', online);
+  drawIsoBox(ctx, cv.x, cv.y, z, '#6b5a3a', '#554828', '#8b7a50', boxHeight, 'STO', online, footprint);
 
   if (!online) {
     ctx.fillStyle = '#ff4444';
     ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('OFF', cv.x, cv.y - 10 * z - 10 * z);
+    ctx.fillText('OFF', cv.x, cv.y - boxHeight - 10 * z);
   }
 }
 
-// ── Power Plant ──────────────────────────────────────────────────────
-
 export function renderPowerPlant(
   ctx: CanvasRenderingContext2D,
-  tx: number, ty: number,
+  tx: number,
+  ty: number,
   camera: Camera,
   online: boolean,
 ): void {
-  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const footprint = getBuildingFootprint('power-plant');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+  const boxHeight = 14 * z;
 
-  // Power Plant is always online (immune), but keep consistent API
-  drawIsoBox(ctx, cv.x, cv.y, z,
-    '#5a8c3a', '#487028', online ? '#7ac24a' : '#5a9a3a',
-    14 * z, 'PWR', online);
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z,
+    '#5a8c3a',
+    '#487028',
+    online ? '#7ac24a' : '#5a9a3a',
+    boxHeight,
+    'PWR',
+    online,
+    footprint,
+  );
 
-  // Lightning bolt indicator
   if (online) {
     ctx.fillStyle = '#ffff44';
     ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('\u26A1', cv.x, cv.y - 14 * z - 10 * z);
+    ctx.fillText('\u26A1', cv.x, cv.y - boxHeight - 10 * z);
   }
 }
 
-// ── Command Relay ────────────────────────────────────────────────────
-
 export function renderCommandRelay(
   ctx: CanvasRenderingContext2D,
-  tx: number, ty: number,
+  tx: number,
+  ty: number,
   camera: Camera,
   online: boolean,
 ): void {
-  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const footprint = getBuildingFootprint('command-relay');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+  const boxHeight = 11 * z;
 
-  drawIsoBox(ctx, cv.x, cv.y, z,
-    '#6a3a8c', '#552870', online ? '#8a4ac2' : '#6a3a9a',
-    11 * z, 'CMD', online);
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z,
+    '#6a3a8c',
+    '#552870',
+    online ? '#8a4ac2' : '#6a3a9a',
+    boxHeight,
+    'CMD',
+    online,
+    footprint,
+  );
 
   if (!online) {
     ctx.fillStyle = '#ff4444';
     ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('OFF', cv.x, cv.y - 11 * z - 10 * z);
+    ctx.fillText('OFF', cv.x, cv.y - boxHeight - 10 * z);
   }
 }
 
@@ -299,7 +333,7 @@ export function renderBuilder(
   const scr = tileToScreen(builder.tx + 0.5, builder.ty + 0.5);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  const height = 8 * z;
+  const boxHeight = 8 * z;
 
   drawIsoBox(
     ctx,
@@ -309,7 +343,7 @@ export function renderBuilder(
     '#6f7e8c',
     '#4e5b66',
     builder.busy ? '#d68f3e' : '#9ad8ff',
-    height,
+    boxHeight,
     'BLD',
     true,
   );
@@ -318,7 +352,7 @@ export function renderBuilder(
   ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(builder.busy ? 'WORK' : 'IDLE', cv.x, cv.y - height - 10 * z);
+  ctx.fillText(builder.busy ? 'WORK' : 'IDLE', cv.x, cv.y - boxHeight - 10 * z);
 }
 
 export function renderConstructionSite(
@@ -326,11 +360,13 @@ export function renderConstructionSite(
   site: ConstructionSitePlacement,
   camera: Camera,
 ): void {
-  const scr = tileToScreen(site.tx + 0.5, site.ty + 0.5);
+  const footprint = getBuildingFootprint(site.type);
+  const center = getFootprintCenter(site.tx, site.ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  const hw = (TILE_W / 2) * z * 0.82;
-  const hh = (TILE_H / 2) * z * 0.82;
+  const hw = (TILE_W / 2) * z * footprint * 0.82;
+  const hh = (TILE_H / 2) * z * footprint * 0.82;
   const platformY = cv.y - 3 * z;
 
   ctx.beginPath();
@@ -354,7 +390,7 @@ export function renderConstructionSite(
   ctx.lineTo(cv.x + hw * 0.45, platformY - hh * 0.2);
   ctx.stroke();
 
-  const barW = 28 * z;
+  const barW = 30 * z;
   const barH = 4 * z;
   const barX = cv.x - barW / 2;
   const barY = platformY - hh - 12 * z;

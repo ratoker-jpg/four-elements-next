@@ -1,5 +1,5 @@
 import { HQ_FOOTPRINT } from '../core/constants.js';
-import { BUILDING_DEFINITIONS } from '../config/buildings.js';
+import { BUILDING_DEFINITIONS, getBuildingFootprint } from '../config/buildings.js';
 import type {
   BuildingPlacement,
   BuildingType,
@@ -44,7 +44,7 @@ export function startConstruction(
     return { ok: false, reason: 'insufficient-matter', buildingType };
   }
 
-  const placement = findAutoPlacement(map, builder);
+  const placement = findAutoPlacement(map, builder, buildingType);
   if (!placement) {
     return { ok: false, reason: 'no-placement', buildingType };
   }
@@ -101,16 +101,18 @@ export function canAffordBuilding(economy: EconomyState, buildingType: BuildingT
 export function findAutoPlacement(
   map: MapData,
   builder: BuilderPlacement,
+  buildingType: BuildingType,
   maxRadius: number = AUTO_BUILD_MAX_RADIUS,
 ): { tx: number; ty: number } | null {
   const occupied = buildOccupiedTileSet(map);
+  const footprint = getBuildingFootprint(buildingType);
 
   for (let radius = 1; radius <= maxRadius; radius++) {
     for (let ty = builder.ty - radius; ty <= builder.ty + radius; ty++) {
       for (let tx = builder.tx - radius; tx <= builder.tx + radius; tx++) {
         const onRing = Math.max(Math.abs(tx - builder.tx), Math.abs(ty - builder.ty)) === radius;
         if (!onRing) continue;
-        if (!isTileBuildable(map, occupied, tx, ty)) continue;
+        if (!isFootprintBuildable(map, occupied, tx, ty, footprint)) continue;
         return { tx, ty };
       }
     }
@@ -129,10 +131,10 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
   }
 
   for (const building of map.buildings) {
-    occupied.add(`${building.tx},${building.ty}`);
+    markFootprintOccupied(occupied, building.tx, building.ty, getBuildingFootprint(building.type));
   }
   for (const site of map.constructionSites) {
-    occupied.add(`${site.tx},${site.ty}`);
+    markFootprintOccupied(occupied, site.tx, site.ty, getBuildingFootprint(site.type));
   }
   for (const resource of map.resources) {
     occupied.add(`${resource.tx},${resource.ty}`);
@@ -147,7 +149,29 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
   return occupied;
 }
 
-function isTileBuildable(map: MapData, occupied: Set<string>, tx: number, ty: number): boolean {
-  if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return false;
-  return !occupied.has(`${tx},${ty}`);
+export function isFootprintBuildable(
+  map: MapData,
+  occupied: ReadonlySet<string>,
+  tx: number,
+  ty: number,
+  footprint: number,
+): boolean {
+  if (tx < 0 || ty < 0) return false;
+  if (tx + footprint > map.width || ty + footprint > map.height) return false;
+
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
+    }
+  }
+
+  return true;
+}
+
+function markFootprintOccupied(occupied: Set<string>, tx: number, ty: number, footprint: number): void {
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      occupied.add(`${tx + dx},${ty + dy}`);
+    }
+  }
 }

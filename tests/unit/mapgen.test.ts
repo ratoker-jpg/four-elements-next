@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getBuildingFootprint } from '../../src/config/buildings.js';
 import { generateMap } from '../../src/game/mapgen.js';
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../../src/core/constants.js';
 
@@ -81,6 +82,43 @@ describe('mapgen', () => {
       expect(d.ty).toBeGreaterThanOrEqual(0);
       expect(d.tx).toBeLessThan(map.width);
       expect(d.ty).toBeLessThan(map.height);
+    }
+  });
+
+  it('pre-placed buildings occupy full footprints without overlaps', () => {
+    const map = generateMap();
+    const occupied = new Map<string, string>();
+
+    const claim = (owner: string, tx: number, ty: number) => {
+      const key = `${tx},${ty}`;
+      expect(occupied.has(key)).toBe(false);
+      occupied.set(key, owner);
+    };
+
+    for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+      for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+        claim('hq', map.hq.tx + dx, map.hq.ty + dy);
+      }
+    }
+
+    for (const building of map.buildings) {
+      const footprint = getBuildingFootprint(building.type);
+      expect(footprint).toBe(2);
+      for (let dy = 0; dy < footprint; dy++) {
+        for (let dx = 0; dx < footprint; dx++) {
+          claim(building.type, building.tx + dx, building.ty + dy);
+        }
+      }
+    }
+
+    for (const builder of map.builders) {
+      claim('builder', builder.tx, builder.ty);
+    }
+    for (const resource of map.resources) {
+      claim(`resource:${resource.type}`, resource.tx, resource.ty);
+    }
+    for (const decor of map.decor) {
+      claim(`decor:${decor.type}`, decor.tx, decor.ty);
     }
   });
 });
