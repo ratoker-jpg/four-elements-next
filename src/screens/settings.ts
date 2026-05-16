@@ -11,17 +11,20 @@ export function createSettingsScreen(navigate: NavigateFn): Screen {
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--settings';
 
+      const card = document.createElement('section');
+      card.className = 'menu-card';
+
       const heading = document.createElement('h2');
       heading.className = 'screen__heading';
-      heading.textContent = 'Settings';
-      wrapper.appendChild(heading);
+      heading.textContent = 'Настройки';
+      card.appendChild(heading);
 
       const section = document.createElement('div');
       section.className = 'screen__section';
 
       const label = document.createElement('label');
       label.className = 'screen__label';
-      label.textContent = 'UI Scale';
+      label.textContent = 'Масштаб интерфейса';
       section.appendChild(label);
 
       const scaleGroup = document.createElement('div');
@@ -41,14 +44,15 @@ export function createSettingsScreen(navigate: NavigateFn): Screen {
       }
 
       section.appendChild(scaleGroup);
-      wrapper.appendChild(section);
+      card.appendChild(section);
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back';
-      btnBack.textContent = 'Back';
+      btnBack.textContent = 'Назад';
       btnBack.addEventListener('click', () => navigate('main-menu', null));
-      wrapper.appendChild(btnBack);
+      card.appendChild(btnBack);
 
+      wrapper.appendChild(card);
       container.appendChild(wrapper);
     },
 
