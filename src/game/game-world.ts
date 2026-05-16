@@ -11,6 +11,9 @@ import {
   createEconomyState,
   tickEconomy,
   getFactionElement,
+  applyCompletedBuildingToEconomy,
+  getSeparatorPositions,
+  getStorageCount,
   type EconomyState,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
@@ -18,6 +21,7 @@ import {
   createPowerState,
   tickPower,
   isBuildingOnline,
+  addBuildingToPowerState,
   type PowerState,
   type ReadonlyPowerState,
 } from '../systems/power.js';
@@ -27,6 +31,14 @@ import {
   type ControlState,
   type ReadonlyControlState,
 } from '../systems/control.js';
+import { BUILDING_DEFINITIONS } from '../config/buildings.js';
+import {
+  BUILDER_CONTROL_COST,
+  startConstruction,
+  tickConstruction,
+  type ConstructionCommandResult,
+} from '../systems/construction.js';
+import type { BuildingType, ConstructionSitePlacement } from './map-types.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
@@ -50,11 +62,18 @@ export class GameWorld {
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
+  private constructionStatusMessage = 'Builder готов к строительству.';
 
   /** Callbacks invoked each frame for HUD updates. */
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
   onPowerUpdate?: (state: ReadonlyPowerState) => void;
   onControlUpdate?: (state: ReadonlyControlState) => void;
+  onConstructionUpdate?: (state: {
+    builderBusy: boolean;
+    matter: number;
+    statusMessage: string;
+    sites: ReadonlyArray<ConstructionSitePlacement>;
+  }) => void;
 
   // Bound handlers for cleanup
   private boundKeyDown: (e: KeyboardEvent) => void;
@@ -82,10 +101,8 @@ export class GameWorld {
     this.map = generateMap(size, size, resolvedFaction);
 
     // Build economy state from building placements
-    const separatorPositions = this.map.buildings
-      .filter((b) => b.type === 'separator')
-      .map((b) => ({ tx: b.tx, ty: b.ty }));
-    const storageCount = this.map.buildings.filter((b) => b.type === 'storage').length;
+    const separatorPositions = getSeparatorPositions(this.map.buildings);
+    const storageCount = getStorageCount(this.map.buildings);
     this.economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
 
     // Build power state from buildings + HQ
@@ -98,6 +115,7 @@ export class GameWorld {
     this.control = createControlState(
       this.map.buildings.filter((b) => b.type === 'command-relay').length,
       relayOnlineCount,
+      this.map.builders.length * BUILDER_CONTROL_COST,
     );
 
     const hqScreen = tileToScreen(
@@ -131,6 +149,7 @@ export class GameWorld {
 
     this.onResize();
     this.lastTime = performance.now();
+    this.publishUiState();
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -156,12 +175,32 @@ export class GameWorld {
     delete (window as any).__powerState;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__controlState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__constructionState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__constructionDebug;
   }
 
   /** Read-only accessors for HUD and tests. */
   getEconomyState(): ReadonlyEconomyState { return this.economy; }
   getPowerState(): ReadonlyPowerState { return this.power; }
   getControlState(): ReadonlyControlState { return this.control; }
+
+  startConstruction(buildingType: BuildingType): ConstructionCommandResult {
+    const result = startConstruction(this.map, this.economy, buildingType);
+    this.constructionStatusMessage = this.resolveConstructionMessage(result);
+    this.publishUiState();
+    return result;
+  }
+
+  debugSetMatter(value: number): void {
+    this.economy.resources.matter = Math.max(0, Math.min(value, this.economy.resources.matterCap));
+    this.publishUiState();
+  }
+
+  debugAdvanceConstruction(seconds: number): void {
+    this.update(seconds);
+  }
 
   private loop(now: number): void {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
@@ -180,6 +219,14 @@ export class GameWorld {
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) dx -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
+
+    const constructionResult = tickConstruction(this.map, dt);
+    for (const building of constructionResult.completedBuildings) {
+      applyCompletedBuildingToEconomy(this.economy, building);
+      addBuildingToPowerState(this.power, building);
+      const definition = BUILDING_DEFINITIONS[building.type];
+      this.constructionStatusMessage = `${definition.label} построен. Builder свободен.`;
+    }
 
     // Power tick
     tickPower(this.power);
@@ -201,6 +248,12 @@ export class GameWorld {
     this.onEconomyUpdate?.(this.economy);
     this.onPowerUpdate?.(this.power);
     this.onControlUpdate?.(this.control);
+    this.onConstructionUpdate?.({
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      matter: this.economy.resources.matter,
+      statusMessage: this.constructionStatusMessage,
+      sites: this.map.constructionSites,
+    });
 
     // Expose testing hooks (cleaned up in destroy)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -240,6 +293,51 @@ export class GameWorld {
       cap: this.control.cap,
       used: this.control.used,
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__constructionState = {
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      builders: this.map.builders.map((builder) => ({
+        tx: builder.tx,
+        ty: builder.ty,
+        busy: builder.busy,
+      })),
+      sites: this.map.constructionSites.map((site) => ({
+        tx: site.tx,
+        ty: site.ty,
+        type: site.type,
+        progress: site.progress,
+      })),
+      statusMessage: this.constructionStatusMessage,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__constructionDebug = {
+      setMatter: (value: number) => this.debugSetMatter(value),
+      advanceConstruction: (seconds: number) => this.debugAdvanceConstruction(seconds),
+      startConstruction: (buildingType: BuildingType) => this.startConstruction(buildingType),
+    };
+  }
+
+  private publishUiState(): void {
+    this.onEconomyUpdate?.(this.economy);
+    this.onPowerUpdate?.(this.power);
+    this.onControlUpdate?.(this.control);
+    this.onConstructionUpdate?.({
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      matter: this.economy.resources.matter,
+      statusMessage: this.constructionStatusMessage,
+      sites: this.map.constructionSites,
+    });
+  }
+
+  private resolveConstructionMessage(result: ConstructionCommandResult): string {
+    if (result.ok && result.site) {
+      const definition = BUILDING_DEFINITIONS[result.buildingType];
+      return `${definition.label} строится на (${result.site.tx}, ${result.site.ty}).`;
+    }
+
+    if (result.reason === 'busy') return 'Builder уже занят.';
+    if (result.reason === 'insufficient-matter') return 'Недостаточно Matter для строительства.';
+    return 'Не удалось найти место для строительства.';
   }
 
   private onKeyDown(e: KeyboardEvent): void { this.keys.add(e.code); }

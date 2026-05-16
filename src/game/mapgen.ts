@@ -1,7 +1,15 @@
 /** Procedural map generator. Pure function, deterministic with seed. */
 
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../core/constants.js';
-import type { MapData, FactionId, TerrainType, ResourceType, DecorType, BuildingPlacement } from './map-types.js';
+import type {
+  MapData,
+  FactionId,
+  TerrainType,
+  ResourceType,
+  DecorType,
+  BuildingPlacement,
+  BuilderPlacement,
+} from './map-types.js';
 
 // Simple deterministic PRNG (mulberry32)
 function mulberry32(seed: number): () => number {
@@ -25,10 +33,21 @@ export function generateMap(
   const occupied = createOccupiedSet(width, height);
   const hq = placeHq(width, height, faction, occupied);
   const buildings = placeBuildings(hq, occupied);
+  const builders = placeBuildersNearHq(width, height, hq, occupied);
   const resources = placeResources(width, height, hq, rand, occupied);
   const decor = placeDecor(width, height, hq, rand, occupied);
 
-  return { width, height, terrain, hq, resources, decor, buildings };
+  return {
+    width,
+    height,
+    terrain,
+    hq,
+    resources,
+    decor,
+    buildings,
+    builders,
+    constructionSites: [],
+  };
 }
 
 function generateTerrain(w: number, h: number, rand: () => number): TerrainType[][] {
@@ -111,6 +130,36 @@ function placeBuildings(hq: MapData['hq'], occupied: Set<string>): BuildingPlace
   buildings.push({ tx: crTx, ty: crTy, type: 'command-relay' });
 
   return buildings;
+}
+
+function placeBuildersNearHq(
+  width: number,
+  height: number,
+  hq: MapData['hq'],
+  occupied: Set<string>,
+): BuilderPlacement[] {
+  const candidates: Array<{ tx: number; ty: number }> = [];
+  for (let ty = hq.ty - 1; ty <= hq.ty + HQ_FOOTPRINT; ty++) {
+    for (let tx = hq.tx - 1; tx <= hq.tx + HQ_FOOTPRINT; tx++) {
+      const onRing =
+        tx === hq.tx - 1
+        || tx === hq.tx + HQ_FOOTPRINT
+        || ty === hq.ty - 1
+        || ty === hq.ty + HQ_FOOTPRINT;
+      if (!onRing) continue;
+      candidates.push({ tx, ty });
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (candidate.tx < 0 || candidate.ty < 0) continue;
+    if (candidate.tx >= width || candidate.ty >= height) continue;
+    if (occupied.has(`${candidate.tx},${candidate.ty}`)) continue;
+    markOccupied(occupied, candidate.tx, candidate.ty, 1);
+    return [{ ...candidate, busy: false }];
+  }
+
+  throw new Error('Failed to place Builder near HQ');
 }
 
 function placeResources(

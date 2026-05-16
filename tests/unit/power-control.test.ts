@@ -203,6 +203,11 @@ describe('availableControl', () => {
     expect(availableControl(state)).toBe(15); // 15 - 0 used
   });
 
+  it('accounts for used slots from the Builder', () => {
+    const state = createControlState(1, 1, 1);
+    expect(availableControl(state)).toBe(14);
+  });
+
   it('returns 0 when used equals current', () => {
     const state = createControlState(0, 0);
     state.used = state.current;

@@ -2,6 +2,7 @@ import type { Screen, ScreenTransitionData, GameScreenData } from '../types/scre
 import type { NavigateFn } from '../core/screen-manager.js';
 import { GameWorld } from '../game/game-world.js';
 import { createEconomyHud } from '../render/economy-hud.js';
+import { createBuildMenu } from '../render/build-menu.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
@@ -28,6 +29,12 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       hud.element.id = 'economy-hud';
       wrapper.appendChild(hud.element);
 
+      const buildMenu = createBuildMenu((buildingType) => {
+        gameWorld?.startConstruction(buildingType);
+      });
+      buildMenu.element.id = 'build-menu';
+      wrapper.appendChild(buildMenu.element);
+
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back screen__back-btn';
       btnBack.textContent = 'В главное меню';
@@ -43,6 +50,13 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       world.onEconomyUpdate = (state) => hud.updateEconomy(state);
       world.onPowerUpdate = (state) => hud.updatePower(state);
       world.onControlUpdate = (state) => hud.updateControl(state);
+      world.onConstructionUpdate = (state) => {
+        buildMenu.update({
+          matter: state.matter,
+          builderBusy: state.builderBusy,
+          statusMessage: state.statusMessage,
+        });
+      };
 
       void world.init().then(() => {
         if (gameWorld !== world) return; // unmount already destroyed this world

@@ -1,6 +1,6 @@
 /** Economy system: resources, caps, separator conversion. Pure logic, no DOM. */
 
-import type { FactionId } from '../game/map-types.js';
+import type { BuildingPlacement, BuildingType, FactionId } from '../game/map-types.js';
 
 /** Element stock by faction. Enables future trophies/trade without changing the economy shape. */
 export type FactionElements = Record<FactionId, number>;
@@ -148,6 +148,47 @@ export function tickEconomy(state: EconomyState, dt: number, separatorOnlineMap?
 /** Read a specific faction element amount. */
 export function getFactionElement(state: ReadonlyEconomyState, faction: FactionId): number {
   return state.resources.elements[faction];
+}
+
+export function applyCompletedBuildingToEconomy(
+  state: EconomyState,
+  building: Pick<BuildingPlacement, 'tx' | 'ty' | 'type'>,
+): void {
+  if (building.type === 'separator') {
+    state.separators.push({
+      tx: building.tx,
+      ty: building.ty,
+      progress: 0,
+      active: false,
+    });
+    return;
+  }
+
+  if (building.type === 'storage') {
+    state.resources.rawCap += STORAGE_RAW_BONUS;
+    state.resources.matterCap += STORAGE_MATTER_BONUS;
+    state.resources.elementCap += STORAGE_ELEMENT_BONUS;
+    state.resources.raw = Math.min(state.resources.raw, state.resources.rawCap);
+    state.resources.matter = Math.min(state.resources.matter, state.resources.matterCap);
+    for (const faction of FACTION_IDS) {
+      state.resources.elements[faction] = Math.min(
+        state.resources.elements[faction],
+        state.resources.elementCap,
+      );
+    }
+  }
+}
+
+export function getStorageCount(buildings: ReadonlyArray<Pick<BuildingPlacement, 'type'>>): number {
+  return buildings.filter((building) => building.type === 'storage').length;
+}
+
+export function getSeparatorPositions(
+  buildings: ReadonlyArray<Pick<BuildingPlacement, 'tx' | 'ty' | 'type'>>,
+): Array<{ tx: number; ty: number }> {
+  return buildings
+    .filter((building): building is { tx: number; ty: number; type: BuildingType } => building.type === 'separator')
+    .map((building) => ({ tx: building.tx, ty: building.ty }));
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

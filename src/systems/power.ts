@@ -95,6 +95,19 @@ export function getBuildingPower(type: BuildingType | 'hq'): number {
   return BUILDING_POWER[type];
 }
 
+export function addBuildingToPowerState(
+  state: PowerState,
+  building: { tx: number; ty: number; type: BuildingType },
+): void {
+  state.buildings.push({
+    tx: building.tx,
+    ty: building.ty,
+    type: building.type,
+    online: true,
+  });
+  recalculate(state);
+}
+
 // ── Internal ─────────────────────────────────────────────────────────
 
 function recalculate(state: PowerState): void {

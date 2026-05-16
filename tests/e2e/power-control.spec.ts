@@ -55,7 +55,7 @@ test.describe('NEXT-04 power and control', () => {
     expect(controlState).not.toBeNull();
     expect(controlState!.current).toBe(15); // HQ(10) + 1 relay(5)
     expect(controlState!.cap).toBe(50);
-    expect(controlState!.used).toBe(0);
+    expect(controlState!.used).toBe(1);
   });
 
   test('power HUD shows net power as +2', async ({ page }) => {

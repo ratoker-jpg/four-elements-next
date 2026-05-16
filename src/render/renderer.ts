@@ -9,7 +9,15 @@ import type { ReadonlyPowerState } from '../systems/power.js';
 import { isBuildingOnline } from '../systems/power.js';
 import { renderTerrain } from './terrain.js';
 import { renderResourceNode, renderDecor } from './environment.js';
-import { renderHq, renderSeparator, renderStorage, renderPowerPlant, renderCommandRelay } from './buildings.js';
+import {
+  renderHq,
+  renderSeparator,
+  renderStorage,
+  renderPowerPlant,
+  renderCommandRelay,
+  renderBuilder,
+  renderConstructionSite,
+} from './buildings.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -67,6 +75,20 @@ export function render(
         render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online),
       });
     }
+  }
+
+  for (const site of map.constructionSites) {
+    entities.push({
+      sortKey: site.tx + site.ty,
+      render: () => renderConstructionSite(ctx, site, camera),
+    });
+  }
+
+  for (const builder of map.builders) {
+    entities.push({
+      sortKey: builder.tx + builder.ty,
+      render: () => renderBuilder(ctx, builder, camera),
+    });
   }
 
   for (const r of map.resources) {
