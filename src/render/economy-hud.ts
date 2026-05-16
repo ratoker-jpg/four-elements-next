@@ -1,6 +1,21 @@
 /** Economy HUD: DOM overlay showing resource counts and caps. */
 
 import type { ReadonlyEconomyState } from '../systems/economy.js';
+import { getFactionElement } from '../systems/economy.js';
+
+const FACTION_ELEMENT_LABELS: Record<ReadonlyEconomyState['faction'], string> = {
+  cyan: 'Голубой элемент',
+  green: 'Зелёный элемент',
+  yellow: 'Жёлтый элемент',
+  purple: 'Фиолетовый элемент',
+};
+
+const FACTION_ELEMENT_COLORS: Record<ReadonlyEconomyState['faction'], string> = {
+  cyan: '#7de1ff',
+  green: '#5ee89a',
+  yellow: '#f2d75c',
+  purple: '#d4a5ff',
+};
 
 /** Create the economy HUD DOM element. Returns the container and an update function. */
 export function createEconomyHud(): {
@@ -22,7 +37,9 @@ export function createEconomyHud(): {
     const r = state.resources;
     rawItem.update(r.raw, r.rawCap);
     matterItem.update(r.matter, r.matterCap);
-    elementItem.update(r.element, r.elementCap);
+    elementItem.setLabel(FACTION_ELEMENT_LABELS[state.faction]);
+    elementItem.setColor(FACTION_ELEMENT_COLORS[state.faction]);
+    elementItem.update(getFactionElement(state, state.faction), r.elementCap);
   };
 
   return { element: hud, update };
@@ -35,6 +52,8 @@ function createResourceItem(
 ): {
   element: HTMLElement;
   update: (current: number, cap: number) => void;
+  setLabel: (nextLabel: string) => void;
+  setColor: (nextColor: string) => void;
 } {
   const item = document.createElement('div');
   item.className = `economy-hud__item economy-hud__item--${key}`;
@@ -58,5 +77,13 @@ function createResourceItem(
     value.textContent = `${current}/${cap}`;
   };
 
-  return { element: item, update };
+  const setLabel = (nextLabel: string) => {
+    labelEl.textContent = nextLabel;
+  };
+
+  const setColor = (nextColor: string) => {
+    icon.style.backgroundColor = nextColor;
+  };
+
+  return { element: item, update, setLabel, setColor };
 }

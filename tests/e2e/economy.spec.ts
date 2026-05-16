@@ -23,40 +23,64 @@ test.describe('NEXT-03 economy baseline', () => {
 
   test('economy HUD shows correct starting resources', async ({ page }) => {
     await navigateToGameScreen(page);
-    // Raw: 0/400, Matter: 100/400, Element: 3/20
     const values = page.locator('.economy-hud__value');
     await expect(values.nth(0)).toHaveText('0/400');
     await expect(values.nth(1)).toHaveText('100/400');
     await expect(values.nth(2)).toHaveText('3/20');
   });
 
-  test('economy HUD labels are in Russian', async ({ page }) => {
+  test('economy HUD labels are in Russian and show active faction element', async ({ page }) => {
     await navigateToGameScreen(page);
     const labels = page.locator('.economy-hud__label');
     await expect(labels.nth(0)).toHaveText('Сырьё');
     await expect(labels.nth(1)).toHaveText('Материя');
-    await expect(labels.nth(2)).toHaveText('Элемент');
+    await expect(labels.nth(2)).toHaveText('Голубой элемент');
   });
 
-  test('economy state is exposed for testing', async ({ page }) => {
+  test('economy state stores four faction elements', async ({ page }) => {
     await navigateToGameScreen(page);
     const economyState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__economyState as {
+        faction: string;
         raw: number;
         matter: number;
-        element: number;
+        elements: Record<string, number>;
+        activeElement: number;
         rawCap: number;
         matterCap: number;
         elementCap: number;
       } | null;
     });
     expect(economyState).not.toBeNull();
+    expect(economyState!.faction).toBe('cyan');
     expect(economyState!.raw).toBe(0);
     expect(economyState!.matter).toBe(100);
-    expect(economyState!.element).toBe(3);
+    expect(economyState!.elements).toEqual({ cyan: 3, green: 0, yellow: 0, purple: 0 });
+    expect(economyState!.activeElement).toBe(3);
     expect(economyState!.rawCap).toBe(400);
     expect(economyState!.matterCap).toBe(400);
     expect(economyState!.elementCap).toBe(20);
+  });
+
+  test('green faction starts with green element only', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Новая игра' }).click();
+    await page.getByRole('button', { name: /Стандартная/ }).click();
+    await page.getByRole('button', { name: 'Зелёные' }).click();
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
+
+    await expect(page.locator('.economy-hud__label').nth(2)).toHaveText('Зелёный элемент');
+    const economyState = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as {
+        faction: string;
+        elements: Record<string, number>;
+        activeElement: number;
+      } | null;
+    });
+    expect(economyState!.faction).toBe('green');
+    expect(economyState!.elements).toEqual({ cyan: 0, green: 3, yellow: 0, purple: 0 });
+    expect(economyState!.activeElement).toBe(3);
   });
 
   test('separator state is idle at game start (no raw)', async ({ page }) => {
@@ -74,7 +98,6 @@ test.describe('NEXT-03 economy baseline', () => {
 
   test('separator remains idle after time passes with no raw', async ({ page }) => {
     await navigateToGameScreen(page);
-    // Wait 3 seconds
     await page.waitForTimeout(3000);
     const economyState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__economyState as {

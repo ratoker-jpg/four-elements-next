@@ -10,6 +10,7 @@ import { render } from '../render/renderer.js';
 import {
   createEconomyState,
   tickEconomy,
+  getFactionElement,
   type EconomyState,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
@@ -70,7 +71,7 @@ export class GameWorld {
       .filter((b) => b.type === 'separator')
       .map((b) => ({ tx: b.tx, ty: b.ty }));
     const storageCount = this.map.buildings.filter((b) => b.type === 'storage').length;
-    this.economy = createEconomyState(separatorPositions, storageCount);
+    this.economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
 
     const hqScreen = tileToScreen(
       this.map.hq.tx + 1.5,
@@ -160,9 +161,11 @@ export class GameWorld {
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__economyState = {
+      faction: this.economy.faction,
       raw: this.economy.resources.raw,
       matter: this.economy.resources.matter,
-      element: this.economy.resources.element,
+      elements: { ...this.economy.resources.elements },
+      activeElement: getFactionElement(this.economy, this.economy.faction),
       rawCap: this.economy.resources.rawCap,
       matterCap: this.economy.resources.matterCap,
       elementCap: this.economy.resources.elementCap,
