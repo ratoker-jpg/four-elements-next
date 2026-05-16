@@ -30,10 +30,14 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       container.appendChild(wrapper);
 
-      gameWorld = new GameWorld(canvas, mapSize, faction);
-      await gameWorld.init();
-      gameWorld.start();
-      wrapper.dataset.ready = 'true';
+      const world = new GameWorld(canvas, mapSize, faction);
+      gameWorld = world;
+
+      void world.init().then(() => {
+        if (gameWorld !== world) return; // unmount already destroyed this world
+        world.start();
+        wrapper.dataset.ready = 'true';
+      });
     },
 
     unmount(): void {
