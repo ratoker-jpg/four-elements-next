@@ -1,7 +1,7 @@
 /** Procedural map generator. Pure function, deterministic with seed. */
 
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../core/constants.js';
-import type { MapData, FactionId, TerrainType, ResourceType, DecorType } from './map-types.js';
+import type { MapData, FactionId, TerrainType, ResourceType, DecorType, BuildingPlacement } from './map-types.js';
 
 // Simple deterministic PRNG (mulberry32)
 function mulberry32(seed: number): () => number {
@@ -24,10 +24,11 @@ export function generateMap(
   const terrain = generateTerrain(width, height, rand);
   const occupied = createOccupiedSet(width, height);
   const hq = placeHq(width, height, faction, occupied);
+  const buildings = placeBuildings(hq, occupied);
   const resources = placeResources(width, height, hq, rand, occupied);
   const decor = placeDecor(width, height, hq, rand, occupied);
 
-  return { width, height, terrain, hq, resources, decor };
+  return { width, height, terrain, hq, resources, decor, buildings };
 }
 
 function generateTerrain(w: number, h: number, rand: () => number): TerrainType[][] {
@@ -79,6 +80,24 @@ function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>
   const ty = Math.max(0, Math.min(h - HQ_FOOTPRINT, 4));
   markOccupied(occupied, tx, ty, HQ_FOOTPRINT);
   return { tx, ty, faction };
+}
+
+/** Pre-place one Separator and one Storage adjacent to HQ. Deterministic — no random. */
+function placeBuildings(hq: MapData['hq'], occupied: Set<string>): BuildingPlacement[] {
+  const buildings: BuildingPlacement[] = [];
+  // Separator: just east of HQ (1×1 footprint)
+  const sepTx = hq.tx + HQ_FOOTPRINT;
+  const sepTy = hq.ty;
+  markOccupied(occupied, sepTx, sepTy, 1);
+  buildings.push({ tx: sepTx, ty: sepTy, type: 'separator' });
+
+  // Storage: south of Separator (1×1 footprint)
+  const stoTx = sepTx;
+  const stoTy = sepTy + 1;
+  markOccupied(occupied, stoTx, stoTy, 1);
+  buildings.push({ tx: stoTx, ty: stoTy, type: 'storage' });
+
+  return buildings;
 }
 
 function placeResources(

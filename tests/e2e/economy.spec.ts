@@ -1,0 +1,124 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('NEXT-03 economy baseline', () => {
+  async function navigateToGameScreen(page: import('@playwright/test').Page) {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Новая игра' }).click();
+    await page.getByRole('button', { name: /Стандартная/ }).click();
+    await page.getByRole('button', { name: 'Голубые' }).click();
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
+  }
+
+  test('economy HUD is visible', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await expect(page.locator('#economy-hud')).toBeVisible();
+  });
+
+  test('economy HUD shows three resource items', async ({ page }) => {
+    await navigateToGameScreen(page);
+    const items = page.locator('.economy-hud__item');
+    await expect(items).toHaveCount(3);
+  });
+
+  test('economy HUD shows correct starting resources', async ({ page }) => {
+    await navigateToGameScreen(page);
+    // Raw: 0/400, Matter: 100/400, Element: 3/20
+    const values = page.locator('.economy-hud__value');
+    await expect(values.nth(0)).toHaveText('0/400');
+    await expect(values.nth(1)).toHaveText('100/400');
+    await expect(values.nth(2)).toHaveText('3/20');
+  });
+
+  test('economy HUD labels are in Russian', async ({ page }) => {
+    await navigateToGameScreen(page);
+    const labels = page.locator('.economy-hud__label');
+    await expect(labels.nth(0)).toHaveText('Сырьё');
+    await expect(labels.nth(1)).toHaveText('Вещество');
+    await expect(labels.nth(2)).toHaveText('Элемент');
+  });
+
+  test('economy state is exposed for testing', async ({ page }) => {
+    await navigateToGameScreen(page);
+    const economyState = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as {
+        raw: number;
+        matter: number;
+        element: number;
+        rawCap: number;
+        matterCap: number;
+        elementCap: number;
+      } | null;
+    });
+    expect(economyState).not.toBeNull();
+    expect(economyState!.raw).toBe(0);
+    expect(economyState!.matter).toBe(100);
+    expect(economyState!.element).toBe(3);
+    expect(economyState!.rawCap).toBe(400);
+    expect(economyState!.matterCap).toBe(400);
+    expect(economyState!.elementCap).toBe(20);
+  });
+
+  test('separator state is idle at game start (no raw)', async ({ page }) => {
+    await navigateToGameScreen(page);
+    const economyState = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as {
+        separators: Array<{ tx: number; ty: number; progress: number; active: boolean }>;
+      } | null;
+    });
+    expect(economyState).not.toBeNull();
+    expect(economyState!.separators).toHaveLength(1);
+    expect(economyState!.separators[0]!.active).toBe(false);
+    expect(economyState!.separators[0]!.progress).toBe(0);
+  });
+
+  test('separator remains idle after time passes with no raw', async ({ page }) => {
+    await navigateToGameScreen(page);
+    // Wait 3 seconds
+    await page.waitForTimeout(3000);
+    const economyState = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as {
+        separators: Array<{ active: boolean; progress: number }>;
+      } | null;
+    });
+    expect(economyState!.separators[0]!.active).toBe(false);
+    expect(economyState!.separators[0]!.progress).toBe(0);
+  });
+
+  test('economy HUD does not interfere with camera pan', async ({ page }) => {
+    await navigateToGameScreen(page);
+    const cameraBefore = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__cameraPos as { x: number; y: number };
+    });
+    const canvas = page.locator('#game-canvas');
+    await canvas.click();
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('KeyW');
+    const cameraAfter = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__cameraPos as { x: number; y: number };
+    });
+    expect(cameraAfter.y).toBeLessThan(cameraBefore.y);
+  });
+
+  test('Back to menu cleans up economy state', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await page.getByRole('button', { name: 'В главное меню' }).click();
+    await expect(page.locator('.screen--main-menu')).toBeVisible();
+    const economyState = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState;
+    });
+    expect(economyState).toBeUndefined();
+  });
+
+  test('no critical console errors with economy', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+    await navigateToGameScreen(page);
+    await page.waitForTimeout(500);
+    const critical = errors.filter((e) => !e.includes('favicon'));
+    expect(critical).toEqual([]);
+  });
+});

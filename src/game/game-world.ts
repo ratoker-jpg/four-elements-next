@@ -1,4 +1,4 @@
-/** GameWorld: owns render loop, camera, map, assets, and input for the game screen. */
+/** GameWorld: owns render loop, camera, map, assets, economy, and input for the game screen. */
 
 import { ASSET_MANIFEST, MAP_SIZE_STANDARD, MAP_SIZE_LARGE } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
@@ -7,6 +7,12 @@ import { generateMap } from './mapgen.js';
 import type { MapData, FactionId } from './map-types.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
+import {
+  createEconomyState,
+  tickEconomy,
+  type EconomyState,
+  type ReadonlyEconomyState,
+} from './economy.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
@@ -21,6 +27,7 @@ export class GameWorld {
   private camera: Camera;
   private map: MapData;
   private assets: AssetStore;
+  private economy: EconomyState;
   private animFrameId: number | null = null;
   private lastTime: number = 0;
   private keys = new Set<string>();
@@ -29,6 +36,9 @@ export class GameWorld {
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
+
+  /** Callback invoked each frame with the current economy state (for HUD updates). */
+  onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
 
   // Bound handlers for cleanup
   private boundKeyDown: (e: KeyboardEvent) => void;
@@ -54,6 +64,14 @@ export class GameWorld {
     const size = resolveMapSize(mapSize);
     this.assets = new AssetStore();
     this.map = generateMap(size, size, resolvedFaction);
+
+    // Build economy state from building placements
+    const separatorPositions = this.map.buildings
+      .filter((b) => b.type === 'separator')
+      .map((b) => ({ tx: b.tx, ty: b.ty }));
+    const storageCount = this.map.buildings.filter((b) => b.type === 'storage').length;
+    this.economy = createEconomyState(separatorPositions, storageCount);
+
     const hqScreen = tileToScreen(
       this.map.hq.tx + 1.5,
       this.map.hq.ty + 1.5,
@@ -101,20 +119,28 @@ export class GameWorld {
     this.canvas.removeEventListener('wheel', this.boundWheel);
     window.removeEventListener('resize', this.boundResize);
     this.keys.clear();
-    // Clean up testing hook
+    // Clean up testing hooks
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__cameraPos;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__economyState;
+  }
+
+  /** Read-only economy state accessor (for HUD and tests). */
+  getEconomyState(): ReadonlyEconomyState {
+    return this.economy;
   }
 
   private loop(now: number): void {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.map, this.camera, this.assets);
+    render(this.ctx, this.map, this.camera, this.assets, this.economy);
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
   private update(dt: number): void {
+    // Camera input
     let dx = 0;
     let dy = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) dy -= 1;
@@ -122,9 +148,31 @@ export class GameWorld {
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) dx -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
-    // Expose camera position for E2E testing only (cleaned up in destroy)
+
+    // Economy tick
+    tickEconomy(this.economy, dt);
+
+    // Notify HUD
+    this.onEconomyUpdate?.(this.economy);
+
+    // Expose testing hooks (cleaned up in destroy)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__economyState = {
+      raw: this.economy.resources.raw,
+      matter: this.economy.resources.matter,
+      element: this.economy.resources.element,
+      rawCap: this.economy.resources.rawCap,
+      matterCap: this.economy.resources.matterCap,
+      elementCap: this.economy.resources.elementCap,
+      separators: this.economy.separators.map((s) => ({
+        tx: s.tx,
+        ty: s.ty,
+        progress: s.progress,
+        active: s.active,
+      })),
+    };
   }
 
   private onKeyDown(e: KeyboardEvent): void { this.keys.add(e.code); }

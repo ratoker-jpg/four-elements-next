@@ -34,6 +34,15 @@ export interface DecorPlacement {
   type: DecorType;
 }
 
+/** Building types that have game logic (economy, production, etc.). */
+export type BuildingType = 'separator' | 'storage';
+
+export interface BuildingPlacement {
+  tx: number;
+  ty: number;
+  type: BuildingType;
+}
+
 export interface MapData {
   width: number;
   height: number;
@@ -41,6 +50,7 @@ export interface MapData {
   hq: HqPlacement;
   resources: ResourcePlacement[];
   decor: DecorPlacement[];
+  buildings: BuildingPlacement[];
 }
 
 /** Asset key mapping for resource types. */
