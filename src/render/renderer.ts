@@ -13,6 +13,7 @@ import {
   renderStorage,
   renderPowerPlant,
   renderCommandRelay,
+  renderUnitsFactory,
   renderBuilder,
   renderConstructionSite,
   renderHarvester,
@@ -80,6 +81,11 @@ export function render(
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online),
+      });
+    } else if (b.type === 'units-factory') {
+      entities.push({
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        render: () => renderUnitsFactory(ctx, b.tx, b.ty, camera, online),
       });
     }
   }
