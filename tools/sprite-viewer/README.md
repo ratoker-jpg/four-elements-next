@@ -14,9 +14,14 @@ Related docs:
 - sprite sheet contract: `docs/assets/CIVIL_SPRITE_SHEET_SPEC.md`
 - prompt pack: `tools/sprite-viewer/PROMPTS.md`
 
+Published viewer:
+
+- GitHub Pages: `https://ratoker-jpg.github.io/four-elements-next/tools/sprite-viewer/`
+
 ## Files
 
 - `index.html` - single-file viewer with plain HTML, CSS, and JavaScript
+- `sprite-manifest.json` - optional published-sheet list for GitHub Pages deployments
 
 ## How to open locally
 
@@ -26,6 +31,8 @@ Related docs:
 4. Adjust frame size, direction row, preset window, anchor, footprint guide, FPS, scale, and background mode as needed.
 
 No build step, package install, or dev server is required for the viewer itself.
+
+In local `file://` mode, the repository manifest loader may be unavailable depending on browser security rules. Manual local PNG loading still works and remains the default workflow.
 
 ## What the viewer can inspect
 
@@ -50,6 +57,7 @@ Default direction row labels:
 
 The tool now includes:
 
+- optional repository-sheet loading through `sprite-manifest.json` on the published GitHub Pages copy;
 - configurable anchor controls with default `x=50%`, `y=84%`;
 - a toggleable crosshair and ground point marker;
 - anchor pixel readouts for the current frame and sheet position;
@@ -78,6 +86,42 @@ The viewer includes the current expected civil animation windows and makes switc
 - unload: `startCol 11`, `frames 6`
 
 These presets only configure the viewer UI. They do not connect the sheets to the game.
+
+## Published path
+
+The project build publishes the viewer to:
+
+- `/four-elements-next/tools/sprite-viewer/` on GitHub Pages
+- `dist/tools/sprite-viewer/` in local build output
+
+The canonical editable source stays in `tools/sprite-viewer/`. The Vite build emits the standalone viewer HTML and manifest into the deployable output so the game runtime and `src/` remain untouched.
+
+## Manifest format
+
+The optional manifest file is `tools/sprite-viewer/sprite-manifest.json`.
+
+Current default:
+
+```json
+{
+  "sheets": []
+}
+```
+
+Future entries can use this shape:
+
+```json
+{
+  "sheets": [
+    {
+      "label": "Builder draft sheet",
+      "src": "../../assets/example/path.png"
+    }
+  ]
+}
+```
+
+If the manifest is empty, the viewer shows `No repository sheets available.` and continues to work with manual local PNG loading.
 
 ## Comparison workflow
 

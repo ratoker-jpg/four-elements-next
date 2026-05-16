@@ -6,6 +6,8 @@ Clean architecture rebuild of Four Elements RTS.
 
 **Public URL:** https://ratoker-jpg.github.io/four-elements-next/
 
+**Sprite Viewer:** https://ratoker-jpg.github.io/four-elements-next/tools/sprite-viewer/
+
 ## Tech Stack
 
 - TypeScript (strict mode)
@@ -30,5 +32,7 @@ Clean architecture rebuild of Four Elements RTS.
 Deployed to GitHub Pages via GitHub Actions on every push to `main`.
 
 The workflow lives at `.github/workflows/deploy-pages.yml`.
+
+The standalone sprite viewer is also published through that same Pages build at `/tools/sprite-viewer/`.
 
 > **One-time setup required:** Go to **Settings → Pages → Source** and select **GitHub Actions** (instead of "Deploy from a branch").
