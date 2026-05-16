@@ -9,23 +9,32 @@ export function createMainMenuScreen(navigate: NavigateFn): Screen {
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--main-menu';
 
+      const card = document.createElement('section');
+      card.className = 'menu-card';
+
       const title = document.createElement('h1');
       title.className = 'screen__title';
-      title.textContent = 'Four Elements';
-      wrapper.appendChild(title);
+      title.textContent = 'Четыре элемента';
+      card.appendChild(title);
+
+      const subtitle = document.createElement('p');
+      subtitle.className = 'screen__subtitle';
+      subtitle.textContent = 'Новая чистая версия изометрической RTS';
+      card.appendChild(subtitle);
 
       const menu = document.createElement('div');
       menu.className = 'screen__menu';
 
-      const btnNewGame = createButton('New Game', () => navigate('map-size', { source: 'main-menu' }));
-      const btnContinue = createButton('Continue', () => {});
+      const btnNewGame = createButton('Новая игра', () => navigate('map-size', { source: 'main-menu' }));
+      const btnContinue = createButton('Продолжить', () => {});
       btnContinue.disabled = true;
-      const btnSettings = createButton('Settings', () => navigate('settings', null));
+      const btnSettings = createButton('Настройки', () => navigate('settings', null));
 
       menu.appendChild(btnNewGame);
       menu.appendChild(btnContinue);
       menu.appendChild(btnSettings);
-      wrapper.appendChild(menu);
+      card.appendChild(menu);
+      wrapper.appendChild(card);
 
       container.appendChild(wrapper);
     },
