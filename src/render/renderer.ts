@@ -4,7 +4,7 @@ import { BG_COLOR, HQ_FOOTPRINT } from '../core/constants.js';
 import type { MapData } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
-import type { ReadonlyEconomyState } from '../game/economy.js';
+import type { ReadonlyEconomyState } from '../systems/economy.js';
 import { renderTerrain } from './terrain.js';
 import { renderResourceNode, renderDecor } from './environment.js';
 import { renderHq, renderSeparator, renderStorage } from './buildings.js';

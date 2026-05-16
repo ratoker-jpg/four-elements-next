@@ -16,7 +16,7 @@ import {
   SEP_ELEMENT_YIELD,
   SEP_CYCLE_SECONDS,
   type EconomyState,
-} from '../../src/game/economy.js';
+} from '../../src/systems/economy.js';
 
 describe('economy constants', () => {
   it('HQ base caps are correct', () => {

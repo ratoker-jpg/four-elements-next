@@ -12,7 +12,7 @@ import {
   tickEconomy,
   type EconomyState,
   type ReadonlyEconomyState,
-} from './economy.js';
+} from '../systems/economy.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {

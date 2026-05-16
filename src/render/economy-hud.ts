@@ -1,6 +1,6 @@
 /** Economy HUD: DOM overlay showing resource counts and caps. */
 
-import type { ReadonlyEconomyState } from '../game/economy.js';
+import type { ReadonlyEconomyState } from '../systems/economy.js';
 
 /** Create the economy HUD DOM element. Returns the container and an update function. */
 export function createEconomyHud(): {
@@ -11,7 +11,7 @@ export function createEconomyHud(): {
   hud.className = 'economy-hud';
 
   const rawItem = createResourceItem('raw', 'Сырьё', '#7de1ff');
-  const matterItem = createResourceItem('matter', 'Вещество', '#5ee89a');
+  const matterItem = createResourceItem('matter', 'Материя', '#5ee89a');
   const elementItem = createResourceItem('element', 'Элемент', '#d4a5ff');
 
   hud.appendChild(rawItem.element);

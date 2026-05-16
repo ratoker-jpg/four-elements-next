@@ -34,7 +34,7 @@ test.describe('NEXT-03 economy baseline', () => {
     await navigateToGameScreen(page);
     const labels = page.locator('.economy-hud__label');
     await expect(labels.nth(0)).toHaveText('Сырьё');
-    await expect(labels.nth(1)).toHaveText('Вещество');
+    await expect(labels.nth(1)).toHaveText('Материя');
     await expect(labels.nth(2)).toHaveText('Элемент');
   });
 
