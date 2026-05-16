@@ -47,25 +47,31 @@ export const GRID_COLOR = 'rgba(0,0,0,0.06)';
 export const HQ_COLOR = '#d4a544';
 export const BG_COLOR = '#171008';
 
-// Asset manifest — paths relative to Vite public dir
+// Asset manifest — paths relative to public dir (no leading slash).
+// Resolved at runtime via assetPath() which prepends BASE_URL.
 export const ASSET_MANIFEST: Record<string, string> = {
-  terrain_sand: '/assets/tiles/sand_tile.png',
-  terrain_sand_dark: '/assets/tiles/sand_tile_dark.png',
-  terrain_sand_light: '/assets/tiles/sand_tile_light.png',
-  mineral_small: '/assets/environment/mineral_small.png',
-  mineral_medium: '/assets/environment/mineral_medium.png',
-  mineral_large: '/assets/environment/mineral_large.png',
-  mineral_infinite: '/assets/environment/mineral_infinite.png',
-  mountain_small_01: '/assets/environment/mountain_small_01.png',
-  mountain_medium_01: '/assets/environment/mountain_medium_01.png',
-  mountain_large_01: '/assets/environment/mountain_large_01.png',
-  volcano_small_01: '/assets/environment/volcano_small_01.png',
-  volcano_medium_01: '/assets/environment/volcano_medium_01.png',
-  rock_cluster_small_01: '/assets/environment/rock_cluster_small_01.png',
-  dry_bush_01: '/assets/environment/dry_bush_01.png',
-  sand_bump_01: '/assets/environment/sand_bump_01.png',
-  hq_cyan: '/assets/factions/cyan/buildings/hq_base.png',
-  hq_green: '/assets/factions/green/buildings/hq_base.png',
-  hq_yellow: '/assets/factions/yellow/buildings/hq_base.png',
-  hq_purple: '/assets/factions/purple/buildings/hq_base.png',
+  terrain_sand: 'assets/tiles/sand_tile.png',
+  terrain_sand_dark: 'assets/tiles/sand_tile_dark.png',
+  terrain_sand_light: 'assets/tiles/sand_tile_light.png',
+  mineral_small: 'assets/environment/mineral_small.png',
+  mineral_medium: 'assets/environment/mineral_medium.png',
+  mineral_large: 'assets/environment/mineral_large.png',
+  mineral_infinite: 'assets/environment/mineral_infinite.png',
+  mountain_small_01: 'assets/environment/mountain_small_01.png',
+  mountain_medium_01: 'assets/environment/mountain_medium_01.png',
+  mountain_large_01: 'assets/environment/mountain_large_01.png',
+  volcano_small_01: 'assets/environment/volcano_small_01.png',
+  volcano_medium_01: 'assets/environment/volcano_medium_01.png',
+  rock_cluster_small_01: 'assets/environment/rock_cluster_small_01.png',
+  dry_bush_01: 'assets/environment/dry_bush_01.png',
+  sand_bump_01: 'assets/environment/sand_bump_01.png',
+  hq_cyan: 'assets/factions/cyan/buildings/hq_base.png',
+  hq_green: 'assets/factions/green/buildings/hq_base.png',
+  hq_yellow: 'assets/factions/yellow/buildings/hq_base.png',
+  hq_purple: 'assets/factions/purple/buildings/hq_base.png',
 };
+
+/** Prepend Vite's BASE_URL to a public-dir-relative path. Works locally and on GitHub Pages. */
+export function assetPath(path: string): string {
+  return `${import.meta.env.BASE_URL}${path}`;
+}

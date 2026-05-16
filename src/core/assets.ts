@@ -1,14 +1,16 @@
 /** Manifest-based asset loader. Never throws; missing assets return null. */
 
+import { assetPath } from './constants.js';
+
 export class AssetStore {
   private cache = new Map<string, HTMLImageElement>();
   private pending = new Set<string>();
   private failed = new Set<string>();
 
-  /** Load all assets from a manifest. Returns a promise that resolves when all are done. */
+  /** Load all assets from a manifest. Paths are public-dir-relative; BASE_URL is prepended. */
   async loadManifest(manifest: Readonly<Record<string, string>>): Promise<void> {
     const entries = Object.entries(manifest);
-    const promises = entries.map(([key, path]) => this.loadSingle(key, path));
+    const promises = entries.map(([key, path]) => this.loadSingle(key, assetPath(path)));
     await Promise.all(promises);
   }
 
