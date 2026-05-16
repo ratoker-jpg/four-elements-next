@@ -24,7 +24,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back screen__back-btn';
-      btnBack.textContent = 'Back to Menu';
+      btnBack.textContent = 'В главное меню';
       btnBack.addEventListener('click', () => navigate('main-menu', null));
       wrapper.appendChild(btnBack);
 

@@ -1,7 +1,10 @@
 import type { Screen, ScreenTransitionData, FactionSelectData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 
-const MAP_SIZES = ['standard', 'large'] as const;
+const MAP_SIZES = [
+  { id: 'standard', label: 'Стандартная', note: '48×48 — основной размер для MVP' },
+  { id: 'large', label: 'Большая', note: 'Пока тоже 48×48, расширим позже' },
+] as const;
 
 export function createMapSizeScreen(navigate: NavigateFn): Screen {
   return {
@@ -11,10 +14,13 @@ export function createMapSizeScreen(navigate: NavigateFn): Screen {
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--map-size';
 
+      const card = document.createElement('section');
+      card.className = 'menu-card';
+
       const heading = document.createElement('h2');
       heading.className = 'screen__heading';
-      heading.textContent = 'Select Map Size';
-      wrapper.appendChild(heading);
+      heading.textContent = 'Размер карты';
+      card.appendChild(heading);
 
       const menu = document.createElement('div');
       menu.className = 'screen__menu';
@@ -22,9 +28,9 @@ export function createMapSizeScreen(navigate: NavigateFn): Screen {
       for (const size of MAP_SIZES) {
         const btn = document.createElement('button');
         btn.className = 'btn';
-        btn.textContent = size.charAt(0).toUpperCase() + size.slice(1);
+        btn.innerHTML = `<span>${size.label}</span><small>${size.note}</small>`;
         btn.addEventListener('click', () => {
-          const data: FactionSelectData = { mapSize: size };
+          const data: FactionSelectData = { mapSize: size.id };
           navigate('faction-select', data);
         });
         menu.appendChild(btn);
@@ -32,11 +38,12 @@ export function createMapSizeScreen(navigate: NavigateFn): Screen {
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back';
-      btnBack.textContent = 'Back';
+      btnBack.textContent = 'Назад';
       btnBack.addEventListener('click', () => navigate('main-menu', null));
       menu.appendChild(btnBack);
 
-      wrapper.appendChild(menu);
+      card.appendChild(menu);
+      wrapper.appendChild(card);
       container.appendChild(wrapper);
     },
 
