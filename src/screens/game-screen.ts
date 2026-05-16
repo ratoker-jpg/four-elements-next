@@ -1,13 +1,14 @@
 import type { Screen, ScreenTransitionData, GameScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
+import { GameWorld } from '../game/game-world.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
-  let cleanup: (() => void) | null = null;
+  let gameWorld: GameWorld | null = null;
 
   return {
     id: 'game-screen',
 
-    mount(container: HTMLElement, data: ScreenTransitionData): void {
+    async mount(container: HTMLElement, data: ScreenTransitionData): Promise<void> {
       const gameData = data as GameScreenData | null;
       const mapSize = gameData?.mapSize ?? 'standard';
       const faction = gameData?.faction ?? 'cyan';
@@ -18,12 +19,8 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       const canvas = document.createElement('canvas');
       canvas.className = 'screen__canvas';
       canvas.id = 'game-canvas';
+      canvas.style.cursor = 'grab';
       wrapper.appendChild(canvas);
-
-      const overlay = document.createElement('div');
-      overlay.className = 'screen__overlay';
-      overlay.textContent = `Game Screen Placeholder — Map: ${mapSize}, Faction: ${faction}`;
-      wrapper.appendChild(overlay);
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back screen__back-btn';
@@ -33,34 +30,17 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       container.appendChild(wrapper);
 
-      resizeCanvas(canvas);
-      drawPlaceholder(canvas);
-
-      const onResize = () => {
-        resizeCanvas(canvas);
-        drawPlaceholder(canvas);
-      };
-      window.addEventListener('resize', onResize);
-      cleanup = () => window.removeEventListener('resize', onResize);
+      gameWorld = new GameWorld(canvas, mapSize, faction);
+      await gameWorld.init();
+      gameWorld.start();
+      wrapper.dataset.ready = 'true';
     },
 
     unmount(): void {
-      if (cleanup) {
-        cleanup();
-        cleanup = null;
+      if (gameWorld) {
+        gameWorld.destroy();
+        gameWorld = null;
       }
     },
   };
-}
-
-function resizeCanvas(canvas: HTMLCanvasElement): void {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-
-function drawPlaceholder(canvas: HTMLCanvasElement): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }

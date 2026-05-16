@@ -33,6 +33,7 @@ export class ScreenManager {
       throw new Error(`Unknown screen: ${id}`);
     }
     this.current = next;
-    next.mount(this.container, data);
+    // Fire-and-forget: async mount may load assets; UI is non-blocking
+    void next.mount(this.container, data);
   }
 }
