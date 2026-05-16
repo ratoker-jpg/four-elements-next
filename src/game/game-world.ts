@@ -1,58 +1,32 @@
-/** GameWorld: owns render loop, camera, map, assets, economy, power, control, and input for the game screen. */
+/** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST, MAP_SIZE_STANDARD, MAP_SIZE_LARGE } from '../core/constants.js';
+import { ASSET_MANIFEST } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
-import { generateMap } from './mapgen.js';
-import type { MapData, FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
+import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
+import type { GameState } from './game-state.js';
+import { createGameState } from './game-state.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
 import {
-  createEconomyState,
-  tickEconomy,
   getFactionElement,
-  applyCompletedBuildingToEconomy,
-  getSeparatorPositions,
-  getStorageCount,
-  type EconomyState,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
-import {
-  createPowerState,
-  tickPower,
-  isBuildingOnline,
-  addBuildingToPowerState,
-  type PowerState,
-  type ReadonlyPowerState,
-} from '../systems/power.js';
-import {
-  createControlState,
-  tickControl,
-  type ControlState,
-  type ReadonlyControlState,
-} from '../systems/control.js';
+import type { ReadonlyPowerState } from '../systems/power.js';
+import type { ReadonlyControlState } from '../systems/control.js';
 import { BUILDING_DEFINITIONS } from '../config/buildings.js';
 import {
-  BUILDER_CONTROL_COST,
-  startConstruction,
-  tickConstruction,
+  startConstruction as startConstructionSystem,
   type ConstructionCommandResult,
 } from '../systems/construction.js';
-
-/** Map the UI map-size string to a grid dimension. */
-function resolveMapSize(mapSize: string): number {
-  return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
-}
+import { runSystems } from '../systems/system-runner.js';
 
 export class GameWorld {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private camera: Camera;
-  private map: MapData;
+  private state: GameState;
   private assets: AssetStore;
-  private economy: EconomyState;
-  private power: PowerState;
-  private control: ControlState;
   private animFrameId: number | null = null;
   private lastTime = 0;
   private keys = new Set<string>();
@@ -61,7 +35,6 @@ export class GameWorld {
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
-  private constructionStatusMessage = 'Строитель готов к строительству.';
 
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
   onPowerUpdate?: (state: ReadonlyPowerState) => void;
@@ -87,31 +60,10 @@ export class GameWorld {
     if (!ctx) throw new Error('Cannot get 2D context');
     this.ctx = ctx;
 
-    const factions: FactionId[] = ['cyan', 'green', 'yellow', 'purple'];
-    const resolvedFaction: FactionId = faction === 'random'
-      ? factions[Math.floor(Math.random() * factions.length)]!
-      : faction;
-
-    const size = resolveMapSize(mapSize);
+    this.state = createGameState(mapSize, faction);
     this.assets = new AssetStore();
-    this.map = generateMap(size, size, resolvedFaction);
 
-    const separatorPositions = getSeparatorPositions(this.map.buildings);
-    const storageCount = getStorageCount(this.map.buildings);
-    this.economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
-
-    this.power = createPowerState(this.map.hq, this.map.buildings);
-
-    const relayOnlineCount = this.power.buildings.filter(
-      (b) => b.type === 'command-relay' && b.online,
-    ).length;
-    this.control = createControlState(
-      this.map.buildings.filter((b) => b.type === 'command-relay').length,
-      relayOnlineCount,
-      this.map.builders.length * BUILDER_CONTROL_COST,
-    );
-
-    const hqScreen = tileToScreen(this.map.hq.tx + 1.5, this.map.hq.ty + 1.5);
+    const hqScreen = tileToScreen(this.state.map.hq.tx + 1.5, this.state.map.hq.ty + 1.5);
     this.camera = new Camera(hqScreen.x, hqScreen.y);
 
     this.boundKeyDown = this.onKeyDown.bind(this);
@@ -175,19 +127,19 @@ export class GameWorld {
     }
   }
 
-  getEconomyState(): ReadonlyEconomyState { return this.economy; }
-  getPowerState(): ReadonlyPowerState { return this.power; }
-  getControlState(): ReadonlyControlState { return this.control; }
+  getEconomyState(): ReadonlyEconomyState { return this.state.economy; }
+  getPowerState(): ReadonlyPowerState { return this.state.power; }
+  getControlState(): ReadonlyControlState { return this.state.control; }
 
   startConstruction(buildingType: BuildingType): ConstructionCommandResult {
-    const result = startConstruction(this.map, this.economy, buildingType);
-    this.constructionStatusMessage = this.resolveConstructionMessage(result);
+    const result = startConstructionSystem(this.state.map, this.state.economy, buildingType);
+    this.state.constructionStatusMessage = this.resolveConstructionMessage(result);
     this.publishUiState();
     return result;
   }
 
   private debugSetMatter(value: number): void {
-    this.economy.resources.matter = Math.max(0, Math.min(value, this.economy.resources.matterCap));
+    this.state.economy.resources.matter = Math.max(0, Math.min(value, this.state.economy.resources.matterCap));
     this.publishUiState();
   }
 
@@ -199,7 +151,7 @@ export class GameWorld {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.map, this.camera, this.assets, this.economy, this.power);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power);
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -212,26 +164,7 @@ export class GameWorld {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
 
-    const constructionResult = tickConstruction(this.map, dt);
-    for (const building of constructionResult.completedBuildings) {
-      applyCompletedBuildingToEconomy(this.economy, building);
-      addBuildingToPowerState(this.power, building);
-      const definition = BUILDING_DEFINITIONS[building.type];
-      this.constructionStatusMessage = `${definition.label} построен. Строитель свободен.`;
-    }
-
-    tickPower(this.power);
-
-    const relayOnlineCount = this.power.buildings.filter(
-      (b) => b.type === 'command-relay' && b.online,
-    ).length;
-    tickControl(this.control, relayOnlineCount);
-
-    const separatorOnlineMap = new Map<string, boolean>();
-    for (const sep of this.economy.separators) {
-      separatorOnlineMap.set(`${sep.tx},${sep.ty}`, isBuildingOnline(this.power, sep.tx, sep.ty));
-    }
-    tickEconomy(this.economy, dt, separatorOnlineMap);
+    runSystems(this.state, dt);
 
     this.publishUiState();
 
@@ -239,14 +172,14 @@ export class GameWorld {
   }
 
   private publishUiState(): void {
-    this.onEconomyUpdate?.(this.economy);
-    this.onPowerUpdate?.(this.power);
-    this.onControlUpdate?.(this.control);
+    this.onEconomyUpdate?.(this.state.economy);
+    this.onPowerUpdate?.(this.state.power);
+    this.onControlUpdate?.(this.state.control);
     this.onConstructionUpdate?.({
-      builderBusy: this.map.builders.some((builder) => builder.busy),
-      matter: this.economy.resources.matter,
-      statusMessage: this.constructionStatusMessage,
-      sites: this.map.constructionSites,
+      builderBusy: this.state.map.builders.some((builder) => builder.busy),
+      matter: this.state.economy.resources.matter,
+      statusMessage: this.state.constructionStatusMessage,
+      sites: this.state.map.constructionSites,
     });
   }
 
@@ -255,15 +188,15 @@ export class GameWorld {
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__economyState = {
-      faction: this.economy.faction,
-      raw: this.economy.resources.raw,
-      matter: this.economy.resources.matter,
-      elements: { ...this.economy.resources.elements },
-      activeElement: getFactionElement(this.economy, this.economy.faction),
-      rawCap: this.economy.resources.rawCap,
-      matterCap: this.economy.resources.matterCap,
-      elementCap: this.economy.resources.elementCap,
-      separators: this.economy.separators.map((s) => ({
+      faction: this.state.economy.faction,
+      raw: this.state.economy.resources.raw,
+      matter: this.state.economy.resources.matter,
+      elements: { ...this.state.economy.resources.elements },
+      activeElement: getFactionElement(this.state.economy, this.state.economy.faction),
+      rawCap: this.state.economy.resources.rawCap,
+      matterCap: this.state.economy.resources.matterCap,
+      elementCap: this.state.economy.resources.elementCap,
+      separators: this.state.economy.separators.map((s) => ({
         tx: s.tx,
         ty: s.ty,
         progress: s.progress,
@@ -272,10 +205,10 @@ export class GameWorld {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__powerState = {
-      totalSupply: this.power.totalSupply,
-      totalDemand: this.power.totalDemand,
-      netPower: this.power.netPower,
-      buildings: this.power.buildings.map((b) => ({
+      totalSupply: this.state.power.totalSupply,
+      totalDemand: this.state.power.totalDemand,
+      netPower: this.state.power.netPower,
+      buildings: this.state.power.buildings.map((b) => ({
         tx: b.tx,
         ty: b.ty,
         type: b.type,
@@ -284,25 +217,25 @@ export class GameWorld {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__controlState = {
-      current: this.control.current,
-      cap: this.control.cap,
-      used: this.control.used,
+      current: this.state.control.current,
+      cap: this.state.control.cap,
+      used: this.state.control.used,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__constructionState = {
-      builderBusy: this.map.builders.some((builder) => builder.busy),
-      builders: this.map.builders.map((builder) => ({
+      builderBusy: this.state.map.builders.some((builder) => builder.busy),
+      builders: this.state.map.builders.map((builder) => ({
         tx: builder.tx,
         ty: builder.ty,
         busy: builder.busy,
       })),
-      sites: this.map.constructionSites.map((site) => ({
+      sites: this.state.map.constructionSites.map((site) => ({
         tx: site.tx,
         ty: site.ty,
         type: site.type,
         progress: site.progress,
       })),
-      statusMessage: this.constructionStatusMessage,
+      statusMessage: this.state.constructionStatusMessage,
     };
 
     if (import.meta.env.MODE === 'test') {
