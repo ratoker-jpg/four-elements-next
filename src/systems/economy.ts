@@ -105,16 +105,17 @@ export function createEconomyState(
 /**
  * Advance the economy by `dt` seconds.
  *
- * For each separator:
- * - If there is enough Raw and both output caps have room → active, progress accumulates.
- * - When progress >= 1 → consume Raw, add Matter + faction Element, reset progress.
- * - If preconditions fail → idle (progress pauses, does not reset).
+ * @param separatorOnlineMap - Map of "tx,ty" → boolean for separator power status.
+ *   Only online separators can convert. Offline separators pause progress.
  */
-export function tickEconomy(state: EconomyState, dt: number): void {
+export function tickEconomy(state: EconomyState, dt: number, separatorOnlineMap?: ReadonlyMap<string, boolean>): void {
   const r = state.resources;
   const faction = state.faction;
   for (const sep of state.separators) {
+    // Check power status — offline separators cannot convert
+    const isOnline = separatorOnlineMap?.get(`${sep.tx},${sep.ty}`) ?? true;
     const canConvert =
+      isOnline &&
       r.raw >= SEP_RAW_COST &&
       r.matter + SEP_MATTER_YIELD <= r.matterCap &&
       r.elements[faction] + SEP_ELEMENT_YIELD <= r.elementCap;

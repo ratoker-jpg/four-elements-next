@@ -1,4 +1,4 @@
-/** GameWorld: owns render loop, camera, map, assets, economy, and input for the game screen. */
+/** GameWorld: owns render loop, camera, map, assets, economy, power, control, and input for the game screen. */
 
 import { ASSET_MANIFEST, MAP_SIZE_STANDARD, MAP_SIZE_LARGE } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
@@ -14,11 +14,22 @@ import {
   type EconomyState,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
+import {
+  createPowerState,
+  tickPower,
+  isBuildingOnline,
+  type PowerState,
+  type ReadonlyPowerState,
+} from '../systems/power.js';
+import {
+  createControlState,
+  tickControl,
+  type ControlState,
+  type ReadonlyControlState,
+} from '../systems/control.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
-  // NOTE(NEXT-03+): MAP_SIZE_LARGE is currently the same as MAP_SIZE_STANDARD (48×48).
-  // Differentiate in a future step.
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
 }
 
@@ -29,6 +40,8 @@ export class GameWorld {
   private map: MapData;
   private assets: AssetStore;
   private economy: EconomyState;
+  private power: PowerState;
+  private control: ControlState;
   private animFrameId: number | null = null;
   private lastTime: number = 0;
   private keys = new Set<string>();
@@ -38,8 +51,10 @@ export class GameWorld {
   private camPanStartX = 0;
   private camPanStartY = 0;
 
-  /** Callback invoked each frame with the current economy state (for HUD updates). */
+  /** Callbacks invoked each frame for HUD updates. */
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
+  onPowerUpdate?: (state: ReadonlyPowerState) => void;
+  onControlUpdate?: (state: ReadonlyControlState) => void;
 
   // Bound handlers for cleanup
   private boundKeyDown: (e: KeyboardEvent) => void;
@@ -72,6 +87,18 @@ export class GameWorld {
       .map((b) => ({ tx: b.tx, ty: b.ty }));
     const storageCount = this.map.buildings.filter((b) => b.type === 'storage').length;
     this.economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
+
+    // Build power state from buildings + HQ
+    this.power = createPowerState(this.map.hq, this.map.buildings);
+
+    // Build control state from online Command Relays
+    const relayOnlineCount = this.power.buildings.filter(
+      (b) => b.type === 'command-relay' && b.online,
+    ).length;
+    this.control = createControlState(
+      this.map.buildings.filter((b) => b.type === 'command-relay').length,
+      relayOnlineCount,
+    );
 
     const hqScreen = tileToScreen(
       this.map.hq.tx + 1.5,
@@ -125,18 +152,22 @@ export class GameWorld {
     delete (window as any).__cameraPos;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__economyState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__powerState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__controlState;
   }
 
-  /** Read-only economy state accessor (for HUD and tests). */
-  getEconomyState(): ReadonlyEconomyState {
-    return this.economy;
-  }
+  /** Read-only accessors for HUD and tests. */
+  getEconomyState(): ReadonlyEconomyState { return this.economy; }
+  getPowerState(): ReadonlyPowerState { return this.power; }
+  getControlState(): ReadonlyControlState { return this.control; }
 
   private loop(now: number): void {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.map, this.camera, this.assets, this.economy);
+    render(this.ctx, this.map, this.camera, this.assets, this.economy, this.power);
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -150,11 +181,26 @@ export class GameWorld {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
 
-    // Economy tick
-    tickEconomy(this.economy, dt);
+    // Power tick
+    tickPower(this.power);
 
-    // Notify HUD
+    // Control tick — recalculate based on online relays
+    const relayOnlineCount = this.power.buildings.filter(
+      (b) => b.type === 'command-relay' && b.online,
+    ).length;
+    tickControl(this.control, relayOnlineCount);
+
+    // Economy tick — build separator online map from power state
+    const separatorOnlineMap = new Map<string, boolean>();
+    for (const sep of this.economy.separators) {
+      separatorOnlineMap.set(`${sep.tx},${sep.ty}`, isBuildingOnline(this.power, sep.tx, sep.ty));
+    }
+    tickEconomy(this.economy, dt, separatorOnlineMap);
+
+    // Notify HUDs
     this.onEconomyUpdate?.(this.economy);
+    this.onPowerUpdate?.(this.power);
+    this.onControlUpdate?.(this.control);
 
     // Expose testing hooks (cleaned up in destroy)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -175,6 +221,24 @@ export class GameWorld {
         progress: s.progress,
         active: s.active,
       })),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__powerState = {
+      totalSupply: this.power.totalSupply,
+      totalDemand: this.power.totalDemand,
+      netPower: this.power.netPower,
+      buildings: this.power.buildings.map((b) => ({
+        tx: b.tx,
+        ty: b.ty,
+        type: b.type,
+        online: b.online,
+      })),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__controlState = {
+      current: this.control.current,
+      cap: this.control.cap,
+      used: this.control.used,
     };
   }
 

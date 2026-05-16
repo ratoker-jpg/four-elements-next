@@ -157,14 +157,38 @@ describe('tickEconomy', () => {
     expect(state.resources.matter).toBe(110);
     expect(state.resources.elements.cyan).toBe(4);
   });
+  it('separator pauses when offline (power deficit)', () => {
+    const state = createStateWithRaw(15);
+    const offlineMap = new Map<string, boolean>([['7,4', false]]);
+    tickEconomy(state, 1, offlineMap);
+    expect(state.separators[0]!.active).toBe(false);
+    expect(state.separators[0]!.progress).toBe(0);
+  });
+
+  it('separator works when online map says true', () => {
+    const state = createStateWithRaw(15);
+    const onlineMap = new Map<string, boolean>([['7,4', true]]);
+    tickEconomy(state, 1, onlineMap);
+    expect(state.separators[0]!.active).toBe(true);
+    expect(state.separators[0]!.progress).toBeGreaterThan(0);
+  });
+
+  it('separator defaults to online when no map provided', () => {
+    const state = createStateWithRaw(15);
+    tickEconomy(state, 1);
+    expect(state.separators[0]!.active).toBe(true);
+  });
 });
 
 describe('mapgen integration — buildings in MapData', () => {
-  it('generated map has one separator and one storage', async () => {
+  it('generated map has one of each building type', async () => {
     const { generateMap } = await import('../../src/game/mapgen.js');
     const map = generateMap(48, 48, 'cyan');
     expect(map.buildings.filter((b) => b.type === 'separator')).toHaveLength(1);
     expect(map.buildings.filter((b) => b.type === 'storage')).toHaveLength(1);
+    expect(map.buildings.filter((b) => b.type === 'power-plant')).toHaveLength(1);
+    expect(map.buildings.filter((b) => b.type === 'command-relay')).toHaveLength(1);
+    expect(map.buildings).toHaveLength(4);
   });
 
   it('buildings are placed adjacent to HQ and do not overlap resources', async () => {
@@ -173,11 +197,17 @@ describe('mapgen integration — buildings in MapData', () => {
     const map = generateMap(48, 48, 'cyan');
     const sep = map.buildings.find((b) => b.type === 'separator')!;
     const sto = map.buildings.find((b) => b.type === 'storage')!;
+    const pp = map.buildings.find((b) => b.type === 'power-plant')!;
+    const cr = map.buildings.find((b) => b.type === 'command-relay')!;
 
     expect(sep.tx).toBe(map.hq.tx + HQ_FOOTPRINT);
     expect(sep.ty).toBe(map.hq.ty);
     expect(sto.tx).toBe(sep.tx);
     expect(sto.ty).toBe(sep.ty + 1);
+    expect(pp.tx).toBe(map.hq.tx + 1);
+    expect(pp.ty).toBe(map.hq.ty + HQ_FOOTPRINT);
+    expect(cr.tx).toBe(pp.tx + 1);
+    expect(cr.ty).toBe(pp.ty);
 
     for (const b of map.buildings) {
       const overlap = map.resources.some((r) => r.tx === b.tx && r.ty === b.ty);

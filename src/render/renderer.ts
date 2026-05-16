@@ -5,9 +5,11 @@ import type { MapData } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
+import type { ReadonlyPowerState } from '../systems/power.js';
+import { isBuildingOnline } from '../systems/power.js';
 import { renderTerrain } from './terrain.js';
 import { renderResourceNode, renderDecor } from './environment.js';
-import { renderHq, renderSeparator, renderStorage } from './buildings.js';
+import { renderHq, renderSeparator, renderStorage, renderPowerPlant, renderCommandRelay } from './buildings.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -21,6 +23,7 @@ export function render(
   camera: Camera,
   assets: AssetStore,
   economy: ReadonlyEconomyState,
+  power: ReadonlyPowerState,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -37,18 +40,31 @@ export function render(
   const entities: SortedEntity[] = [];
   entities.push({ sortKey: hqSortKey, render: () => renderHq(ctx, map.hq, camera, assets) });
 
-  // Buildings (Separator, Storage) — 1×1 footprint
+  // Buildings — 1×1 footprint
   for (const b of map.buildings) {
-    const sepState = economy.separators.find((s) => s.tx === b.tx && s.ty === b.ty);
-    if (b.type === 'separator' && sepState) {
+    const online = isBuildingOnline(power, b.tx, b.ty);
+    if (b.type === 'separator') {
+      const sepState = economy.separators.find((s) => s.tx === b.tx && s.ty === b.ty);
+      const active = online && (sepState?.active ?? false);
+      const progress = sepState?.progress ?? 0;
       entities.push({
         sortKey: b.tx + b.ty,
-        render: () => renderSeparator(ctx, b.tx, b.ty, camera, sepState.active, sepState.progress),
+        render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online),
       });
     } else if (b.type === 'storage') {
       entities.push({
         sortKey: b.tx + b.ty,
-        render: () => renderStorage(ctx, b.tx, b.ty, camera),
+        render: () => renderStorage(ctx, b.tx, b.ty, camera, online),
+      });
+    } else if (b.type === 'power-plant') {
+      entities.push({
+        sortKey: b.tx + b.ty,
+        render: () => renderPowerPlant(ctx, b.tx, b.ty, camera, online),
+      });
+    } else if (b.type === 'command-relay') {
+      entities.push({
+        sortKey: b.tx + b.ty,
+        render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online),
       });
     }
   }

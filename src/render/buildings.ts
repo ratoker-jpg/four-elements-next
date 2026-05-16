@@ -1,4 +1,4 @@
-/** Building rendering: faction HQ, Separator, Storage with sprite or geometric fallback. */
+/** Building rendering: faction HQ, Separator, Storage, Power Plant, Command Relay with geometric fallbacks. */
 
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
@@ -13,9 +13,78 @@ const HQ_ASSET_KEYS: Record<FactionId, string> = {
   purple: 'hq_purple',
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/** Dim a hex color by multiplying RGB channels by a factor (0..1). */
+function dimColor(hex: string, factor: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const dr = Math.round(r * factor);
+  const dg = Math.round(g * factor);
+  const db = Math.round(b * factor);
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`;
+}
+
+function drawIsoBox(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, z: number,
+  rightFace: string, leftFace: string, topFace: string,
+  bHeight: number, label: string, online: boolean,
+): void {
+  const hw = (TILE_W / 2) * z;
+  const hh = (TILE_H / 2) * z;
+  const dim = online ? 1 : 0.45;
+
+  // Right face
+  ctx.beginPath();
+  ctx.moveTo(cx + hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx, cy + hh - bHeight);
+  ctx.lineTo(cx + hw, cy - bHeight);
+  ctx.closePath();
+  ctx.fillStyle = dimColor(rightFace, dim);
+  ctx.fill();
+  ctx.strokeStyle = dimColor('#000000', dim);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Left face
+  ctx.beginPath();
+  ctx.moveTo(cx - hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx, cy + hh - bHeight);
+  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.closePath();
+  ctx.fillStyle = dimColor(leftFace, dim);
+  ctx.fill();
+  ctx.strokeStyle = dimColor('#000000', dim);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Top face
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - bHeight - hh);
+  ctx.lineTo(cx + hw, cy - bHeight);
+  ctx.lineTo(cx, cy - bHeight + hh);
+  ctx.lineTo(cx - hw, cy - bHeight);
+  ctx.closePath();
+  ctx.fillStyle = dimColor(topFace, dim);
+  ctx.fill();
+  ctx.strokeStyle = GRID_COLOR;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Label
+  ctx.fillStyle = online ? '#1a1a1a' : '#555';
+  ctx.font = `${7 * z}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, cx, cy - bHeight);
+}
+
 // ── HQ ───────────────────────────────────────────────────────────────
 
-/** Render the faction HQ with sprite or isometric-box fallback. */
 export function renderHq(
   ctx: CanvasRenderingContext2D,
   hq: HqPlacement,
@@ -100,167 +169,124 @@ function renderHqFallback(
 
 // ── Separator ────────────────────────────────────────────────────────
 
-/** Render a Separator building with progress bar overlay. */
 export function renderSeparator(
   ctx: CanvasRenderingContext2D,
-  tx: number,
-  ty: number,
+  tx: number, ty: number,
   camera: Camera,
   active: boolean,
   progress: number,
+  online: boolean,
 ): void {
   const scr = tileToScreen(tx + 0.5, ty + 0.5);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  renderSeparatorFallback(ctx, cv.x, cv.y, z, active, progress);
-}
 
-function renderSeparatorFallback(
-  ctx: CanvasRenderingContext2D,
-  cx: number, cy: number,
-  z: number,
-  active: boolean,
-  progress: number,
-): void {
-  const hw = (TILE_W / 2) * z;
-  const hh = (TILE_H / 2) * z;
   const bHeight = 12 * z;
+  drawIsoBox(ctx, cv.x, cv.y, z,
+    '#3a6b8c', '#2c5570', active ? '#4a9ac2' : '#3a7a9a',
+    bHeight, 'SEP', online);
 
-  // Right face
-  ctx.beginPath();
-  ctx.moveTo(cx + hw, cy);
-  ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = '#3a6b8c';
-  ctx.fill();
-  ctx.strokeStyle = '#1e4a6a';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Left face
-  ctx.beginPath();
-  ctx.moveTo(cx - hw, cy);
-  ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx - hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = '#2c5570';
-  ctx.fill();
-  ctx.strokeStyle = '#163d55';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Top face
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - bHeight - hh);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.lineTo(cx, cy - bHeight + hh);
-  ctx.lineTo(cx - hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = active ? '#4a9ac2' : '#3a7a9a';
-  ctx.fill();
-  ctx.strokeStyle = GRID_COLOR;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Progress bar (only visible when progress > 0)
-  if (progress > 0) {
+  // Progress bar (only visible when progress > 0 and online)
+  if (online && progress > 0) {
     const barW = 24 * z;
     const barH = 4 * z;
-    const barX = cx - barW / 2;
-    const barY = cy - bHeight - hh - 8 * z;
+    const barX = cv.x - barW / 2;
+    const barY = cv.y - bHeight - ((TILE_H / 2) * z) - 8 * z;
 
-    // Background
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(barX, barY, barW, barH);
 
-    // Fill
     ctx.fillStyle = active ? '#5ee89a' : '#888';
     ctx.fillRect(barX, barY, barW * Math.min(progress, 1), barH);
 
-    // Border
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, barH);
   }
 
-  // Label
-  ctx.fillStyle = '#1a3a4a';
-  ctx.font = `${7 * z}px "Segoe UI", system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('SEP', cx, cy - bHeight);
+  // Offline indicator
+  if (!online) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFF', cv.x, cv.y - bHeight - 10 * z);
+  }
 }
 
 // ── Storage ──────────────────────────────────────────────────────────
 
-/** Render a Storage building. */
 export function renderStorage(
   ctx: CanvasRenderingContext2D,
-  tx: number,
-  ty: number,
+  tx: number, ty: number,
   camera: Camera,
+  online: boolean,
 ): void {
   const scr = tileToScreen(tx + 0.5, ty + 0.5);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  renderStorageFallback(ctx, cv.x, cv.y, z);
+
+  drawIsoBox(ctx, cv.x, cv.y, z,
+    '#6b5a3a', '#554828', '#8b7a50',
+    10 * z, 'STO', online);
+
+  if (!online) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFF', cv.x, cv.y - 10 * z - 10 * z);
+  }
 }
 
-function renderStorageFallback(
+// ── Power Plant ──────────────────────────────────────────────────────
+
+export function renderPowerPlant(
   ctx: CanvasRenderingContext2D,
-  cx: number, cy: number,
-  z: number,
+  tx: number, ty: number,
+  camera: Camera,
+  online: boolean,
 ): void {
-  const hw = (TILE_W / 2) * z;
-  const hh = (TILE_H / 2) * z;
-  const bHeight = 10 * z;
+  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
 
-  // Right face
-  ctx.beginPath();
-  ctx.moveTo(cx + hw, cy);
-  ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = '#6b5a3a';
-  ctx.fill();
-  ctx.strokeStyle = '#4a3d25';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Power Plant is always online (immune), but keep consistent API
+  drawIsoBox(ctx, cv.x, cv.y, z,
+    '#5a8c3a', '#487028', online ? '#7ac24a' : '#5a9a3a',
+    14 * z, 'PWR', online);
 
-  // Left face
-  ctx.beginPath();
-  ctx.moveTo(cx - hw, cy);
-  ctx.lineTo(cx, cy + hh);
-  ctx.lineTo(cx, cy + hh - bHeight);
-  ctx.lineTo(cx - hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = '#554828';
-  ctx.fill();
-  ctx.strokeStyle = '#3a3018';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Lightning bolt indicator
+  if (online) {
+    ctx.fillStyle = '#ffff44';
+    ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('\u26A1', cv.x, cv.y - 14 * z - 10 * z);
+  }
+}
 
-  // Top face
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - bHeight - hh);
-  ctx.lineTo(cx + hw, cy - bHeight);
-  ctx.lineTo(cx, cy - bHeight + hh);
-  ctx.lineTo(cx - hw, cy - bHeight);
-  ctx.closePath();
-  ctx.fillStyle = '#8b7a50';
-  ctx.fill();
-  ctx.strokeStyle = GRID_COLOR;
-  ctx.lineWidth = 1;
-  ctx.stroke();
+// ── Command Relay ────────────────────────────────────────────────────
 
-  // Label
-  ctx.fillStyle = '#2a1e0a';
-  ctx.font = `${7 * z}px "Segoe UI", system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('STO', cx, cy - bHeight);
+export function renderCommandRelay(
+  ctx: CanvasRenderingContext2D,
+  tx: number, ty: number,
+  camera: Camera,
+  online: boolean,
+): void {
+  const scr = tileToScreen(tx + 0.5, ty + 0.5);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+
+  drawIsoBox(ctx, cv.x, cv.y, z,
+    '#6a3a8c', '#552870', online ? '#8a4ac2' : '#6a3a9a',
+    11 * z, 'CMD', online);
+
+  if (!online) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFF', cv.x, cv.y - 11 * z - 10 * z);
+  }
 }

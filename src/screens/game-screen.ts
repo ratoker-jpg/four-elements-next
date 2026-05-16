@@ -23,7 +23,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       canvas.style.cursor = 'grab';
       wrapper.appendChild(canvas);
 
-      // Economy HUD overlay
+      // Economy + Power + Control HUD overlay
       const hud = createEconomyHud();
       hud.element.id = 'economy-hud';
       wrapper.appendChild(hud.element);
@@ -39,8 +39,10 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       const world = new GameWorld(canvas, mapSize, faction);
       gameWorld = world;
 
-      // Wire economy HUD updates
-      world.onEconomyUpdate = (state) => hud.update(state);
+      // Wire HUD updates
+      world.onEconomyUpdate = (state) => hud.updateEconomy(state);
+      world.onPowerUpdate = (state) => hud.updatePower(state);
+      world.onControlUpdate = (state) => hud.updateControl(state);
 
       void world.init().then(() => {
         if (gameWorld !== world) return; // unmount already destroyed this world
