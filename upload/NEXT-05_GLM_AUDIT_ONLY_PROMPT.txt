@@ -1,0 +1,203 @@
+TASK: NEXT-05 — Builder + Construction Foundation / Phase 1 Audit Only
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Mode:
+PHASE 1 AUDIT ONLY.
+Do not edit files.
+Do not create branches.
+Do not commit.
+Do not open PR.
+Do not implement code.
+Return audit only.
+Finish exactly with: Жду Делай
+
+Current status:
+- NEXT-01 merged: Vite + TypeScript + menu flow.
+- NEXT-02 merged: visual isometric map, camera, HQ, resources, decor.
+- DEPLOY-01 merged: GitHub Pages deployment.
+- UI-01 merged: Russian UI/menu polish.
+- NEXT-03 merged: Raw / Matter / Element economy + Separator + Storage + HUD.
+- NEXT-03A merged: four faction elements stored internally; HUD shows active faction element.
+- NEXT-04 merged: Power + Control foundation; Power Plant + Command Relay pre-placed; HUD shows Энергия + Контроль; Separator pauses when offline.
+- Public URL works: https://ratoker-jpg.github.io/four-elements-next/
+
+NEXT-05 goal:
+Add Builder + Construction foundation.
+
+Important:
+This is the first real player action system.
+Keep it small and clean.
+No harvester yet.
+No production yet.
+No combat.
+
+Approved product direction:
+- Builder constructs civil buildings.
+- Player should select a building type from a build menu.
+- Player should NOT manually place exact tile in MVP.
+- System should auto-place near Builder/HQ according to rules.
+- Construction costs Matter.
+- Construction should update map buildings and derived systems:
+  - economy caps when Storage is completed;
+  - power state when Power Plant / Command Relay / Separator are completed;
+  - control state when Command Relay is completed and online.
+- Construction sites should be visually clear and block future placement.
+- Occupancy foundation should exist, but pathfinding/unit movement can be deferred if needed.
+
+Available civil buildings from current roadmap:
+- Separator
+- Storage
+- Power Plant
+- Command Relay
+
+Potential costs/times to audit and recommend:
+- Separator: 80 Matter, 25s
+- Storage: 100 Matter, 20s
+- Power Plant: 120 Matter, 25s
+- Command Relay: 90 Matter, 18s
+These are proposed numbers; audit may adjust.
+
+Strict NEXT-05 scope:
+IN SCOPE:
+- Builder unit representation.
+- Initial pre-placed Builder near HQ.
+- Build menu in Russian.
+- Building definitions/config for buildable civil buildings.
+- Construction command validation.
+- Auto-placement algorithm.
+- Construction site state.
+- Construction progress.
+- Completing construction adds real building to map.
+- Matter spending/refund policy audit must decide.
+- Occupancy/placement validation for HQ, existing buildings, resources, decor if needed.
+- HUD/menu feedback for insufficient Matter / no place found.
+- Unit tests for placement, validation, cost, progress.
+- E2E tests for building at least one building from menu.
+
+OUT OF SCOPE:
+- no harvester gathering;
+- no unit production;
+- no Units Factory;
+- no combat;
+- no AI;
+- no fog;
+- no territory;
+- no save/load;
+- no multi-builder coordination unless trivial;
+- no manual tile placement;
+- no pathfinding unless absolutely required for auto-placement;
+- no new assets unless audit explicitly justifies builder asset reuse; prefer geometric fallback if possible.
+
+Important architecture guardrails:
+- GameWorld must not become a monolith.
+- Strongly consider introducing a central GameState/WorldState object if needed.
+- Construction logic must live in src/systems/construction.ts.
+- Build definitions should live in src/config/buildings.ts or equivalent.
+- Builder data/types should be separate from rendering.
+- Render reads state only.
+- HUD/build menu reads state and sends commands only.
+- Screens remain mount/unmount only.
+- No window.FE_* globals.
+- No copied Sandbox runtime.
+- No FE_PATCH patterns.
+
+Critical audit question:
+GameWorld is already holding camera/map/assets/economy/power/control/input/test hooks.
+NEXT-05 must decide whether to:
+A) keep small additions in GameWorld for one more step;
+B) introduce GameState/WorldState and system runner before construction;
+C) split input/HUD systems first.
+Recommend the safest path.
+
+Current systems to inspect:
+- src/game/game-world.ts
+- src/game/map-types.ts
+- src/game/mapgen.ts
+- src/systems/economy.ts
+- src/systems/power.ts
+- src/systems/control.ts
+- src/render/renderer.ts
+- src/render/buildings.ts
+- src/render/economy-hud.ts
+- src/screens/game-screen.ts
+- src/styles/main.css
+- tests/unit/economy.test.ts
+- tests/unit/power-control.test.ts
+- tests/e2e/economy.spec.ts
+- tests/e2e/power-control.spec.ts
+- docs/NEXT_ROADMAP.md
+- docs/ARCHITECTURE_RULES.md
+- docs/NEXT_00_BLUEPRINT.md
+
+Reference-only Sandbox files:
+- src/config/buildings.js
+- src/construction/construction_system.js
+- docs/patches/FEN-04.md
+- docs/patches/FEN-05.md
+- src/main.js only as behavior reference; do not copy.
+
+Audit questions:
+1. Is NEXT-05 the right next step after Power/Control?
+2. Should Builder be visual-only/geometric now or copy builder asset?
+3. Should we introduce GameState/WorldState before construction?
+4. What should buildable building definitions contain?
+5. What are safe cost/build-time values?
+6. How should auto-placement search work?
+7. What must block placement?
+8. Should construction site immediately affect occupancy/power/control, or only after completion?
+9. Should Matter be spent at start or completion?
+10. Should cancel/refund exist now?
+11. How should build menu be represented in DOM?
+12. How to avoid construction leaking into production/harvester systems?
+13. What tests are required?
+14. What must be postponed?
+
+Expected audit output:
+
+BEGIN_COPY_BLOCK
+
+NEXT-05 PHASE 1 AUDIT
+
+1. Executive summary
+2. Is NEXT-05 the right next step?
+3. Current repo state after NEXT-04
+4. Architecture checkpoint
+   4.1 GameWorld risk
+   4.2 GameState/WorldState recommendation
+   4.3 System runner recommendation
+5. Scope recommendation
+6. Builder model
+7. Building definitions
+8. Construction model
+   8.1 Validation
+   8.2 Cost
+   8.3 Auto-placement
+   8.4 Construction site
+   8.5 Completion
+   8.6 Cancel/refund decision
+9. Occupancy/placement rules
+10. Build menu UI plan
+11. Rendering plan
+12. Interaction with Economy/Power/Control
+13. Proposed file/folder changes
+14. Tests plan
+15. Checks to run
+16. Main risks
+17. Explicitly postponed items
+18. Final recommendation
+19. Open questions for user
+
+Final verdict:
+<clear recommendation: give Делай / adjust scope first / do not proceed>
+
+Жду Делай
+
+END_COPY_BLOCK
+
+Output rules:
+- Return one copyable block only.
+- Keep it concise and specific.
+- Do not implement.
+- Do not create PR.

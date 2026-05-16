@@ -1,0 +1,202 @@
+Task: NEXT-01 — four-elements-next repo bootstrap + minimal product-like main menu / Implementation.
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Important:
+This is IMPLEMENTATION after approved NEXT-01 audit.
+Do not touch ratoker-jpg/glm-game-sandbox.
+Do not copy Sandbox code.
+Do not copy Sandbox assets in NEXT-01.
+Do not add gameplay systems.
+Do not add economy, map generation, movement, combat, AI, fog, territory, save/load, HUD, or real game loop.
+
+Goal:
+Create the first clean TypeScript + Vite bootstrap for four-elements-next:
+- working Vite + TypeScript project;
+- minimal product-like main menu;
+- New Game flow;
+- map size selection placeholder;
+- faction selection placeholder;
+- disabled Continue placeholder;
+- Settings placeholder with UI scale 100/125/150;
+- transition to empty game screen with Canvas;
+- Playwright E2E tests for the flow.
+
+Accepted audit corrections / clarifications:
+1. NEXT-01 does NOT copy assets yet.
+   Assets are copied in a later step, likely NEXT-02.
+2. package-lock.json is allowed and expected if npm install creates it.
+   bun.lock is NOT allowed.
+3. Vitest must not fail because there are no unit tests yet.
+   Either use `vitest run --passWithNoTests` or add one tiny smoke unit test.
+4. main.ts must remain a composition root, target under 50 lines, hard stop 200.
+5. No window.FE_* globals.
+6. No script-tag architecture except Vite entry script in index.html.
+7. Menu must be product-like, but minimal. No long UI polish.
+
+Branch:
+glm/next-01-repo-bootstrap-menu
+
+PR title:
+NEXT-01: bootstrap Vite TypeScript app with minimal menu flow
+
+Expected implementation:
+
+Project setup:
+- Initialize Vite vanilla-ts project in the existing repo.
+- Keep default branch main as base.
+- Add TypeScript strict mode.
+- Add Playwright.
+- Add Vitest.
+- Use Canvas 2D + HTML overlay UI.
+- No React/Vue/Svelte.
+
+Package scripts:
+- dev: vite
+- build: tsc && vite build
+- preview: vite preview
+- type-check: tsc --noEmit
+- test: vitest run --passWithNoTests OR equivalent passing setup
+- test:e2e: playwright test
+
+Files expected to create/modify:
+- README.md
+- .gitignore
+- package.json
+- package-lock.json, if npm creates it
+- tsconfig.json
+- tsconfig.node.json, if Vite template creates it
+- vite.config.ts
+- vitest.config.ts, if needed
+- playwright.config.ts
+- index.html
+- src/main.ts
+- src/types/screens.ts
+- src/core/screen-manager.ts
+- src/screens/main-menu.ts
+- src/screens/map-size.ts
+- src/screens/faction-select.ts
+- src/screens/settings.ts
+- src/screens/game-screen.ts
+- src/styles/main.css
+- tests/e2e/bootstrap.spec.ts
+
+Do NOT create yet:
+- public/assets/
+- src/game/
+- src/systems/
+- src/render/
+- src/input/
+- src/config/
+- save/load system
+- HUD system
+- economy/combat/map systems
+- copied Sandbox assets
+- copied Sandbox code
+
+Required screen flow:
+1. App opens on main menu.
+2. Main menu shows:
+   - title: Four Elements
+   - New Game
+   - Continue disabled
+   - Settings
+3. New Game opens map size screen.
+4. Map size screen shows:
+   - Standard
+   - Large
+   - Back
+5. Selecting map size opens faction selection.
+6. Faction selection shows:
+   - Cyan
+   - Green
+   - Yellow
+   - Purple
+   - Random
+   - Back
+7. Selecting faction opens game screen.
+8. Game screen shows:
+   - full viewport Canvas
+   - simple dark placeholder background
+   - small text/overlay saying game screen placeholder / selected map/faction
+   - Back to menu button is acceptable for NEXT-01.
+9. Settings shows:
+   - UI scale 100 / 125 / 150
+   - Back
+   - implemented via CSS variable, no persistence required.
+10. Continue is disabled and cannot start a game.
+
+Architecture:
+- src/main.ts only creates and starts ScreenManager.
+- ScreenManager owns transitions.
+- Each screen module owns its DOM subtree and event handlers.
+- No gameplay rules in screens.
+- Game screen may resize Canvas and draw a dark placeholder only.
+- No update/render gameplay loop yet.
+
+CSS:
+- Use src/styles/main.css.
+- Keep CSS simple and product-like.
+- Dark minimal RTS style is fine.
+- Do not copy Sandbox inline CSS.
+- Target CSS under ~160 lines if possible.
+
+Tests:
+Create tests/e2e/bootstrap.spec.ts.
+
+Must verify:
+- page loads without critical console errors;
+- main menu is visible;
+- Continue is disabled;
+- New Game -> map size screen;
+- Standard/Large visible;
+- Back from map screen works;
+- Standard -> faction screen;
+- faction options visible;
+- Back from faction screen works;
+- selecting faction opens game screen;
+- Canvas exists on game screen;
+- Settings opens;
+- UI scale buttons change CSS variable or a visible state/class;
+- no window.FE_* globals.
+
+Checks to run:
+npm run type-check
+npm run build
+npm run test
+npm run test:e2e
+
+Additional verification:
+- main.ts line count
+- grep/check no window.FE_ usage
+- confirm no copied assets
+- confirm no bun.lock
+- confirm no changes to glm-game-sandbox
+
+Before opening PR:
+git diff --name-only origin/main...HEAD
+
+Return CODE_SUMMARY:
+- Branch
+- PR number + URL
+- SHA
+- Files changed count
+- Exact changed files
+- Confirm package-lock status
+- Confirm no bun.lock
+- Confirm no Sandbox assets copied
+- Confirm no Sandbox code copied
+- Confirm no window.FE_* globals
+- Confirm no gameplay systems created
+- main.ts line count
+- CSS line count
+- Screen flow summary
+- Checks:
+  - npm run type-check
+  - npm run build
+  - npm run test
+  - npm run test:e2e
+- QA result
+- Known limitations
+- Recommended NEXT-02

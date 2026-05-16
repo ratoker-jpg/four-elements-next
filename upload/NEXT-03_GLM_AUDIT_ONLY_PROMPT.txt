@@ -1,0 +1,220 @@
+TASK: NEXT-03 — Civil Economy Foundation / Phase 1 Audit Only
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Reference repo:
+ratoker-jpg/glm-game-sandbox
+
+Mode:
+PHASE 1 AUDIT ONLY.
+Do not edit files.
+Do not create branches.
+Do not commit.
+Do not open PR.
+Do not implement code.
+Return audit only.
+Finish exactly with: Жду Делай
+
+Current status:
+- NEXT-01 merged: Vite + TypeScript + menu flow.
+- NEXT-02 merged: visual isometric map, camera, HQ, resources, decor, 19 approved assets.
+- DEPLOY-01 merged: GitHub Pages deploy.
+- UI-01 merged: Russian menu + sandbox-inspired visual polish.
+- Public URL works: https://ratoker-jpg.github.io/four-elements-next/
+
+NEXT-03 goal:
+Add the first civil economy foundation:
+- resource model;
+- economy state;
+- resource HUD;
+- storage caps;
+- Separator conversion contract/runtime;
+- tests.
+
+Important:
+NEXT-03 is NOT full gameplay yet.
+No harvester.
+No builder.
+No construction.
+No production.
+No Power/Control yet.
+No combat.
+No AI.
+No fog.
+No territory.
+No save/load.
+
+Economy decisions already approved:
+Resources:
+- Raw / Сырьё: gathered later by Harvester from map.
+- Matter / Материя: main construction resource.
+- Element / Элемент: faction resource for units/upgrades/tech.
+- Power / Энергия: building power, later NEXT-04, not currency.
+- Control / Контроль: unit cap, later NEXT-04.
+
+Separator formula:
+15 Raw -> 10 Matter + 1 Element
+
+Element belongs to player faction.
+
+Starting setup from docs:
+- HQ
+- 1 Builder later, not now
+- 1 Harvester later, not now
+- Raw = 0
+- Matter = 100
+- Element = 3
+
+Civil Storage policy:
+For civil v0.1, Storage is universal:
+- +200 Raw cap
+- +200 Matter cap
+- +10 Element cap
+
+Question to resolve in audit:
+Since NEXT-03 has no builder/harvester/construction yet, decide the correct minimal implementation path:
+
+Option A:
+Economy core + HUD + tests only. No visible Separator/Storage yet.
+Pros: clean scope, no fake gameplay.
+Cons: less visible progress.
+
+Option B:
+Add initial pre-placed Separator/Storage as neutral/productive civil structures near HQ for visual/economy test, but do not allow building them yet.
+Pros: visible economy objects and Separator runtime can be observed.
+Cons: risks blurring construction scope.
+
+Option C:
+Add debug-only resource buttons.
+Expected answer: avoid unless test-only, because product UI should not become debug UI.
+
+Audit must recommend one option and explain why.
+
+Strict NEXT-03 scope:
+IN SCOPE:
+- Resource types and EconomyState.
+- Starting resource values and caps.
+- Resource HUD in Russian.
+- Pure economy functions: canSpend, addResource, spendResource, cap handling.
+- Separator conversion logic as pure/system function.
+- Unit tests for economy math and caps.
+- E2E test that HUD displays correct starting values and no console errors.
+- If approved in audit: minimal visual representation of Storage/Separator only if it does not conflict with construction roadmap.
+
+OUT OF SCOPE:
+- no resource gathering;
+- no harvester state machine;
+- no builder;
+- no construction/build menu;
+- no unit production;
+- no Power/Control;
+- no Command Relay;
+- no combat units;
+- no enemy/AI;
+- no fog/territory;
+- no save/load;
+- no sandbox combat assets;
+- no copying legacy runtime.
+
+Architecture guardrails:
+- src/main.ts remains composition root only.
+- src/screens/game-screen.ts remains screen mount/unmount only.
+- GameWorld must not become economy monolith.
+- Render must not mutate economy state.
+- Economy logic must live in dedicated modules.
+- Prefer config/data-driven definitions.
+- No window.FE_* globals.
+- No FE_PATCH patterns.
+- No copied legacy src/main.js.
+
+Suggested structure to evaluate/refine:
+- src/config/resources.ts
+- src/config/buildings.ts, only if building definitions are needed
+- src/game/economy-state.ts
+- src/systems/economy.ts
+- src/ui/resource-hud.ts
+- tests/unit/economy.test.ts
+- tests/e2e/economy-hud.spec.ts
+
+Files to inspect in four-elements-next:
+- docs/NEXT_00_BLUEPRINT.md
+- docs/NEXT_ROADMAP.md
+- docs/ARCHITECTURE_RULES.md
+- docs/ASSET_POLICY.md
+- docs/DECISIONS_LOG.md
+- src/game/game-world.ts
+- src/game/map-types.ts
+- src/game/mapgen.ts
+- src/render/renderer.ts
+- src/screens/game-screen.ts
+- src/styles/main.css
+- tests/unit/mapgen.test.ts
+- tests/e2e/map-visual.spec.ts
+- package.json
+
+Reference-only files in Sandbox:
+- src/economy/economy_system.js
+- src/production/production_system.js
+- src/construction/construction_system.js
+- src/config/buildings.js
+- src/config/units.js
+- docs/patches/FEN-03.md
+- docs/patches/FEN-04.md
+- docs/patches/FEN-05.md
+
+Audit questions:
+1. Is NEXT-03 economy foundation the correct next step after visual baseline?
+2. Should NEXT-03 include only economy core + HUD, or also preplaced Separator/Storage?
+3. Where should EconomyState live?
+4. How should resources and caps be typed?
+5. How should faction Element be represented?
+6. How should Separator conversion be designed now if harvesters are not implemented yet?
+7. Should HUD be DOM overlay or Canvas render? Expected likely DOM overlay.
+8. How to keep HUD product-like, not debug-only?
+9. What tests should be required?
+10. What should be postponed to NEXT-04/NEXT-05/NEXT-06?
+11. What risks could recreate Sandbox architecture problems?
+
+Expected audit output:
+
+BEGIN_COPY_BLOCK
+
+NEXT-03 PHASE 1 AUDIT
+
+1. Executive summary
+2. Is NEXT-03 the right next step?
+3. Current repo state after UI-01
+4. Recommended scope decision
+   4.1 Option A/B/C evaluation
+   4.2 Final recommended option
+5. Economy model audit
+   5.1 Raw
+   5.2 Matter
+   5.3 Element
+   5.4 Caps
+   5.5 Separator formula
+6. Architecture plan
+7. Proposed file/folder changes
+8. HUD plan
+9. Separator runtime plan
+10. Storage/caps plan
+11. Tests plan
+12. Checks to run
+13. Main risks
+14. Explicitly postponed items
+15. Final recommendation
+16. Open questions for user
+
+Final verdict:
+<clear recommendation: give Делай / adjust scope first / do not proceed>
+
+Жду Делай
+
+END_COPY_BLOCK
+
+Output rules:
+- Return one copyable block only.
+- Keep it concise and specific.
+- Do not implement.
+- Do not create PR.

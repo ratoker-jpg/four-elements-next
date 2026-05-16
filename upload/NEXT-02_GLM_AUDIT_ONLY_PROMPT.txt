@@ -1,0 +1,205 @@
+Task: NEXT-02 — Map + camera + visual baseline / Phase 1 Audit Only.
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Important:
+PHASE 1 AUDIT ONLY.
+Do not edit files.
+Do not commit.
+Do not open PR.
+Do not implement anything.
+Return audit only.
+Finish exactly with: Жду Делай
+
+Context:
+NEXT-01 is merged. Current repo has Vite + TypeScript, minimal product-like menu flow, screen manager, map size/faction placeholders, empty Canvas game screen, and Playwright bootstrap tests.
+
+NEXT-02 goal:
+Turn the empty game screen into the first real visual baseline:
+- load/copy only needed visual assets;
+- render a basic isometric map;
+- add camera pan/zoom;
+- show player starting HQ using selected faction;
+- show nearby resource nodes and some environment decor;
+- use real assets where appropriate;
+- keep it product-like, not debug-only.
+
+This is still NOT gameplay.
+
+Strict scope:
+IN SCOPE:
+- asset reuse audit for NEXT-02;
+- minimal asset-copy plan;
+- map render architecture;
+- camera architecture;
+- basic map generation rules;
+- first visual scene composition;
+- test plan;
+- file/folder plan.
+
+OUT OF SCOPE:
+- no harvesting;
+- no economy;
+- no construction;
+- no production;
+- no combat;
+- no enemy;
+- no AI;
+- no fog of war;
+- no territory;
+- no save/load;
+- no HUD resource logic;
+- no unit control;
+- no pathfinding;
+- no real game loop beyond render/camera if needed.
+
+Critical asset policy:
+- Do NOT use Sandbox combat unit assets as final Next product assets.
+- Do NOT copy/use Sandbox light_tank, heavy_tank, bomber, scout as product units.
+- Future combat units will be new assets/designs based on Hull + Weapon.
+- Civil units may reuse builder and harvester later, but only when needed.
+- NEXT-02 should copy only assets required for visual map baseline:
+  - terrain tiles;
+  - environment/decor;
+  - resource nodes;
+  - faction HQ sprites if needed for start base.
+- If audit recommends copying broader assets, it must justify why and keep combat assets excluded.
+
+Current design decisions:
+- Next is separate repo. Sandbox is reference only.
+- TypeScript + Vite + Canvas 2D.
+- Canvas renders game world; HTML overlay stays for menu/UI.
+- main.ts must remain composition root only, hard limit <200 lines.
+- renderer.ts must be orchestrator only, target <100 lines, hard stop 150.
+- No window.FE_* globals.
+- No script-tag architecture.
+- No FE_PATCH patterns.
+- No copied legacy runtime.
+
+Civil MVP map rules:
+- Dev/Test map: 32x32
+- Standard MVP map: 48x48
+- Large: later
+- Civil MVP visibility: full reveal
+- Fog of war: future
+- Territory: future
+- Map style: sand/desert, readable, not chessboard
+- Start: player HQ visible near start
+- Resources: several Raw deposits near HQ
+- Resources scale toward center: more medium/large near center
+- Center: large/infinite deposit
+- Decor/obstacles: mountains/rocks/bushes/volcano-like assets, but must not block first economy.
+- NEXT-02 may render obstacles/decor visually, but no occupancy/pathfinding yet.
+
+Expected architecture direction:
+Suggested folders, but audit may refine:
+- src/core/coordinates.ts
+- src/core/assets.ts
+- src/game/map-types.ts
+- src/game/mapgen.ts
+- src/render/renderer.ts
+- src/render/terrain.ts
+- src/render/environment.ts
+- src/render/buildings.ts
+- src/render/camera.ts
+- src/screens/game-screen.ts updated only to mount Canvas and hand off to renderer/camera modules
+- public/assets/... for copied visual assets
+
+Audit questions:
+1. Is NEXT-02 the right next step after NEXT-01?
+2. Which exact Sandbox assets should be copied now?
+3. Should assets be copied under public/assets/ or imported via Vite from src/assets?
+4. How should selected faction from NEXT-01 affect the HQ sprite?
+5. What is the minimal isometric coordinate system needed?
+6. How should camera pan/zoom work in NEXT-02?
+7. What should the map generator create in NEXT-02?
+8. Should NEXT-02 include units visually, or defer units to NEXT-03/NEXT-04?
+9. Should resource nodes be interactive now? Expected answer likely no.
+10. How to keep renderer.ts from becoming a monolith?
+11. How to keep game-screen.ts from becoming a logic container?
+12. What E2E tests should prove NEXT-02 works?
+13. What unit tests should be added for coordinates/mapgen?
+14. What must be explicitly postponed?
+
+Files to inspect in four-elements-next:
+- package.json
+- index.html
+- src/main.ts
+- src/core/screen-manager.ts
+- src/screens/game-screen.ts
+- src/types/screens.ts
+- src/styles/main.css
+- tests/e2e/bootstrap.spec.ts
+- playwright.config.ts
+- vite.config.ts
+- tsconfig.json
+
+Reference repo:
+ratoker-jpg/glm-game-sandbox
+
+Reference-only files to inspect if needed:
+- assets/tiles/*
+- assets/environment/*
+- assets/factions/*/buildings/hq_base.png
+- src/config/environment.js
+- src/config/sprite_profiles.js
+- fe-next/src/core/coordinates.js
+- fe-next/src/render/renderer.js
+- fe-next/src/game/state.js
+- docs/patches/FEN-02.md
+- docs/patches/FEN-03.md
+- docs/project/four_elements_patch_roadmap_actual.md
+
+Hard rules:
+- Do NOT propose continuing FE Spike as final product.
+- Do NOT propose copying root src/main.js.
+- Do NOT propose copying FE_PATCH_*.
+- Do NOT propose copying Sandbox combat unit assets.
+- Do NOT propose adding gameplay systems in NEXT-02.
+- Do NOT propose adding a debug-only screen.
+- Do NOT let src/screens/game-screen.ts own renderer/map/camera logic.
+- Do NOT let src/render/renderer.ts exceed orchestrator role.
+- Do NOT create files.
+
+Expected audit output:
+
+BEGIN_COPY_BLOCK
+
+NEXT-02 PHASE 1 AUDIT
+
+1. Executive summary
+2. Is NEXT-02 the right next step?
+3. Current repo state after NEXT-01
+4. Asset reuse plan
+   4.1 Copy now
+   4.2 Defer
+   4.3 Never copy
+5. Map visual baseline scope
+   5.1 Included
+   5.2 Excluded
+6. Proposed architecture
+7. Proposed file/folder changes
+8. Isometric coordinates plan
+9. Camera pan/zoom plan
+10. Map generation plan
+11. Rendering plan
+12. Game screen integration plan
+13. Tests plan
+14. Checks to run
+15. Main risks
+16. Corrections/clarifications needed before implementation
+17. Final recommendation
+18. Open questions for user
+
+Final verdict:
+<clear recommendation: give Делай / adjust scope first / do not proceed>
+
+Жду Делай
+
+END_COPY_BLOCK
+
+Output rules:
+- Return one copyable block only.
+- Do not implement.
+- Do not create PR.

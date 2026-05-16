@@ -1,0 +1,98 @@
+TASK: NEXT-04 — Power + Control Foundation / Implementation
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+IMPORTANT:
+Use this prompt ONLY after:
+1. GLM returns NEXT-04 Phase 1 Audit.
+2. GPT reviews and approves that audit.
+3. User explicitly says Делай.
+
+Do not start implementation without the approved audit pasted into this task.
+
+Paste approved GLM audit below this line:
+[PASTE APPROVED NEXT-04 AUDIT HERE]
+
+Implementation goal:
+Add Power + Control foundation exactly according to the approved audit.
+
+Hard scope:
+IN SCOPE:
+- Power state/model/system.
+- Control state/model/system.
+- Power/Control HUD in Russian.
+- Building status fields needed for power online/offline.
+- Unit tests.
+- E2E tests.
+- Optional pre-placed Power Plant / Command Relay ONLY if approved by audit.
+
+OUT OF SCOPE:
+- no builder;
+- no construction/build menu;
+- no harvester;
+- no unit production;
+- no combat;
+- no AI;
+- no fog/territory;
+- no save/load;
+- no asset copying;
+- no debug buttons.
+
+Product rules:
+- Power / Энергия is not currency.
+- Matter remains construction currency.
+- Raw remains gathered resource.
+- Element remains faction resource.
+- Control / Контроль is unit capacity, not a spendable resource.
+- HQ gives +10 Control.
+- Command Relay gives +5 Control.
+- MVP max Control cap = 50.
+- Command Relay consumes 1 Power.
+- Power system must prevent death spiral:
+  - HQ always online.
+  - Power producers always online.
+  - Player must retain a recovery path.
+
+Architecture rules:
+- Do not make GameWorld a monolith.
+- Power logic must live outside GameWorld, preferably src/systems/power.ts.
+- Control logic must live outside GameWorld, preferably src/systems/control.ts.
+- Render must not mutate gameplay state.
+- HUD must read state only.
+- No window.FE_* globals.
+- No copied Sandbox runtime.
+- No FE_PATCH patterns.
+- Keep screen modules as mount/unmount only.
+
+Branch:
+codex/next-04-power-control
+
+PR title:
+NEXT-04: add Power and Control foundation
+
+Required checks:
+- npm run type-check
+- npm run build
+- npm run test
+- npm run test:e2e
+- GITHUB_PAGES=true npm run build
+
+Before PR:
+- Verify changed files are only relevant to NEXT-04.
+- Verify no assets were added.
+- Verify no construction/production/combat/AI code appeared.
+
+Return CODE_SUMMARY:
+- Branch
+- PR URL
+- SHA
+- Files changed count
+- Exact changed files
+- Power model summary
+- Control model summary
+- HUD summary
+- Confirm no out-of-scope systems
+- Checks results
+- Known limitations
+- Recommended NEXT-05

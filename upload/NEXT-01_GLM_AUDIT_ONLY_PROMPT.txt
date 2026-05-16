@@ -1,0 +1,134 @@
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Task: NEXT-01 — Repo bootstrap + minimal product-like main menu / Phase 1 Audit Only.
+
+Role:
+Act as a senior game developer / technical lead with RTS/game architecture experience.
+Your job is not to code.
+Your job is to protect the new project from repeating Sandbox architecture mistakes.
+
+Important:
+PHASE 1 AUDIT ONLY.
+Do not edit files.
+Do not commit.
+Do not open PR.
+Do not implement anything.
+Return audit only.
+Finish exactly with: Жду Делай
+
+Context:
+We are starting a new clean repository: ratoker-jpg/four-elements-next.
+Legacy repo ratoker-jpg/glm-game-sandbox is Sandbox/reference only.
+FE Spike inside Sandbox is lab prototype only.
+Do not copy legacy runtime as-is.
+
+Approved NEXT-00 decisions:
+- New repo: four-elements-next
+- Stack: TypeScript + Vite + Canvas 2D + HTML overlay UI
+- Tests: Vitest + Playwright
+- First version: civil sandbox only
+- No combat units
+- No bot / enemy AI
+- No fog of war
+- No territory
+- Assets from Sandbox will be copied fully later
+- Sandbox main.js / FE_PATCH / old bot / old combat runtime must never be copied
+- main.ts must stay under 200 lines
+- render/renderer.ts must be orchestrator only, target <100 lines, hard stop 150
+- architecture-first, data-driven, system ownership
+
+NEXT-01 goal:
+Create an implementation plan for the first real project bootstrap.
+
+NEXT-01 should include:
+- Vite + TypeScript setup
+- basic folder structure
+- minimal product-like main menu, not debug page
+- New Game button
+- Continue disabled/empty-state placeholder
+- Settings placeholder with UI scale 100/125/150 if safe
+- faction selection placeholder
+- map size selection placeholder
+- transition to game screen placeholder
+- empty Canvas game screen placeholder
+- no gameplay systems yet
+- no map generation yet
+- no economy yet
+- no construction yet
+- no production yet
+- no combat
+- no AI
+
+Current repository state:
+- README.md exists
+- .gitignore exists
+- default branch: main
+- no code yet
+
+Audit questions:
+1. Is NEXT-01 scope correct?
+2. What exact files should be created?
+3. What should package.json include?
+4. Should we use Vite vanilla TypeScript template?
+5. What minimal src/ structure should exist in NEXT-01?
+6. How to keep main.ts under 200 lines from day one?
+7. How to structure UI/menu vs game screen?
+8. How to avoid over-polishing the menu?
+9. What tests should be added in NEXT-01?
+10. What should be explicitly out of scope?
+11. What guardrails should implementation follow?
+12. What checks should run before PR?
+13. What should be the branch name and PR title?
+
+Hard rules:
+- Do NOT add combat.
+- Do NOT add AI.
+- Do NOT add economy.
+- Do NOT add map generation.
+- Do NOT copy Sandbox src/main.js.
+- Do NOT copy FE_PATCH_*.
+- Do NOT copy old bot runtime.
+- Do NOT use window.FE_* globals.
+- Do NOT use script-tag architecture.
+- Do NOT create debug-only screen as first experience.
+- Do NOT add large asset copying in NEXT-01 unless audit proves it is safe and needed.
+- Do NOT let main.ts become a logic container.
+- Do NOT implement before approval.
+
+Expected audit output:
+
+BEGIN_COPY_BLOCK
+
+NEXT-01 PHASE 1 AUDIT
+
+1. Executive summary
+2. Current repo state
+3. NEXT-01 scope review
+4. Proposed implementation scope
+5. Proposed file/folder structure
+6. Package/tooling plan
+7. App/menu/game-screen architecture
+8. Test strategy
+9. Files to create
+10. Files not to create yet
+11. Guardrails
+12. Checks to run
+13. Risks
+14. Success criteria
+15. Failure criteria
+16. Recommended implementation prompt summary
+
+Final verdict:
+<clear recommendation: give Делай / adjust scope first / do not proceed>
+
+Жду Делай
+
+END_COPY_BLOCK
+
+Output format rules:
+- Return the whole audit in one single copyable plain-text block.
+- Use exactly BEGIN_COPY_BLOCK and END_COPY_BLOCK.
+- Do not split into multiple messages.
+- Do not use nested markdown code fences inside the block.
+- Keep it concise and practical.

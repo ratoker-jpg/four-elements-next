@@ -1,0 +1,206 @@
+TASK: NEXT-06 — Harvester + Civil Production / Draft Phase 1 Audit Only
+
+Repo: ratoker-jpg/four-elements-next
+Base branch: main
+
+Mode:
+DRAFT PHASE 1 AUDIT ONLY.
+Do not edit files.
+Do not create branches.
+Do not commit.
+Do not open PR.
+Do not implement code.
+Return audit only.
+Finish exactly with: Жду NEXT-05 merge/recheck
+
+Important:
+NEXT-05 is NOT merged yet.
+Codex is expected to implement NEXT-05 Builder + Construction in parallel.
+This NEXT-06 audit is a DRAFT based on:
+- current main after NEXT-04;
+- approved NEXT-05 audit/plan;
+- expected NEXT-05 outcome.
+
+Do not finalize implementation details that depend on actual NEXT-05 code.
+Mark assumptions clearly.
+After NEXT-05 is merged, a short NEXT-06 Final Recheck will be required before implementation.
+
+Current confirmed status:
+- NEXT-01 merged: Vite + TypeScript + menu flow.
+- NEXT-02 merged: visual map/camera/HQ/resources/decor.
+- DEPLOY-01 merged: GitHub Pages deployment.
+- UI-01 merged: Russian UI/menu polish.
+- NEXT-03 merged: Raw / Matter / Element economy + Separator + Storage + HUD.
+- NEXT-03A merged: four faction elements internally; HUD shows active faction element.
+- NEXT-04 merged: Power + Control foundation; Power Plant + Command Relay pre-placed; HUD shows Энергия + Контроль.
+- NEXT-05 approved plan: static Builder, build menu, construction sites, build civil buildings using Matter, no harvester/production/combat.
+
+NEXT-06 goal:
+Add Harvester + Civil Production foundation.
+
+Product goal:
+The civil loop should become playable:
+- Harvester gathers Raw from nearby resource nodes.
+- Harvester returns Raw to HQ/storage.
+- Separator converts Raw -> Matter + faction Element.
+- Builder can construct civil buildings.
+- Units Factory can produce Builder/Harvester if approved.
+- Control limits active unit count.
+- Power gates building operation.
+
+Critical question:
+Should Units Factory be introduced in NEXT-06, or should NEXT-06 be Harvester-only and leave production to NEXT-07?
+Audit must evaluate both options.
+
+Strict DRAFT scope candidates:
+
+Option A — Harvester only:
+IN SCOPE:
+- Harvester unit representation.
+- Initial pre-placed Harvester near HQ.
+- Resource node capacity/count logic.
+- Harvester state machine:
+  idle -> moving/gathering simplified -> carrying -> returning -> unloading -> repeat
+- Static/no pathfinding MVP movement decision must be audited.
+- Raw delivery to economy.
+- HUD updates.
+- Unit tests and E2E tests.
+
+OUT OF SCOPE:
+- Units Factory
+- producing units
+- production queue
+
+Option B — Harvester + Units Factory production:
+IN SCOPE:
+- Everything from Option A.
+- Units Factory as constructable building if NEXT-05 supports construction config.
+- Production system for Builder/Harvester.
+- Unit costs using active faction Element.
+- Queue limit maybe 2.
+- Spawn validation around factory.
+- Control used/cap enforcement.
+
+OUT OF SCOPE:
+- combat production
+- rally points
+- advanced pathfinding
+- save/load
+- AI
+
+Audit must recommend Option A or B.
+
+Known desired future production values from previous design:
+- Builder costs 1 active faction Element, build time 20s.
+- Harvester costs 1 active faction Element, build time 25s.
+- Units Factory queue max 2.
+But audit may recommend deferring these if too much for NEXT-06.
+
+Architecture guardrails:
+- GameWorld must not become a monolith.
+- If NEXT-05 makes GameWorld >400 lines, NEXT-06 must recommend a GameState/WorldState or system runner extraction before adding more systems.
+- Harvester logic belongs in src/systems/harvesting.ts.
+- Production logic, if included, belongs in src/systems/production.ts.
+- Unit definitions should live in src/config/units.ts if production is included.
+- Render reads state only.
+- UI sends commands only.
+- No window.FE_* globals except existing cleaned test hooks pattern.
+- No copied Sandbox runtime.
+- No FE_PATCH patterns.
+- No combat units or combat assets.
+- No Tanki/ProTanki assets/models/textures/effects.
+
+Files to inspect in main/current:
+- docs/NEXT_ROADMAP.md
+- docs/ARCHITECTURE_RULES.md
+- docs/NEXT_00_BLUEPRINT.md
+- src/game/game-world.ts
+- src/game/map-types.ts
+- src/game/mapgen.ts
+- src/systems/economy.ts
+- src/systems/power.ts
+- src/systems/control.ts
+- src/render/renderer.ts
+- src/render/buildings.ts
+- src/render/economy-hud.ts
+- src/screens/game-screen.ts
+- src/styles/main.css
+- tests/unit/*
+- tests/e2e/*
+
+Expected NEXT-05 assumptions to use:
+- static Builder exists and uses 1 Control.
+- construction sites exist and can complete buildings.
+- build menu exists.
+- Storage, Separator, Power Plant, Command Relay can be constructed.
+- GameWorld may be larger; audit must flag if final recheck is needed.
+
+Reference-only Sandbox files:
+- src/harvesting/harvesting_system.js
+- src/production/production_system.js
+- src/config/units.js
+- docs/patches/FEN-03.md
+- docs/patches/FEN-05.md
+Do not copy code.
+
+Audit questions:
+1. Is NEXT-06 the right next step after NEXT-05?
+2. Should NEXT-06 be Harvester-only or Harvester + Units Factory production?
+3. How should Harvester move or act without full pathfinding?
+4. Should resource nodes have finite yield now?
+5. How should Raw delivery work?
+6. How should Control used count existing units?
+7. Should Builder and Harvester both consume Control?
+8. Should production use faction Element now?
+9. What config files are needed?
+10. What runtime state shape should units have?
+11. What rendering is enough for Harvester?
+12. How to avoid GameWorld monolith growth?
+13. What tests are required?
+14. What must be postponed?
+
+Expected audit output:
+
+BEGIN_COPY_BLOCK
+
+NEXT-06 DRAFT PHASE 1 AUDIT
+
+1. Executive summary
+2. Why this is a draft
+3. Assumptions from approved NEXT-05 plan
+4. Is NEXT-06 the right next step?
+5. Option A/B evaluation
+   5.1 Harvester only
+   5.2 Harvester + Units Factory production
+   5.3 Recommendation
+6. Architecture checkpoint
+   6.1 GameWorld risk
+   6.2 GameState/WorldState/system runner recommendation
+7. Harvester model
+8. Resource node model
+9. Raw delivery model
+10. Production model, if recommended
+11. Control interaction
+12. Power interaction
+13. Economy interaction
+14. Rendering/UI plan
+15. Proposed file/folder changes
+16. Tests plan
+17. Checks to run
+18. Main risks
+19. Explicitly postponed items
+20. Final recommendation
+21. Required NEXT-06 Final Recheck after NEXT-05 merge
+
+Final verdict:
+<DRAFT ONLY: do not implement until NEXT-05 is merged and rechecked>
+
+Жду NEXT-05 merge/recheck
+
+END_COPY_BLOCK
+
+Output rules:
+- Return one copyable block only.
+- Keep it concise and specific.
+- Do not implement.
+- Do not create PR.
