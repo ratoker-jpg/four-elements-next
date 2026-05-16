@@ -1,6 +1,7 @@
 import type { Screen, ScreenTransitionData, GameScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 import { GameWorld } from '../game/game-world.js';
+import { createEconomyHud } from '../render/economy-hud.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
@@ -22,6 +23,11 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       canvas.style.cursor = 'grab';
       wrapper.appendChild(canvas);
 
+      // Economy HUD overlay
+      const hud = createEconomyHud();
+      hud.element.id = 'economy-hud';
+      wrapper.appendChild(hud.element);
+
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back screen__back-btn';
       btnBack.textContent = 'В главное меню';
@@ -32,6 +38,9 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       const world = new GameWorld(canvas, mapSize, faction);
       gameWorld = world;
+
+      // Wire economy HUD updates
+      world.onEconomyUpdate = (state) => hud.update(state);
 
       void world.init().then(() => {
         if (gameWorld !== world) return; // unmount already destroyed this world

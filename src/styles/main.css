@@ -202,3 +202,50 @@ html, body {
   width: auto;
   z-index: 1;
 }
+
+/* ── Economy HUD ─────────────────────────────────────────────────── */
+
+.economy-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: calc(1.2rem * var(--ui-scale));
+  padding: calc(0.5rem * var(--ui-scale)) calc(1rem * var(--ui-scale));
+  background: linear-gradient(180deg, rgba(23, 16, 8, 0.88), rgba(23, 16, 8, 0.0));
+  z-index: 2;
+  pointer-events: none;
+}
+
+.economy-hud__item {
+  display: flex;
+  align-items: center;
+  gap: calc(0.35rem * var(--ui-scale));
+  padding: calc(0.25rem * var(--ui-scale)) calc(0.6rem * var(--ui-scale));
+  background: rgba(43, 28, 12, 0.7);
+  border: 1px solid rgba(240, 201, 106, 0.25);
+  border-radius: 6px;
+}
+
+.economy-hud__icon {
+  width: calc(10px * var(--ui-scale));
+  height: calc(10px * var(--ui-scale));
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.economy-hud__label {
+  font-size: calc(0.8rem * var(--ui-scale));
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.economy-hud__value {
+  font-size: calc(0.85rem * var(--ui-scale));
+  font-weight: 800;
+  color: var(--text);
+  min-width: calc(4.5ch * var(--ui-scale));
+  text-align: right;
+}

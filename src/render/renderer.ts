@@ -4,9 +4,10 @@ import { BG_COLOR, HQ_FOOTPRINT } from '../core/constants.js';
 import type { MapData } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
+import type { ReadonlyEconomyState } from '../systems/economy.js';
 import { renderTerrain } from './terrain.js';
 import { renderResourceNode, renderDecor } from './environment.js';
-import { renderHq } from './buildings.js';
+import { renderHq, renderSeparator, renderStorage } from './buildings.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -19,6 +20,7 @@ export function render(
   map: MapData,
   camera: Camera,
   assets: AssetStore,
+  economy: ReadonlyEconomyState,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -34,6 +36,23 @@ export function render(
   const hqSortKey = map.hq.tx + map.hq.ty + (HQ_FOOTPRINT - 1) * 2;
   const entities: SortedEntity[] = [];
   entities.push({ sortKey: hqSortKey, render: () => renderHq(ctx, map.hq, camera, assets) });
+
+  // Buildings (Separator, Storage) — 1×1 footprint
+  for (const b of map.buildings) {
+    const sepState = economy.separators.find((s) => s.tx === b.tx && s.ty === b.ty);
+    if (b.type === 'separator' && sepState) {
+      entities.push({
+        sortKey: b.tx + b.ty,
+        render: () => renderSeparator(ctx, b.tx, b.ty, camera, sepState.active, sepState.progress),
+      });
+    } else if (b.type === 'storage') {
+      entities.push({
+        sortKey: b.tx + b.ty,
+        render: () => renderStorage(ctx, b.tx, b.ty, camera),
+      });
+    }
+  }
+
   for (const r of map.resources) {
     entities.push({ sortKey: r.tx + r.ty, render: () => renderResourceNode(ctx, r, camera, assets) });
   }
