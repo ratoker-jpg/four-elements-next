@@ -326,6 +326,43 @@ export function renderCommandRelay(
   }
 }
 
+export function renderUnitsFactory(
+  ctx: CanvasRenderingContext2D,
+  tx: number,
+  ty: number,
+  camera: Camera,
+  online: boolean,
+): void {
+  const footprint = getBuildingFootprint('units-factory');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+  const boxHeight = 13 * z;
+
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z,
+    '#8c5a2a',
+    '#704520',
+    online ? '#c27a3a' : '#9a6a3a',
+    boxHeight,
+    'FAC',
+    online,
+    footprint,
+  );
+
+  if (!online) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFF', cv.x, cv.y - boxHeight - 10 * z);
+  }
+}
+
 export function renderBuilder(
   ctx: CanvasRenderingContext2D,
   builder: BuilderPlacement,

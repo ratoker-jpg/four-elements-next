@@ -25,12 +25,14 @@ describe('power constants', () => {
     expect(BUILDING_POWER.storage).toBe(0);
     expect(BUILDING_POWER['power-plant']).toBe(4);
     expect(BUILDING_POWER['command-relay']).toBe(-1);
+    expect(BUILDING_POWER['units-factory']).toBe(-2);
   });
 
   it('power priorities are correct', () => {
     expect(POWER_PRIORITY.hq).toBe(100);
     expect(POWER_PRIORITY['power-plant']).toBe(99);
     expect(POWER_PRIORITY['command-relay']).toBe(70);
+    expect(POWER_PRIORITY['units-factory']).toBe(60);
     expect(POWER_PRIORITY.separator).toBe(50);
     expect(POWER_PRIORITY.storage).toBe(30);
   });

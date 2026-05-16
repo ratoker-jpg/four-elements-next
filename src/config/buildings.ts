@@ -42,6 +42,14 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
     shortCode: 'CMD',
     footprint: 2,
   },
+  'units-factory': {
+    type: 'units-factory',
+    label: 'Фабрика юнитов',
+    costMatter: 150,
+    buildTimeSeconds: 30,
+    shortCode: 'FAC',
+    footprint: 2,
+  },
 };
 
 export const BUILD_MENU_ORDER: BuildingType[] = [
@@ -49,6 +57,7 @@ export const BUILD_MENU_ORDER: BuildingType[] = [
   'storage',
   'power-plant',
   'command-relay',
+  'units-factory',
 ];
 
 export function getBuildingFootprint(type: BuildingType): number {

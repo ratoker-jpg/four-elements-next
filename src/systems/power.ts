@@ -11,6 +11,7 @@ export const BUILDING_POWER: Record<BuildingType | 'hq', number> = {
   storage: 0,
   'power-plant': 4,
   'command-relay': -1,
+  'units-factory': -2,
 };
 
 /** Power priority for shutdown order. Lower = shed first. HQ and producers are immune. */
@@ -18,6 +19,7 @@ export const POWER_PRIORITY: Record<BuildingType | 'hq', number> = {
   hq: 100,          // always online (immune)
   'power-plant': 99, // always online (immune)
   'command-relay': 70, // high — Control is important
+  'units-factory': 60, // medium-high — production facility
   separator: 50,    // medium
   storage: 30,      // passive — lowest
 };
