@@ -8,21 +8,25 @@ import { tickPower, isBuildingOnline, addBuildingToPowerState } from './power.js
 import { tickControl } from './control.js';
 import { tickHarvesting } from './harvesting.js';
 import { tickEconomy } from './economy.js';
+import { applyCompletedBuildingToProduction, tickProduction } from './production.js';
 
 /**
  * Run all game systems in the correct order for one tick.
  *
- * Order: construction → completion cascade → power → control → harvesting → economy.
+ * Order: construction → completion cascade → power → control → production → harvesting → economy.
+ * Production runs after control (needs control.used reservation) and before harvesting
+ * so that newly spawned harvesters can act in the same tick.
  * Harvesting runs before economy so that raw deliveries are visible to tickEconomy.
  */
 export function runSystems(state: GameState, dt: number): void {
   // 1. Construction tick
   const constructionResult = tickConstruction(state.map, dt);
 
-  // 2. Completion cascade: wire each completed building into economy and power
+  // 2. Completion cascade: wire each completed building into economy, power, and production
   for (const building of constructionResult.completedBuildings) {
     applyCompletedBuildingToEconomy(state.economy, building);
     addBuildingToPowerState(state.power, building);
+    applyCompletedBuildingToProduction(state.production, building);
     const definition = BUILDING_DEFINITIONS[building.type];
     state.constructionStatusMessage = `${definition.label} построен. Строитель свободен.`;
   }
@@ -36,10 +40,13 @@ export function runSystems(state: GameState, dt: number): void {
   ).length;
   tickControl(state.control, relayOnlineCount);
 
-  // 5. Harvesting tick — harvesters gather and deliver raw
+  // 5. Production tick — factory queues progress and spawn units
+  tickProduction(state, dt);
+
+  // 6. Harvesting tick — harvesters gather and deliver raw
   tickHarvesting(state, dt);
 
-  // 6. Economy tick — build separator online map from power state
+  // 7. Economy tick — build separator online map from power state
   const separatorOnlineMap = new Map<string, boolean>();
   for (const sep of state.economy.separators) {
     separatorOnlineMap.set(`${sep.tx},${sep.ty}`, isBuildingOnline(state.power, sep.tx, sep.ty));
