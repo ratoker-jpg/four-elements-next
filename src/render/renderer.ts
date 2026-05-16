@@ -15,10 +15,12 @@ import {
   renderCommandRelay,
   renderBuilder,
   renderConstructionSite,
+  renderHarvester,
 } from './buildings.js';
 import type { Camera } from './camera.js';
 import { renderResourceNode, renderDecor } from './environment.js';
 import { renderTerrain } from './terrain.js';
+import type { HarvesterState } from '../systems/harvesting.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -36,6 +38,7 @@ export function render(
   assets: AssetStore,
   economy: ReadonlyEconomyState,
   power: ReadonlyPowerState,
+  harvesters: readonly HarvesterState[],
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -92,6 +95,13 @@ export function render(
     entities.push({
       sortKey: builder.tx + builder.ty,
       render: () => renderBuilder(ctx, builder, camera),
+    });
+  }
+
+  for (const harvester of harvesters) {
+    entities.push({
+      sortKey: harvester.tx + harvester.ty,
+      render: () => renderHarvester(ctx, harvester, camera),
     });
   }
 

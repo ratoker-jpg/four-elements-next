@@ -6,13 +6,14 @@ import { tickConstruction } from './construction.js';
 import { applyCompletedBuildingToEconomy } from './economy.js';
 import { tickPower, isBuildingOnline, addBuildingToPowerState } from './power.js';
 import { tickControl } from './control.js';
+import { tickHarvesting } from './harvesting.js';
 import { tickEconomy } from './economy.js';
 
 /**
  * Run all game systems in the correct order for one tick.
  *
- * Order: construction → completion cascade → power → control → economy.
- * This matches the previous inline sequence in GameWorld.update().
+ * Order: construction → completion cascade → power → control → harvesting → economy.
+ * Harvesting runs before economy so that raw deliveries are visible to tickEconomy.
  */
 export function runSystems(state: GameState, dt: number): void {
   // 1. Construction tick
@@ -35,7 +36,10 @@ export function runSystems(state: GameState, dt: number): void {
   ).length;
   tickControl(state.control, relayOnlineCount);
 
-  // 5. Economy tick — build separator online map from power state
+  // 5. Harvesting tick — harvesters gather and deliver raw
+  tickHarvesting(state, dt);
+
+  // 6. Economy tick — build separator online map from power state
   const separatorOnlineMap = new Map<string, boolean>();
   for (const sep of state.economy.separators) {
     separatorOnlineMap.set(`${sep.tx},${sep.ty}`, isBuildingOnline(state.power, sep.tx, sep.ty));
