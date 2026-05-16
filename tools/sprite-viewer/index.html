@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Four Elements Sprite Viewer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10161b;
+        --panel: rgba(17, 24, 30, 0.92);
+        --panel-border: rgba(255, 255, 255, 0.08);
+        --text: #f3efe3;
+        --muted: #b9b4a4;
+        --accent: #7ed6b5;
+        --accent-strong: #f1c86a;
+        --danger: #ff7c6f;
+        --shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+        --checker-a: rgba(255, 255, 255, 0.12);
+        --checker-b: rgba(255, 255, 255, 0.04);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top, rgba(126, 214, 181, 0.18), transparent 28%),
+          radial-gradient(circle at right, rgba(241, 200, 106, 0.12), transparent 24%),
+          linear-gradient(180deg, #172028 0%, #0d1115 100%);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 430px) 1fr;
+        gap: 20px;
+        padding: 20px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .sidebar {
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 1.45rem;
+      }
+
+      .lede {
+        color: var(--muted);
+        line-height: 1.45;
+        margin-top: 6px;
+      }
+
+      .dropzone {
+        position: relative;
+        border: 1px dashed rgba(255, 255, 255, 0.22);
+        border-radius: 16px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.03);
+        transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+      }
+
+      .dropzone.dragover {
+        border-color: var(--accent);
+        background: rgba(126, 214, 181, 0.09);
+        transform: translateY(-1px);
+      }
+
+      .dropzone input[type="file"] {
+        width: 100%;
+        margin-top: 12px;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .field.wide {
+        grid-column: 1 / -1;
+      }
+
+      label,
+      .label {
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      button {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        background: rgba(7, 11, 15, 0.82);
+        color: var(--text);
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+      }
+
+      .toggles {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 11px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .preset-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+
+      .button-secondary {
+        cursor: pointer;
+        background: linear-gradient(180deg, rgba(241, 200, 106, 0.2), rgba(241, 200, 106, 0.1));
+      }
+
+      .viewer {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .summary {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .summary strong {
+        display: block;
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-bottom: 3px;
+      }
+
+      .canvas-grid {
+        display: grid;
+        grid-template-columns: minmax(340px, 1.15fr) minmax(280px, 0.85fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .canvas-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .canvas-card h3 {
+        font-size: 0.98rem;
+        margin-bottom: 10px;
+      }
+
+      canvas {
+        width: 100%;
+        display: block;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        image-rendering: pixelated;
+      }
+
+      .preview-canvas {
+        aspect-ratio: 1 / 1;
+      }
+
+      .sheet-canvas {
+        max-height: 62vh;
+        object-fit: contain;
+        background:
+          linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+          linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+          linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+      }
+
+      .help {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .stat .key {
+        display: block;
+        font-size: 0.76rem;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .empty-note {
+        color: var(--muted);
+        text-align: center;
+        padding: 26px 12px 6px;
+      }
+
+      @media (max-width: 1100px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .canvas-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .preset-row,
+        .stats {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="layout">
+      <aside class="panel sidebar">
+        <section>
+          <h1>Four Elements Sprite Viewer</h1>
+          <p class="lede">
+            Standalone local preview tool for civil unit sprite sheets. Load a PNG, pick a direction row,
+            tune the animation window, and inspect frame crops without touching game runtime.
+          </p>
+        </section>
+
+        <section class="dropzone" id="dropzone">
+          <h2>Load Sprite Sheet</h2>
+          <p class="help">Drop a `.png` here or choose one from disk. Nothing is uploaded or saved.</p>
+          <input id="fileInput" type="file" accept="image/png">
+          <p class="help" id="fileLabel">No sheet loaded yet.</p>
+        </section>
+
+        <section>
+          <div class="preset-row">
+            <div class="field">
+              <label for="presetSelect">Civil preset</label>
+              <select id="presetSelect">
+                <option value="">Custom</option>
+                <option value="builder-idle">Builder: idle</option>
+                <option value="builder-move">Builder: move</option>
+                <option value="builder-build">Builder: build/work</option>
+                <option value="harvester-idle">Harvester: idle</option>
+                <option value="harvester-move">Harvester: move</option>
+                <option value="harvester-load">Harvester: load</option>
+                <option value="harvester-unload">Harvester: unload</option>
+              </select>
+            </div>
+            <button class="button-secondary" id="resetButton" type="button">Reset defaults</button>
+          </div>
+        </section>
+
+        <section class="field-grid">
+          <div class="field">
+            <label for="frameWidth">Frame width</label>
+            <input id="frameWidth" type="number" min="1" value="128">
+          </div>
+          <div class="field">
+            <label for="frameHeight">Frame height</label>
+            <input id="frameHeight" type="number" min="1" value="128">
+          </div>
+          <div class="field">
+            <label for="rows">Rows</label>
+            <input id="rows" type="number" min="1" value="8">
+          </div>
+          <div class="field">
+            <label for="fps">FPS</label>
+            <input id="fps" type="number" min="1" max="60" value="8">
+          </div>
+          <div class="field">
+            <label for="scale">Scale</label>
+            <input id="scale" type="number" min="0.25" max="8" step="0.25" value="2">
+          </div>
+          <div class="field">
+            <label for="rowSelect">Direction row</label>
+            <select id="rowSelect"></select>
+          </div>
+          <div class="field">
+            <label for="startCol">Start column</label>
+            <input id="startCol" type="number" min="0" value="0">
+          </div>
+          <div class="field">
+            <label for="frameCount">Frame count</label>
+            <input id="frameCount" type="number" min="1" value="1">
+          </div>
+          <div class="field wide">
+            <label for="backgroundMode">Background</label>
+            <select id="backgroundMode">
+              <option value="checker">Transparent checker</option>
+              <option value="dark">Dark</option>
+              <option value="sand">Sand-like</option>
+              <option value="field">Green test field</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="toggles">
+          <label class="toggle"><input id="showGrid" type="checkbox" checked> Show frame grid</label>
+          <label class="toggle"><input id="showAnchor" type="checkbox" checked> Show anchor marker</label>
+        </section>
+
+        <section class="stats">
+          <div class="stat">
+            <span class="key">Expected layout</span>
+            <span>8 direction rows, east to north-east</span>
+          </div>
+          <div class="stat">
+            <span class="key">Presets included</span>
+            <span>Builder and Harvester action windows</span>
+          </div>
+          <div class="stat">
+            <span class="key">Animation source</span>
+            <span id="frameInfo">Frame 0 of 0</span>
+          </div>
+          <div class="stat">
+            <span class="key">Crop rectangle</span>
+            <span id="cropInfo">x: 0, y: 0, w: 128, h: 128</span>
+          </div>
+        </section>
+      </aside>
+
+      <section class="panel viewer">
+        <div class="summary">
+          <div>
+            <strong>Preview row</strong>
+            <span id="directionLabel">east</span>
+          </div>
+          <div>
+            <strong>Sheet size</strong>
+            <span id="sheetSize">not loaded</span>
+          </div>
+          <div>
+            <strong>Frame columns</strong>
+            <span id="columnInfo">0 to 0</span>
+          </div>
+        </div>
+
+        <div class="canvas-grid">
+          <article class="canvas-card">
+            <h3>Animation Preview</h3>
+            <canvas id="previewCanvas" class="preview-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="previewNote">Load a sprite sheet to start previewing the loop.</p>
+          </article>
+
+          <article class="canvas-card">
+            <h3>Sheet Inspector</h3>
+            <canvas id="sheetCanvas" class="sheet-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="sheetNote">The source sheet will appear here with row and frame highlights.</p>
+          </article>
+        </div>
+
+        <p class="help">
+          Direction rows use the Four Elements civil contract order: east, south-east, south,
+          south-west, west, north-west, north, north-east.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const DIRECTIONS = [
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+        "north",
+        "north-east"
+      ];
+
+      const PRESETS = {
+        "builder-idle": { startCol: 0, frameCount: 1 },
+        "builder-move": { startCol: 1, frameCount: 4 },
+        "builder-build": { startCol: 5, frameCount: 6 },
+        "harvester-idle": { startCol: 0, frameCount: 1 },
+        "harvester-move": { startCol: 1, frameCount: 4 },
+        "harvester-load": { startCol: 5, frameCount: 6 },
+        "harvester-unload": { startCol: 11, frameCount: 6 }
+      };
+
+      const els = {
+        dropzone: document.getElementById("dropzone"),
+        fileInput: document.getElementById("fileInput"),
+        fileLabel: document.getElementById("fileLabel"),
+        presetSelect: document.getElementById("presetSelect"),
+        resetButton: document.getElementById("resetButton"),
+        frameWidth: document.getElementById("frameWidth"),
+        frameHeight: document.getElementById("frameHeight"),
+        rows: document.getElementById("rows"),
+        fps: document.getElementById("fps"),
+        scale: document.getElementById("scale"),
+        rowSelect: document.getElementById("rowSelect"),
+        startCol: document.getElementById("startCol"),
+        frameCount: document.getElementById("frameCount"),
+        backgroundMode: document.getElementById("backgroundMode"),
+        showGrid: document.getElementById("showGrid"),
+        showAnchor: document.getElementById("showAnchor"),
+        previewCanvas: document.getElementById("previewCanvas"),
+        sheetCanvas: document.getElementById("sheetCanvas"),
+        previewNote: document.getElementById("previewNote"),
+        sheetNote: document.getElementById("sheetNote"),
+        frameInfo: document.getElementById("frameInfo"),
+        cropInfo: document.getElementById("cropInfo"),
+        directionLabel: document.getElementById("directionLabel"),
+        sheetSize: document.getElementById("sheetSize"),
+        columnInfo: document.getElementById("columnInfo")
+      };
+
+      const previewCtx = els.previewCanvas.getContext("2d");
+      const sheetCtx = els.sheetCanvas.getContext("2d");
+
+      const state = {
+        image: null,
+        imageUrl: null,
+        currentFrame: 0,
+        lastTick: 0,
+        defaults: {
+          frameWidth: 128,
+          frameHeight: 128,
+          rows: 8,
+          fps: 8,
+          scale: 2,
+          row: 0,
+          startCol: 0,
+          frameCount: 1,
+          backgroundMode: "checker",
+          showGrid: true,
+          showAnchor: true
+        }
+      };
+
+      function populateDirectionRows() {
+        const rows = Math.max(1, Math.floor(readNumber(els.rows, state.defaults.rows)));
+        const currentValue = readNumber(els.rowSelect, state.defaults.row);
+        els.rowSelect.innerHTML = "";
+        for (let index = 0; index < rows; index += 1) {
+          const label = DIRECTIONS[index] || `row ${index}`;
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = `${index}: ${label}`;
+          els.rowSelect.append(option);
+        }
+        els.rowSelect.value = String(clamp(currentValue, 0, rows - 1));
+        syncRowOptions();
+      }
+
+      function syncRowOptions() {
+        const rows = Math.max(1, Math.floor(readNumber(els.rows, state.defaults.rows)));
+        if (els.rowSelect.options.length !== rows) {
+          populateDirectionRows();
+          return;
+        }
+        const currentValue = clamp(readNumber(els.rowSelect, 0), 0, Math.max(rows - 1, 0));
+        els.rowSelect.value = String(currentValue);
+        els.directionLabel.textContent = DIRECTIONS[currentValue] || `row ${currentValue}`;
+      }
+
+      function readNumber(input, fallback) {
+        const value = Number(input.value);
+        return Number.isFinite(value) ? value : fallback;
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+      }
+
+      function resetControls() {
+        els.frameWidth.value = String(state.defaults.frameWidth);
+        els.frameHeight.value = String(state.defaults.frameHeight);
+        els.rows.value = String(state.defaults.rows);
+        els.fps.value = String(state.defaults.fps);
+        els.scale.value = String(state.defaults.scale);
+        els.rowSelect.value = String(state.defaults.row);
+        els.startCol.value = String(state.defaults.startCol);
+        els.frameCount.value = String(state.defaults.frameCount);
+        els.backgroundMode.value = state.defaults.backgroundMode;
+        els.showGrid.checked = state.defaults.showGrid;
+        els.showAnchor.checked = state.defaults.showAnchor;
+        els.presetSelect.value = "";
+        state.currentFrame = 0;
+        syncRowOptions();
+        render();
+      }
+
+      function applyPreset(value) {
+        const preset = PRESETS[value];
+        if (!preset) return;
+        els.startCol.value = String(preset.startCol);
+        els.frameCount.value = String(preset.frameCount);
+        state.currentFrame = 0;
+        render();
+      }
+
+      function handleFiles(files) {
+        const file = files && files[0];
+        if (!file) return;
+        if (file.type !== "image/png") {
+          els.fileLabel.textContent = `Expected PNG. Received: ${file.type || file.name}`;
+          return;
+        }
+
+        if (state.imageUrl) {
+          URL.revokeObjectURL(state.imageUrl);
+        }
+
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          state.image = image;
+          state.imageUrl = url;
+          state.currentFrame = 0;
+          els.fileLabel.textContent = `${file.name} loaded`;
+          els.sheetSize.textContent = `${image.width} x ${image.height}px`;
+          els.previewNote.hidden = true;
+          els.sheetNote.hidden = true;
+          render();
+        };
+        image.onerror = () => {
+          els.fileLabel.textContent = `Could not load ${file.name}`;
+          URL.revokeObjectURL(url);
+        };
+        image.src = url;
+      }
+
+      function getConfig() {
+        const frameWidth = Math.max(1, Math.floor(readNumber(els.frameWidth, state.defaults.frameWidth)));
+        const frameHeight = Math.max(1, Math.floor(readNumber(els.frameHeight, state.defaults.frameHeight)));
+        const rows = Math.max(1, Math.floor(readNumber(els.rows, state.defaults.rows)));
+        const fps = clamp(Math.floor(readNumber(els.fps, state.defaults.fps)), 1, 60);
+        const scale = clamp(readNumber(els.scale, state.defaults.scale), 0.25, 8);
+        const row = clamp(Math.floor(readNumber(els.rowSelect, 0)), 0, rows - 1);
+        const startCol = Math.max(0, Math.floor(readNumber(els.startCol, 0)));
+        const frameCount = Math.max(1, Math.floor(readNumber(els.frameCount, 1)));
+        return {
+          frameWidth,
+          frameHeight,
+          rows,
+          fps,
+          scale,
+          row,
+          startCol,
+          frameCount,
+          backgroundMode: els.backgroundMode.value,
+          showGrid: els.showGrid.checked,
+          showAnchor: els.showAnchor.checked
+        };
+      }
+
+      function drawBackground(ctx, width, height, mode) {
+        ctx.save();
+        ctx.clearRect(0, 0, width, height);
+
+        if (mode === "checker") {
+          const size = 20;
+          for (let y = 0; y < height; y += size) {
+            for (let x = 0; x < width; x += size) {
+              ctx.fillStyle = ((x / size + y / size) % 2 === 0) ? "#e9e6dd" : "#c9c3b7";
+              ctx.fillRect(x, y, size, size);
+            }
+          }
+        } else if (mode === "dark") {
+          const gradient = ctx.createLinearGradient(0, 0, width, height);
+          gradient.addColorStop(0, "#1b242d");
+          gradient.addColorStop(1, "#091018");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, width, height);
+        } else if (mode === "sand") {
+          const gradient = ctx.createLinearGradient(0, 0, 0, height);
+          gradient.addColorStop(0, "#d8c59a");
+          gradient.addColorStop(1, "#a48754");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = "rgba(120, 86, 40, 0.12)";
+          for (let i = 0; i < 120; i += 1) {
+            const px = (i * 47) % width;
+            const py = (i * 29) % height;
+            const radius = 1 + (i % 3);
+            ctx.beginPath();
+            ctx.arc(px, py, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (mode === "field") {
+          const gradient = ctx.createLinearGradient(0, 0, 0, height);
+          gradient.addColorStop(0, "#5b8341");
+          gradient.addColorStop(1, "#243d1d");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, width, height);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+          ctx.lineWidth = 1;
+          for (let x = 0; x <= width; x += 24) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+          }
+          for (let y = 0; y <= height; y += 24) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+          }
+        }
+
+        ctx.restore();
+      }
+
+      function drawPreview(config) {
+        const width = els.previewCanvas.width;
+        const height = els.previewCanvas.height;
+        drawBackground(previewCtx, width, height, config.backgroundMode);
+
+        if (!state.image) {
+          return;
+        }
+
+        const frameIndex = state.currentFrame % config.frameCount;
+        const sourceX = (config.startCol + frameIndex) * config.frameWidth;
+        const sourceY = config.row * config.frameHeight;
+        const destWidth = config.frameWidth * config.scale;
+        const destHeight = config.frameHeight * config.scale;
+        const destX = (width - destWidth) / 2;
+        const destY = (height - destHeight) / 2;
+
+        previewCtx.imageSmoothingEnabled = false;
+        previewCtx.drawImage(
+          state.image,
+          sourceX,
+          sourceY,
+          config.frameWidth,
+          config.frameHeight,
+          destX,
+          destY,
+          destWidth,
+          destHeight
+        );
+
+        if (config.showGrid) {
+          previewCtx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+          previewCtx.lineWidth = 1;
+          previewCtx.strokeRect(destX + 0.5, destY + 0.5, destWidth - 1, destHeight - 1);
+        }
+
+        if (config.showAnchor) {
+          const anchorX = width / 2;
+          const anchorY = destY + destHeight * 0.84;
+          previewCtx.strokeStyle = "#ff6b6b";
+          previewCtx.lineWidth = 2;
+          previewCtx.beginPath();
+          previewCtx.moveTo(anchorX - 10, anchorY);
+          previewCtx.lineTo(anchorX + 10, anchorY);
+          previewCtx.moveTo(anchorX, anchorY - 10);
+          previewCtx.lineTo(anchorX, anchorY + 10);
+          previewCtx.stroke();
+          previewCtx.beginPath();
+          previewCtx.arc(anchorX, anchorY, 4, 0, Math.PI * 2);
+          previewCtx.fillStyle = "#ffb38b";
+          previewCtx.fill();
+        }
+
+        els.frameInfo.textContent = `Frame ${frameIndex + 1} of ${config.frameCount}`;
+        els.cropInfo.textContent = `x: ${sourceX}, y: ${sourceY}, w: ${config.frameWidth}, h: ${config.frameHeight}`;
+        els.columnInfo.textContent = `${config.startCol} to ${config.startCol + config.frameCount - 1}`;
+      }
+
+      function drawSheet(config) {
+        const width = els.sheetCanvas.width;
+        const height = els.sheetCanvas.height;
+        sheetCtx.clearRect(0, 0, width, height);
+
+        if (!state.image) {
+          return;
+        }
+
+        const scale = Math.min(width / state.image.width, height / state.image.height);
+        const drawWidth = state.image.width * scale;
+        const drawHeight = state.image.height * scale;
+        const offsetX = (width - drawWidth) / 2;
+        const offsetY = (height - drawHeight) / 2;
+
+        sheetCtx.imageSmoothingEnabled = false;
+        sheetCtx.drawImage(state.image, offsetX, offsetY, drawWidth, drawHeight);
+
+        if (config.showGrid) {
+          sheetCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+          sheetCtx.lineWidth = 1;
+          for (let x = 0; x <= state.image.width; x += config.frameWidth) {
+            const px = offsetX + x * scale;
+            sheetCtx.beginPath();
+            sheetCtx.moveTo(px, offsetY);
+            sheetCtx.lineTo(px, offsetY + drawHeight);
+            sheetCtx.stroke();
+          }
+          for (let y = 0; y <= state.image.height; y += config.frameHeight) {
+            const py = offsetY + y * scale;
+            sheetCtx.beginPath();
+            sheetCtx.moveTo(offsetX, py);
+            sheetCtx.lineTo(offsetX + drawWidth, py);
+            sheetCtx.stroke();
+          }
+        }
+
+        const rowY = offsetY + config.row * config.frameHeight * scale;
+        sheetCtx.fillStyle = "rgba(126, 214, 181, 0.12)";
+        sheetCtx.fillRect(offsetX, rowY, drawWidth, config.frameHeight * scale);
+
+        const activeFrame = state.currentFrame % config.frameCount;
+        const sourceX = (config.startCol + activeFrame) * config.frameWidth;
+        const frameX = offsetX + sourceX * scale;
+        const frameY = rowY;
+        const frameW = config.frameWidth * scale;
+        const frameH = config.frameHeight * scale;
+        sheetCtx.strokeStyle = "#f1c86a";
+        sheetCtx.lineWidth = 2;
+        sheetCtx.strokeRect(frameX + 1, frameY + 1, Math.max(frameW - 2, 0), Math.max(frameH - 2, 0));
+      }
+
+      function render() {
+        syncRowOptions();
+        const config = getConfig();
+        els.directionLabel.textContent = DIRECTIONS[config.row] || `row ${config.row}`;
+        drawPreview(config);
+        drawSheet(config);
+      }
+
+      function tick(timestamp) {
+        const config = getConfig();
+        const frameDuration = 1000 / config.fps;
+        if (timestamp - state.lastTick >= frameDuration) {
+          state.currentFrame = (state.currentFrame + 1) % config.frameCount;
+          state.lastTick = timestamp;
+          render();
+        }
+        requestAnimationFrame(tick);
+      }
+
+      els.fileInput.addEventListener("change", (event) => {
+        handleFiles(event.target.files);
+      });
+
+      els.dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        els.dropzone.classList.add("dragover");
+      });
+
+      ["dragleave", "dragend"].forEach((type) => {
+        els.dropzone.addEventListener(type, () => {
+          els.dropzone.classList.remove("dragover");
+        });
+      });
+
+      els.dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        els.dropzone.classList.remove("dragover");
+        handleFiles(event.dataTransfer.files);
+      });
+
+      [
+        els.frameWidth,
+        els.frameHeight,
+        els.rows,
+        els.fps,
+        els.scale,
+        els.rowSelect,
+        els.startCol,
+        els.frameCount,
+        els.backgroundMode,
+        els.showGrid,
+        els.showAnchor
+      ].forEach((element) => {
+        element.addEventListener("input", render);
+        element.addEventListener("change", render);
+      });
+
+      els.presetSelect.addEventListener("change", (event) => {
+        applyPreset(event.target.value);
+      });
+
+      els.resetButton.addEventListener("click", resetControls);
+
+      populateDirectionRows();
+      resetControls();
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>
