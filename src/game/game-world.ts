@@ -139,6 +139,7 @@ export class GameWorld {
     this.onResize();
     this.lastTime = performance.now();
     this.publishUiState();
+    this.publishTestHooks();
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -234,6 +235,22 @@ export class GameWorld {
 
     this.publishUiState();
 
+    this.publishTestHooks();
+  }
+
+  private publishUiState(): void {
+    this.onEconomyUpdate?.(this.economy);
+    this.onPowerUpdate?.(this.power);
+    this.onControlUpdate?.(this.control);
+    this.onConstructionUpdate?.({
+      builderBusy: this.map.builders.some((builder) => builder.busy),
+      matter: this.economy.resources.matter,
+      statusMessage: this.constructionStatusMessage,
+      sites: this.map.constructionSites,
+    });
+  }
+
+  private publishTestHooks(): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -296,18 +313,6 @@ export class GameWorld {
         startConstruction: (buildingType: BuildingType) => this.startConstruction(buildingType),
       };
     }
-  }
-
-  private publishUiState(): void {
-    this.onEconomyUpdate?.(this.economy);
-    this.onPowerUpdate?.(this.power);
-    this.onControlUpdate?.(this.control);
-    this.onConstructionUpdate?.({
-      builderBusy: this.map.builders.some((builder) => builder.busy),
-      matter: this.economy.resources.matter,
-      statusMessage: this.constructionStatusMessage,
-      sites: this.map.constructionSites,
-    });
   }
 
   private resolveConstructionMessage(result: ConstructionCommandResult): string {
