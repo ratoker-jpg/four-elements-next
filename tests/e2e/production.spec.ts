@@ -10,6 +10,10 @@ test.describe('NEXT-06C2 production system', () => {
     await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
   }
 
+  async function openProductionPanel(page: import('@playwright/test').Page) {
+    await page.locator('#production-panel').getByRole('button', { name: /^Производство/ }).click();
+  }
+
   /** Build a Units Factory using debug hooks and return its position. */
   async function buildUnitsFactory(page: import('@playwright/test').Page): Promise<{ tx: number; ty: number }> {
     // Give enough matter to build factory (150) and still have some left for production
@@ -66,11 +70,13 @@ test.describe('NEXT-06C2 production system', () => {
 
     const panel = page.locator('#production-panel');
     await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button', { name: /^Производство/ })).toBeVisible();
   });
 
   test('production panel shows factory position and buttons', async ({ page }) => {
     await navigateToGameScreen(page);
     await buildUnitsFactory(page);
+    await openProductionPanel(page);
 
     const panel = page.locator('#production-panel');
     await expect(panel).toContainText('Фабрика');
@@ -81,6 +87,7 @@ test.describe('NEXT-06C2 production system', () => {
   test('produce buttons show cost and time', async ({ page }) => {
     await navigateToGameScreen(page);
     await buildUnitsFactory(page);
+    await openProductionPanel(page);
 
     const panel = page.locator('#production-panel');
     const builderBtn = panel.getByRole('button', { name: /Строитель/ });
@@ -95,6 +102,7 @@ test.describe('NEXT-06C2 production system', () => {
   test('produce buttons are disabled when resources are insufficient', async ({ page }) => {
     await navigateToGameScreen(page);
     await buildUnitsFactory(page);
+    await openProductionPanel(page);
 
     // Drain matter
     await page.evaluate(() => {
@@ -109,19 +117,13 @@ test.describe('NEXT-06C2 production system', () => {
     await expect(panel.getByRole('button', { name: /Сборщик/ })).toBeDisabled();
   });
 
-  test('producing a builder deducts resources and shows queue', async ({ page }) => {
+  test('producing a builder from UI deducts resources and shows queue', async ({ page }) => {
     await navigateToGameScreen(page);
-    const factoryPos = await buildUnitsFactory(page);
+    await buildUnitsFactory(page);
+    await openProductionPanel(page);
 
-    // Produce a builder and verify it succeeds
-    const result = await page.evaluate((pos) => {
-      const debug = (window as Record<string, unknown>).__productionTest as {
-        startProduction: (tx: number, ty: number, unitType: string) => unknown;
-      };
-      return debug.startProduction(pos.tx, pos.ty, 'builder') as { ok: boolean };
-    }, factoryPos);
-
-    expect(result.ok).toBe(true);
+    const panel = page.locator('#production-panel');
+    await panel.getByRole('button', { name: /Строитель/ }).click();
 
     // Wait a frame for test hooks to update, then verify resources changed
     await page.waitForTimeout(100);
@@ -149,7 +151,6 @@ test.describe('NEXT-06C2 production system', () => {
     expect(afterState.used).toBeGreaterThanOrEqual(3); // initial builder(1) + harvester(1) + produced builder(1)
 
     // Verify queue shows 1/2
-    const panel = page.locator('#production-panel');
     await expect(panel).toContainText('1/2');
   });
 

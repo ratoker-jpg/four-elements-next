@@ -1,7 +1,7 @@
 /** Production panel: DOM overlay showing factory production queues and controls. Minimal UI. */
 
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
-import { canProduce, QUEUE_LIMIT, PRODUCTION_COSTS as COSTS } from '../systems/production.js';
+import { QUEUE_LIMIT, PRODUCTION_COSTS as COSTS } from '../systems/production.js';
 import { isBuildingOnline } from '../systems/power.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
 import type { ReadonlyPowerState } from '../systems/power.js';
@@ -24,30 +24,108 @@ const UNIT_SHORT: Record<ProducibleUnitType, string> = {
   harvester: 'HRV',
 };
 
+function getDisabledReason(
+  state: ProductionPanelState,
+  factoryTx: number,
+  factoryTy: number,
+  queueLength: number,
+  unitType: ProducibleUnitType,
+): string | null {
+  if (!isBuildingOnline(state.power, factoryTx, factoryTy)) return 'Фабрика без питания';
+  if (queueLength >= QUEUE_LIMIT) return 'Очередь заполнена';
+
+  const cost = COSTS[unitType];
+  if (state.economy.resources.matter < cost.matter) return 'Недостаточно материи';
+
+  const activeElement = state.economy.resources.elements[state.economy.faction];
+  if (activeElement < cost.element) return 'Недостаточно элемента фракции';
+
+  if (state.control.current - state.control.used < cost.control) return 'Недостаточно контроля';
+
+  return null;
+}
+
+function createRenderKey(state: ProductionPanelState): string {
+  const activeElement = state.economy.resources.elements[state.economy.faction];
+  const factoryKey = state.factories.map((factory) => {
+    const online = isBuildingOnline(state.power, factory.tx, factory.ty) ? '1' : '0';
+    const queueKey = factory.queue.map((item) => [
+      item.unitType,
+      Math.floor(item.progress * 100),
+      item.completed ? '1' : '0',
+    ].join(':')).join(',');
+    return `${factory.tx},${factory.ty},${online},${queueKey}`;
+  }).join('|');
+
+  return [
+    state.factories.length,
+    Math.floor(state.economy.resources.matter),
+    activeElement,
+    state.control.current,
+    state.control.used,
+    factoryKey,
+  ].join('|');
+}
+
 export function createProductionPanel(
   onProduce: (factoryTx: number, factoryTy: number, unitType: ProducibleUnitType) => void,
 ): {
   element: HTMLElement;
   update: (state: ProductionPanelState) => void;
+  toggle: () => void;
 } {
   const root = document.createElement('div');
   root.className = 'production-panel';
   root.dataset.visible = 'false';
+  root.dataset.open = 'false';
+
+  const panel = document.createElement('div');
+  panel.className = 'production-panel__panel';
+  panel.style.display = 'none';
+
+  const applyOpenState = (): void => {
+    panel.style.display = root.dataset.open === 'true' ? 'block' : 'none';
+  };
+
+  const toggleButton = document.createElement('button');
+  toggleButton.className = 'btn production-panel__toggle';
+  toggleButton.type = 'button';
+  toggleButton.textContent = 'Производство';
+  toggleButton.addEventListener('click', () => {
+    root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+    applyOpenState();
+  });
+  root.appendChild(toggleButton);
+
+  root.appendChild(panel);
 
   const title = document.createElement('div');
   title.className = 'production-panel__title';
   title.textContent = 'Производство';
-  root.appendChild(title);
+  panel.appendChild(title);
 
   const factoryList = document.createElement('div');
   factoryList.className = 'production-panel__list';
-  root.appendChild(factoryList);
+  panel.appendChild(factoryList);
+
+  let lastRenderKey = '';
 
   const update = (state: ProductionPanelState): void => {
     const hasFactories = state.factories.length > 0;
     root.dataset.visible = hasFactories ? 'true' : 'false';
+    toggleButton.textContent = `Производство${hasFactories ? ` (${state.factories.length})` : ''}`;
 
-    // Rebuild factory list
+    if (!hasFactories) {
+      root.dataset.open = 'false';
+    }
+    applyOpenState();
+
+    const nextRenderKey = createRenderKey(state);
+    if (nextRenderKey === lastRenderKey) return;
+    lastRenderKey = nextRenderKey;
+
+    // Rebuild factory list only when the visible production state actually changes.
+    // Rebuilding every animation frame detaches buttons between pointerdown/click.
     factoryList.innerHTML = '';
 
     for (const factory of state.factories) {
@@ -69,30 +147,46 @@ export function createProductionPanel(
       // Buttons row
       const buttonsRow = document.createElement('div');
       buttonsRow.className = 'production-panel__buttons';
+      const disabledReasons: string[] = [];
 
       for (const unitType of ['builder', 'harvester'] as ProducibleUnitType[]) {
         const cost = COSTS[unitType];
-        const canAfford = canProduce(
-          state.economy,
-          state.control,
-          state.power,
-          factory.queue.length,
+        const disabledReason = getDisabledReason(
+          state,
           factory.tx,
           factory.ty,
+          factory.queue.length,
           unitType,
         );
+        if (disabledReason && !disabledReasons.includes(disabledReason)) disabledReasons.push(disabledReason);
 
         const btn = document.createElement('button');
         btn.className = 'btn production-panel__produce-btn';
         btn.type = 'button';
         btn.textContent = `${UNIT_LABELS[unitType]} • ${cost.matter}M/${cost.element}E • ${cost.duration}с`;
-        btn.disabled = !canAfford;
-        btn.title = !canAfford ? 'Недостаточно ресурсов или контроля' : '';
-        btn.addEventListener('click', () => onProduce(factory.tx, factory.ty, unitType));
+        btn.disabled = disabledReason !== null;
+        btn.title = disabledReason ?? '';
+        btn.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (btn.disabled) return;
+          onProduce(factory.tx, factory.ty, unitType);
+        });
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
         buttonsRow.appendChild(btn);
       }
 
       card.appendChild(buttonsRow);
+
+      if (disabledReasons.length > 0) {
+        const reason = document.createElement('div');
+        reason.className = 'production-panel__reason';
+        reason.textContent = disabledReasons[0]!;
+        card.appendChild(reason);
+      }
 
       // Queue display
       const queueInfo = document.createElement('div');
@@ -138,5 +232,10 @@ export function createProductionPanel(
     }
   };
 
-  return { element: root, update };
+  const toggle = () => {
+    root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+    applyOpenState();
+  };
+
+  return { element: root, update, toggle };
 }
