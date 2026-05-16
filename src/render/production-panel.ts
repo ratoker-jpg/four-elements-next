@@ -137,7 +137,16 @@ export function createProductionPanel(
         btn.textContent = `${UNIT_LABELS[unitType]} • ${cost.matter}M/${cost.element}E • ${cost.duration}с`;
         btn.disabled = disabledReason !== null;
         btn.title = disabledReason ?? '';
-        btn.addEventListener('click', () => onProduce(factory.tx, factory.ty, unitType));
+        btn.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (btn.disabled) return;
+          onProduce(factory.tx, factory.ty, unitType);
+        });
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
         buttonsRow.appendChild(btn);
       }
 
