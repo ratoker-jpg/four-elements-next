@@ -82,9 +82,10 @@ function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>
   return { tx, ty, faction };
 }
 
-/** Pre-place one Separator and one Storage adjacent to HQ. Deterministic — no random. */
+/** Pre-place one Separator, one Storage, one Power Plant, one Command Relay adjacent to HQ. */
 function placeBuildings(hq: MapData['hq'], occupied: Set<string>): BuildingPlacement[] {
   const buildings: BuildingPlacement[] = [];
+
   // Separator: just east of HQ (1×1 footprint)
   const sepTx = hq.tx + HQ_FOOTPRINT;
   const sepTy = hq.ty;
@@ -96,6 +97,18 @@ function placeBuildings(hq: MapData['hq'], occupied: Set<string>): BuildingPlace
   const stoTy = sepTy + 1;
   markOccupied(occupied, stoTx, stoTy, 1);
   buildings.push({ tx: stoTx, ty: stoTy, type: 'storage' });
+
+  // Power Plant: south of HQ (1×1 footprint)
+  const ppTx = hq.tx + 1;
+  const ppTy = hq.ty + HQ_FOOTPRINT;
+  markOccupied(occupied, ppTx, ppTy, 1);
+  buildings.push({ tx: ppTx, ty: ppTy, type: 'power-plant' });
+
+  // Command Relay: east of Power Plant (1×1 footprint)
+  const crTx = ppTx + 1;
+  const crTy = ppTy;
+  markOccupied(occupied, crTx, crTy, 1);
+  buildings.push({ tx: crTx, ty: crTy, type: 'command-relay' });
 
   return buildings;
 }

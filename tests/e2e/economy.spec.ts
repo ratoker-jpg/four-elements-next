@@ -18,7 +18,8 @@ test.describe('NEXT-03 economy baseline', () => {
   test('economy HUD shows three resource items', async ({ page }) => {
     await navigateToGameScreen(page);
     const items = page.locator('.economy-hud__item');
-    await expect(items).toHaveCount(3);
+    // 3 resource items + 2 power/control items = 5
+    await expect(items).toHaveCount(5);
   });
 
   test('economy HUD shows correct starting resources', async ({ page }) => {

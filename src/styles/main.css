@@ -249,3 +249,10 @@ html, body {
   min-width: calc(4.5ch * var(--ui-scale));
   text-align: right;
 }
+
+.economy-hud__separator {
+  width: calc(1px * var(--ui-scale));
+  height: calc(20px * var(--ui-scale));
+  background: rgba(240, 201, 106, 0.25);
+  align-self: center;
+}
