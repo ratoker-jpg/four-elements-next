@@ -232,6 +232,58 @@ describe('startProduction', () => {
     expect(state.economy.resources.elements.cyan).toBe(elemSnap);
     expect(state.control.used).toBe(usedSnap);
   });
+
+  // NEXT-TEST-01: failure paths must not mutate any state
+
+  it('queue-full failure does not change matter, element, or control.used', () => {
+    const state = createStateWithFactory();
+    startProduction(state, 10, 10, 'builder');
+    startProduction(state, 10, 10, 'harvester');
+    // Queue is now full (2/2)
+    const matterSnap = state.economy.resources.matter;
+    const elemSnap = state.economy.resources.elements.cyan;
+    const usedSnap = state.control.used;
+
+    const result = startProduction(state, 10, 10, 'builder');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('queue-full');
+    expect(state.economy.resources.matter).toBe(matterSnap);
+    expect(state.economy.resources.elements.cyan).toBe(elemSnap);
+    expect(state.control.used).toBe(usedSnap);
+  });
+
+  it('insufficient-control failure does not change matter, element, or control.used', () => {
+    const state = createStateWithFactory();
+    state.control.used = state.control.current;
+    const matterSnap = state.economy.resources.matter;
+    const elemSnap = state.economy.resources.elements.cyan;
+    const usedSnap = state.control.used;
+
+    const result = startProduction(state, 10, 10, 'builder');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('insufficient-control');
+    expect(state.economy.resources.matter).toBe(matterSnap);
+    expect(state.economy.resources.elements.cyan).toBe(elemSnap);
+    expect(state.control.used).toBe(usedSnap);
+  });
+
+  it('factory-offline failure does not change matter, element, or control.used', () => {
+    const state = createStateWithFactory();
+    const building = state.power.buildings.find(
+      (b) => b.tx === 10 && b.ty === 10,
+    )!;
+    building.online = false;
+    const matterSnap = state.economy.resources.matter;
+    const elemSnap = state.economy.resources.elements.cyan;
+    const usedSnap = state.control.used;
+
+    const result = startProduction(state, 10, 10, 'builder');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('factory-offline');
+    expect(state.economy.resources.matter).toBe(matterSnap);
+    expect(state.economy.resources.elements.cyan).toBe(elemSnap);
+    expect(state.control.used).toBe(usedSnap);
+  });
 });
 
 // ── tickProduction ─────────────────────────────────────────────────────
@@ -582,5 +634,51 @@ describe('GameState includes ProductionState', () => {
     const state = createGameState('standard', 'cyan');
     expect(state.production).toBeDefined();
     expect(state.production.factories).toEqual([]);
+  });
+});
+
+// ── NEXT-TEST-01: control.used reservation across production cycles ───
+
+describe('control.used reservation across production', () => {
+  it('producing harvester reserves control.used', () => {
+    const state = createStateWithFactory();
+    const usedBefore = state.control.used;
+    startProduction(state, 10, 10, 'harvester');
+    expect(state.control.used).toBe(usedBefore + PRODUCTION_COSTS.harvester.control);
+  });
+
+  it('producing 2 items reserves control.used for both', () => {
+    const state = createStateWithFactory();
+    const usedBefore = state.control.used;
+    startProduction(state, 10, 10, 'builder');
+    startProduction(state, 10, 10, 'harvester');
+    expect(state.control.used).toBe(
+      usedBefore + PRODUCTION_COSTS.builder.control + PRODUCTION_COSTS.harvester.control,
+    );
+  });
+
+  it('control.used unchanged through complete produce-and-spawn cycle', () => {
+    const state = createStateWithFactory();
+    const usedInitial = state.control.used;
+
+    // Enqueue builder
+    startProduction(state, 10, 10, 'builder');
+    const usedAfterEnqueue = state.control.used;
+    expect(usedAfterEnqueue).toBe(usedInitial + PRODUCTION_COSTS.builder.control);
+
+    // Complete production and spawn
+    tickProduction(state, 21);
+    // control.used must not change at spawn
+    expect(state.control.used).toBe(usedAfterEnqueue);
+
+    // Enqueue harvester
+    startProduction(state, 10, 10, 'harvester');
+    const usedAfterSecond = state.control.used;
+    expect(usedAfterSecond).toBe(usedAfterEnqueue + PRODUCTION_COSTS.harvester.control);
+
+    // Complete and spawn harvester
+    tickProduction(state, 26);
+    // Still unchanged after second spawn
+    expect(state.control.used).toBe(usedAfterSecond);
   });
 });
