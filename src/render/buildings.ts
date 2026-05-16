@@ -5,6 +5,7 @@ import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR } f
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
 import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
+import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
 
 const HQ_ASSET_KEYS: Record<FactionId, string> = {
@@ -407,4 +408,81 @@ export function renderConstructionSite(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('SITE', cv.x, platformY - hh - 21 * z);
+}
+
+/** Phase label for harvester rendering. */
+function harvesterPhaseLabel(phase: HarvesterState['phase']): string {
+  switch (phase) {
+    case 'idle': return 'IDLE';
+    case 'moving-to-resource': return 'GO';
+    case 'gathering': return 'DIG';
+    case 'moving-to-hq': return 'RET';
+    case 'delivering': return 'DLV';
+  }
+}
+
+/** Top face color for harvester based on phase. */
+function harvesterTopColor(phase: HarvesterState['phase']): string {
+  switch (phase) {
+    case 'idle': return '#9ad8ff';
+    case 'moving-to-resource': return '#d6c83e';
+    case 'gathering': return '#e89040';
+    case 'moving-to-hq': return '#d68f3e';
+    case 'delivering': return '#5ee89a';
+  }
+}
+
+/** Render a Harvester unit with fallback geometry (no sprite). */
+export function renderHarvester(
+  ctx: CanvasRenderingContext2D,
+  harvester: HarvesterState,
+  camera: Camera,
+): void {
+  const scr = tileToScreen(harvester.tx, harvester.ty);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+  const boxHeight = 7 * z;
+
+  drawIsoBox(
+    ctx,
+    cv.x,
+    cv.y,
+    z * 0.65,
+    '#5a7a4a',
+    '#3e5830',
+    harvesterTopColor(harvester.phase),
+    boxHeight,
+    'HRV',
+    true,
+  );
+
+  // Phase label above
+  ctx.fillStyle = '#e8f0d8';
+  ctx.font = `bold ${5 * z}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(harvesterPhaseLabel(harvester.phase), cv.x, cv.y - boxHeight - 9 * z);
+
+  // Carry indicator
+  if (harvester.carry > 0) {
+    ctx.fillStyle = '#5ee89a';
+    ctx.font = `bold ${5 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(`${harvester.carry}`, cv.x, cv.y - boxHeight - 3 * z);
+  }
+
+  // Gathering progress bar
+  if (harvester.phase === 'gathering' && harvester.gatherProgress > 0) {
+    const barW = 22 * z;
+    const barH = 3 * z;
+    const barX = cv.x - barW / 2;
+    const barY = cv.y - boxHeight - ((TILE_H / 2) * z * 0.65) - 6 * z;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = '#e89040';
+    ctx.fillRect(barX, barY, barW * Math.min(harvester.gatherProgress, 1), barH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+  }
 }

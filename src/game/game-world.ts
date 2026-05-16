@@ -120,6 +120,8 @@ export class GameWorld {
     delete (window as any).__controlState;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__constructionState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__harvesterState;
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,7 +153,7 @@ export class GameWorld {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters);
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -236,6 +238,24 @@ export class GameWorld {
         progress: site.progress,
       })),
       statusMessage: this.state.constructionStatusMessage,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__harvesterState = {
+      harvesters: this.state.harvesters.map((h) => ({
+        tx: h.tx,
+        ty: h.ty,
+        phase: h.phase,
+        targetNodeIndex: h.targetNodeIndex,
+        gatherProgress: h.gatherProgress,
+        carry: h.carry,
+      })),
+      resourceNodes: this.state.resourceNodes.map((n) => ({
+        tx: n.tx,
+        ty: n.ty,
+        type: n.type,
+        infinite: n.infinite,
+        remaining: n.remaining,
+      })),
     };
 
     if (import.meta.env.MODE === 'test') {

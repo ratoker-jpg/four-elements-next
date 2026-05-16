@@ -3,6 +3,7 @@ import { createGameState } from '../../src/game/game-state.js';
 import { runSystems } from '../../src/systems/system-runner.js';
 import { startConstruction } from '../../src/systems/construction.js';
 import { BUILDER_CONTROL_COST } from '../../src/systems/construction.js';
+import { HARVESTER_CONTROL_COST } from '../../src/systems/harvesting.js';
 import { HQ_CONTROL, RELAY_CONTROL } from '../../src/systems/control.js';
 
 describe('runSystems', () => {
@@ -98,13 +99,14 @@ describe('runSystems', () => {
     expect(state.map.builders[0]!.busy).toBe(false);
   });
 
-  it('preserves builder control cost in control.used after init', () => {
+  it('preserves builder + harvester control cost in control.used after init', () => {
     const state = createState();
     const builderCount = state.map.builders.length;
+    const harvesterCount = state.harvesters.length;
 
     runSystems(state, 1);
 
     // control.used is set at creation time, not changed by tickControl
-    expect(state.control.used).toBe(builderCount * BUILDER_CONTROL_COST);
+    expect(state.control.used).toBe(builderCount * BUILDER_CONTROL_COST + harvesterCount * HARVESTER_CONTROL_COST);
   });
 });

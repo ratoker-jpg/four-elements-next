@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createGameState } from '../../src/game/game-state.js';
 import { BUILDER_CONTROL_COST } from '../../src/systems/construction.js';
+import { HARVESTER_CONTROL_COST } from '../../src/systems/harvesting.js';
 import { HQ_FOOTPRINT } from '../../src/core/constants.js';
 import { getBuildingFootprint } from '../../src/config/buildings.js';
 
 describe('createGameState', () => {
-  it('creates state with map, economy, power, and control', () => {
+  it('creates state with map, economy, power, control, harvesters, and resourceNodes', () => {
     const state = createGameState('standard', 'cyan');
 
     expect(state.map).toBeDefined();
@@ -13,6 +14,8 @@ describe('createGameState', () => {
     expect(state.power).toBeDefined();
     expect(state.control).toBeDefined();
     expect(state.constructionStatusMessage).toBe('Строитель готов к строительству.');
+    expect(state.harvesters).toBeDefined();
+    expect(state.resourceNodes).toBeDefined();
   });
 
   it('initializes map with correct dimensions for standard size', () => {
@@ -56,9 +59,11 @@ describe('createGameState', () => {
     expect(hqEntry!.online).toBe(true);
   });
 
-  it('sets control used to builder count times BUILDER_CONTROL_COST', () => {
+  it('sets control used to builder + harvester control cost', () => {
     const state = createGameState('standard', 'cyan');
-    expect(state.control.used).toBe(state.map.builders.length * BUILDER_CONTROL_COST);
+    expect(state.control.used).toBe(
+      state.map.builders.length * BUILDER_CONTROL_COST + state.harvesters.length * HARVESTER_CONTROL_COST,
+    );
   });
 
   it('has builders placed on the map', () => {
@@ -69,6 +74,24 @@ describe('createGameState', () => {
   it('has no construction sites at start', () => {
     const state = createGameState('standard', 'cyan');
     expect(state.map.constructionSites).toHaveLength(0);
+  });
+
+  it('creates harvesters near HQ at start', () => {
+    const state = createGameState('standard', 'cyan');
+    expect(state.harvesters.length).toBeGreaterThanOrEqual(1);
+    const h = state.harvesters[0]!;
+    expect(h.phase).toBe('idle');
+    expect(h.carry).toBe(0);
+    expect(h.gatherProgress).toBe(0);
+    expect(h.targetNodeIndex).toBe(-1);
+  });
+
+  it('creates resource node runtime states matching map resources', () => {
+    const state = createGameState('standard', 'cyan');
+    expect(state.resourceNodes).toHaveLength(state.map.resources.length);
+    for (const node of state.resourceNodes) {
+      expect(node.remaining).toBeGreaterThan(0);
+    }
   });
 
   it('map buildings have 2x2 footprints and do not overlap', () => {
