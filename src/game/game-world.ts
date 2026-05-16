@@ -4,6 +4,7 @@ import { ASSET_MANIFEST } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
+import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
 import type { GameState } from './game-state.js';
 import { createGameState } from './game-state.js';
 import { Camera } from '../render/camera.js';
@@ -17,8 +18,12 @@ import type { ReadonlyControlState } from '../systems/control.js';
 import { BUILDING_DEFINITIONS } from '../config/buildings.js';
 import {
   startConstruction as startConstructionSystem,
-  type ConstructionCommandResult,
+  type ConstructionCommandResult as ConstructionCommandResultType,
 } from '../systems/construction.js';
+import {
+  startProduction as startProductionSystem,
+  type ProductionCommandResult,
+} from '../systems/production.js';
 import { runSystems } from '../systems/system-runner.js';
 
 export class GameWorld {
@@ -44,6 +49,11 @@ export class GameWorld {
     matter: number;
     statusMessage: string;
     sites: ReadonlyArray<ConstructionSitePlacement>;
+  }) => void;
+  onProductionUpdate?: (state: ReadonlyProductionState & {
+    economy: ReadonlyEconomyState;
+    control: ReadonlyControlState;
+    power: ReadonlyPowerState;
   }) => void;
 
   private boundKeyDown: (e: KeyboardEvent) => void;
@@ -122,10 +132,14 @@ export class GameWorld {
     delete (window as any).__constructionState;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__harvesterState;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__productionState;
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).__constructionTest;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__productionTest;
     }
   }
 
@@ -133,9 +147,15 @@ export class GameWorld {
   getPowerState(): ReadonlyPowerState { return this.state.power; }
   getControlState(): ReadonlyControlState { return this.state.control; }
 
-  startConstruction(buildingType: BuildingType): ConstructionCommandResult {
+  startConstruction(buildingType: BuildingType): ConstructionCommandResultType {
     const result = startConstructionSystem(this.state.map, this.state.economy, buildingType);
     this.state.constructionStatusMessage = this.resolveConstructionMessage(result);
+    this.publishUiState();
+    return result;
+  }
+
+  startProduction(factoryTx: number, factoryTy: number, unitType: ProducibleUnitType): ProductionCommandResult {
+    const result = startProductionSystem(this.state, factoryTx, factoryTy, unitType);
     this.publishUiState();
     return result;
   }
@@ -182,6 +202,12 @@ export class GameWorld {
       matter: this.state.economy.resources.matter,
       statusMessage: this.state.constructionStatusMessage,
       sites: this.state.map.constructionSites,
+    });
+    this.onProductionUpdate?.({
+      factories: this.state.production.factories,
+      economy: this.state.economy,
+      control: this.state.control,
+      power: this.state.power,
     });
   }
 
@@ -257,6 +283,20 @@ export class GameWorld {
         remaining: n.remaining,
       })),
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__productionState = {
+      factories: this.state.production.factories.map((f) => ({
+        tx: f.tx,
+        ty: f.ty,
+        queue: f.queue.map((item) => ({
+          unitType: item.unitType,
+          elapsed: item.elapsed,
+          duration: item.duration,
+          progress: item.progress,
+          completed: item.completed,
+        })),
+      })),
+    };
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -265,10 +305,15 @@ export class GameWorld {
         advanceConstruction: (seconds: number) => this.debugAdvanceConstruction(seconds),
         startConstruction: (buildingType: BuildingType) => this.startConstruction(buildingType),
       };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__productionTest = {
+        startProduction: (factoryTx: number, factoryTy: number, unitType: ProducibleUnitType) =>
+          this.startProduction(factoryTx, factoryTy, unitType),
+      };
     }
   }
 
-  private resolveConstructionMessage(result: ConstructionCommandResult): string {
+  private resolveConstructionMessage(result: ConstructionCommandResultType): string {
     if (result.ok && result.site) {
       const definition = BUILDING_DEFINITIONS[result.buildingType];
       return `${definition.label} строится на (${result.site.tx}, ${result.site.ty}).`;

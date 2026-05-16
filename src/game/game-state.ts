@@ -25,6 +25,10 @@ import {
   type HarvesterState,
   type ResourceNodeState,
 } from '../systems/harvesting.js';
+import {
+  createProductionState,
+  type ProductionState,
+} from '../systems/production.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
@@ -42,6 +46,8 @@ export interface GameState {
   harvesters: HarvesterState[];
   /** Runtime resource node states (depletion tracking). Managed by tickHarvesting. */
   resourceNodes: ResourceNodeState[];
+  /** Production system state: factory queues and progress. Managed by tickProduction. */
+  production: ProductionState;
 }
 
 /** Resolve "random" faction to a concrete FactionId. */
@@ -101,6 +107,8 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
     map.builders.length * BUILDER_CONTROL_COST + harvesters.length * HARVESTER_CONTROL_COST,
   );
 
+  const production = createProductionState();
+
   return {
     map,
     economy,
@@ -109,5 +117,6 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
     constructionStatusMessage: 'Строитель готов к строительству.',
     harvesters,
     resourceNodes,
+    production,
   };
 }

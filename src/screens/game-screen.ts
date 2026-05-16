@@ -3,6 +3,7 @@ import type { NavigateFn } from '../core/screen-manager.js';
 import { GameWorld } from '../game/game-world.js';
 import { createEconomyHud } from '../render/economy-hud.js';
 import { createBuildMenu } from '../render/build-menu.js';
+import { createProductionPanel } from '../render/production-panel.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
@@ -35,6 +36,12 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       buildMenu.element.id = 'build-menu';
       wrapper.appendChild(buildMenu.element);
 
+      const productionPanel = createProductionPanel((factoryTx, factoryTy, unitType) => {
+        gameWorld?.startProduction(factoryTx, factoryTy, unitType);
+      });
+      productionPanel.element.id = 'production-panel';
+      wrapper.appendChild(productionPanel.element);
+
       buildMenuHotkey = (event: KeyboardEvent) => {
         if (event.repeat || event.code !== 'KeyB') return;
         buildMenu.toggle();
@@ -61,6 +68,9 @@ export function createGameScreen(navigate: NavigateFn): Screen {
           builderBusy: state.builderBusy,
           statusMessage: state.statusMessage,
         });
+      };
+      world.onProductionUpdate = (state) => {
+        productionPanel.update(state);
       };
 
       void world.init().then(() => {
