@@ -64,10 +64,10 @@ test.describe('NEXT-04 power and control', () => {
     await expect(powerValue).toHaveText('+2');
   });
 
-  test('control HUD shows 15/50', async ({ page }) => {
+  test('control HUD shows used/current control', async ({ page }) => {
     await navigateToGameScreen(page);
     const controlValue = page.locator('.economy-hud__item--control .economy-hud__value');
-    await expect(controlValue).toHaveText('15/50');
+    await expect(controlValue).toHaveText('2/15');
   });
 
   test('all buildings are online at game start', async ({ page }) => {
