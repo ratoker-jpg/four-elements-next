@@ -17,6 +17,15 @@ Related docs:
 ## Files
 
 - `index.html` - single-file viewer with plain HTML, CSS, and JavaScript
+- `sprite-manifest.json` - optional repository sheet list used by the published GitHub Pages copy
+
+## Published viewer
+
+When the app is built for GitHub Pages, the viewer is copied into the site output and published at:
+
+- `https://ratoker-jpg.github.io/four-elements-next/tools/sprite-viewer/`
+
+The source of truth remains `tools/sprite-viewer/index.html`, so opening the file directly via `file://` still works for local art review.
 
 ## How to open locally
 
@@ -26,6 +35,8 @@ Related docs:
 4. Adjust frame size, direction row, preset window, anchor, footprint guide, FPS, scale, and background mode as needed.
 
 No build step, package install, or dev server is required for the viewer itself.
+
+When the viewer is opened from the deployed site, it also looks for `sprite-manifest.json` in the same folder. If the manifest has no entries, the UI shows `No repository sheets available.` and the rest of the viewer still works normally.
 
 ## What the viewer can inspect
 

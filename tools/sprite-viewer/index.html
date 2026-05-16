@@ -132,6 +132,12 @@
         grid-column: 1 / -1;
       }
 
+      .repository-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 10px;
+      }
+
       label,
       .label {
         font-size: 0.84rem;
@@ -311,6 +317,7 @@
       @media (max-width: 740px) {
         .field-grid,
         .preset-row,
+        .repository-row,
         .stats {
           grid-template-columns: 1fr;
         }
@@ -347,6 +354,20 @@
             <p class="help">Optional. Load a second sheet to compare alignment against the primary view.</p>
             <input id="secondaryInput" type="file" accept="image/png">
             <p class="help" id="secondaryLabel">No secondary sheet loaded.</p>
+          </div>
+        </section>
+
+        <section class="field-grid">
+          <div class="field wide">
+            <label for="repositorySheetSelect">Repository sheet manifest</label>
+            <div class="repository-row">
+              <select id="repositorySheetSelect" disabled>
+                <option value="">No repository sheets available</option>
+              </select>
+              <button id="loadRepositoryPrimaryButton" type="button" disabled>Load primary</button>
+              <button id="loadRepositorySecondaryButton" type="button" disabled>Load compare</button>
+            </div>
+            <p class="help" id="repositorySheetHelp">No repository sheets available.</p>
           </div>
         </section>
 
@@ -564,6 +585,8 @@
         "3x3": "3x3 HQ guide"
       };
 
+      const REPOSITORY_SHEET_MANIFEST = "./sprite-manifest.json";
+
       const els = {
         primaryDropzone: document.getElementById("primaryDropzone"),
         secondaryDropzone: document.getElementById("secondaryDropzone"),
@@ -571,6 +594,10 @@
         secondaryInput: document.getElementById("secondaryInput"),
         primaryLabel: document.getElementById("primaryLabel"),
         secondaryLabel: document.getElementById("secondaryLabel"),
+        repositorySheetSelect: document.getElementById("repositorySheetSelect"),
+        repositorySheetHelp: document.getElementById("repositorySheetHelp"),
+        loadRepositoryPrimaryButton: document.getElementById("loadRepositoryPrimaryButton"),
+        loadRepositorySecondaryButton: document.getElementById("loadRepositorySecondaryButton"),
         clearSecondaryButton: document.getElementById("clearSecondaryButton"),
         presetUnit: document.getElementById("presetUnit"),
         presetState: document.getElementById("presetState"),
@@ -624,6 +651,8 @@
         primaryUrl: null,
         secondaryImage: null,
         secondaryUrl: null,
+        repositorySheets: [],
+        repositoryManifestUrl: new URL(REPOSITORY_SHEET_MANIFEST, window.location.href).href,
         currentFrame: 0,
         lastTick: 0,
         defaults: {
@@ -646,6 +675,90 @@
           presetState: "idle"
         }
       };
+
+      function releaseObjectUrl(url) {
+        if (typeof url === "string" && url.startsWith("blob:")) {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      function normalizeManifestEntry(entry, manifestUrl, index) {
+        if (!entry || typeof entry !== "object" || typeof entry.src !== "string") {
+          return null;
+        }
+
+        const label =
+          typeof entry.label === "string" && entry.label.trim()
+            ? entry.label.trim()
+            : "Repository sheet " + (index + 1);
+
+        return {
+          label,
+          src: new URL(entry.src, manifestUrl).href
+        };
+      }
+
+      function syncRepositorySheetOptions(message) {
+        els.repositorySheetSelect.innerHTML = "";
+
+        if (!state.repositorySheets.length) {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No repository sheets available";
+          els.repositorySheetSelect.append(option);
+          els.repositorySheetSelect.disabled = true;
+          els.loadRepositoryPrimaryButton.disabled = true;
+          els.loadRepositorySecondaryButton.disabled = true;
+          els.repositorySheetHelp.textContent = message || "No repository sheets available.";
+          return;
+        }
+
+        state.repositorySheets.forEach((sheet, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = sheet.label;
+          els.repositorySheetSelect.append(option);
+        });
+
+        els.repositorySheetSelect.disabled = false;
+        els.loadRepositoryPrimaryButton.disabled = false;
+        els.loadRepositorySecondaryButton.disabled = false;
+        els.repositorySheetHelp.textContent = message || "Repository sheet manifest loaded.";
+      }
+
+      async function loadRepositoryManifest() {
+        if (window.location.protocol === "file:") {
+          syncRepositorySheetOptions("Repository manifest is unavailable over file://. Use the local PNG picker.");
+          return;
+        }
+
+        try {
+          const response = await fetch(state.repositoryManifestUrl, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error("Manifest request failed with " + response.status);
+          }
+
+          const manifest = await response.json();
+          const sheets = Array.isArray(manifest.sheets)
+            ? manifest.sheets
+                .map((entry, index) => normalizeManifestEntry(entry, state.repositoryManifestUrl, index))
+                .filter(Boolean)
+            : [];
+
+          state.repositorySheets = sheets;
+
+          if (!sheets.length) {
+            syncRepositorySheetOptions("No repository sheets available.");
+            return;
+          }
+
+          syncRepositorySheetOptions(sheets.length + " repository sheet(s) available.");
+        } catch (error) {
+          console.warn("Sprite viewer manifest unavailable:", error);
+          state.repositorySheets = [];
+          syncRepositorySheetOptions("No repository sheets available.");
+        }
+      }
 
       function populateDirectionRows() {
         const rows = Math.max(1, Math.floor(readNumber(els.rows, state.defaults.rows)));
@@ -781,23 +894,30 @@
 
         const urlKey = slot + "Url";
         const imageKey = slot + "Image";
-        if (state[urlKey]) {
-          URL.revokeObjectURL(state[urlKey]);
-        }
+        releaseObjectUrl(state[urlKey]);
 
         const url = URL.createObjectURL(file);
+        const loadedLabel = file.name;
+        loadImageIntoSlot(url, slot, loadedLabel);
+      }
+
+      function loadImageIntoSlot(url, slot, loadedLabel) {
+        const urlKey = slot + "Url";
+        const imageKey = slot + "Image";
+        releaseObjectUrl(state[urlKey]);
+
         const image = new Image();
         image.onload = () => {
           state[imageKey] = image;
           state[urlKey] = url;
           state.currentFrame = 0;
           if (slot === "primary") {
-            els.primaryLabel.textContent = file.name + " loaded";
+            els.primaryLabel.textContent = loadedLabel + " loaded";
             els.primarySize.textContent = image.width + " x " + image.height + "px";
             els.primaryPreviewNote.hidden = true;
             els.primarySheetNote.hidden = true;
           } else {
-            els.secondaryLabel.textContent = file.name + " loaded";
+            els.secondaryLabel.textContent = loadedLabel + " loaded";
             els.secondaryPreviewCard.classList.remove("hidden");
             els.secondarySheetCard.classList.remove("hidden");
             els.secondaryPreviewNote.hidden = true;
@@ -807,16 +927,28 @@
         };
         image.onerror = () => {
           const label = slot === "primary" ? els.primaryLabel : els.secondaryLabel;
-          label.textContent = "Could not load " + file.name;
-          URL.revokeObjectURL(url);
+          label.textContent = "Could not load " + loadedLabel;
+          releaseObjectUrl(url);
         };
         image.src = url;
       }
 
-      function clearSecondarySheet() {
-        if (state.secondaryUrl) {
-          URL.revokeObjectURL(state.secondaryUrl);
+      function loadRepositorySheet(slot) {
+        const selectedIndex = Number(els.repositorySheetSelect.value);
+        if (!Number.isFinite(selectedIndex)) {
+          return;
         }
+
+        const selectedSheet = state.repositorySheets[selectedIndex];
+        if (!selectedSheet) {
+          return;
+        }
+
+        loadImageIntoSlot(selectedSheet.src, slot, selectedSheet.label);
+      }
+
+      function clearSecondarySheet() {
+        releaseObjectUrl(state.secondaryUrl);
         state.secondaryUrl = null;
         state.secondaryImage = null;
         els.secondaryInput.value = "";
@@ -1210,11 +1342,18 @@
         }
       });
       els.clearSecondaryButton.addEventListener("click", clearSecondarySheet);
+      els.loadRepositoryPrimaryButton.addEventListener("click", () => {
+        loadRepositorySheet("primary");
+      });
+      els.loadRepositorySecondaryButton.addEventListener("click", () => {
+        loadRepositorySheet("secondary");
+      });
       els.resetButton.addEventListener("click", resetControls);
 
       populateDirectionRows();
       populatePresetStates();
       resetControls();
+      loadRepositoryManifest();
       requestAnimationFrame(tick);
     </script>
   </body>

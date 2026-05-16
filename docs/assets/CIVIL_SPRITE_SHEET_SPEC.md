@@ -91,3 +91,5 @@ The standalone viewer expects:
 If those rules are followed, the sheet should preview correctly in `tools/sprite-viewer/index.html`.
 
 Viewer footprint overlays are optional visual guides only. They are useful for judging perceived placement around the anchor, but they do not define runtime tile dimensions or gameplay footprint rules.
+
+The published GitHub Pages copy of the viewer may also expose a repository sheet list via `tools/sprite-viewer/sprite-manifest.json`, but that manifest is only a viewer convenience layer and does not change this sprite sheet contract.
