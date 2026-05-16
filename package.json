@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "playwright test"
+    "test:e2e": "tsc && vite build --mode test && playwright test"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

@@ -46,7 +46,7 @@ describe('construction system', () => {
     expect(map.builders[0]!.busy).toBe(false);
   });
 
-  it('rejects a second construction while the Builder is busy', () => {
+  it('rejects a second construction while the builder is busy', () => {
     const { map, economy } = createBaseline();
     expect(startConstruction(map, economy, 'separator').ok).toBe(true);
 
@@ -87,7 +87,7 @@ describe('construction system', () => {
     expect(findAutoPlacement(map, builder)).toBeNull();
   });
 
-  it('completes construction into a real building and frees the Builder', () => {
+  it('completes construction into a real building and frees the builder', () => {
     const { map, economy } = createBaseline();
     startConstruction(map, economy, 'command-relay');
 

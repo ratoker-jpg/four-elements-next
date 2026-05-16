@@ -203,7 +203,7 @@ describe('availableControl', () => {
     expect(availableControl(state)).toBe(15); // 15 - 0 used
   });
 
-  it('accounts for used slots from the Builder', () => {
+  it('accounts for used slots from the builder', () => {
     const state = createControlState(1, 1, 1);
     expect(availableControl(state)).toBe(14);
   });

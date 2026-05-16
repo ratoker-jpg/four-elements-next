@@ -35,7 +35,7 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
 
   const description = document.createElement('div');
   description.className = 'build-menu__hint';
-  description.textContent = 'Статичный Builder ставит здания автоматически рядом с собой.';
+  description.textContent = 'Статичный строитель автоматически ставит здания рядом с собой.';
   panel.appendChild(description);
 
   const buttons = new Map<BuildingType, HTMLButtonElement>();
@@ -44,7 +44,7 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
     const button = document.createElement('button');
     button.className = 'btn build-menu__option';
     button.type = 'button';
-    button.textContent = `${definition.label} • ${definition.costMatter} Matter • ${definition.buildTimeSeconds}с`;
+    button.textContent = `${definition.label} • ${definition.costMatter} материи • ${definition.buildTimeSeconds}с`;
     button.addEventListener('click', () => onBuild(buildingType));
     buttons.set(buildingType, button);
     panel.appendChild(button);
@@ -62,13 +62,15 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
       const canAfford = state.matter >= definition.costMatter;
       button.disabled = state.builderBusy || !canAfford;
       button.title = state.builderBusy
-        ? 'Builder занят'
+        ? 'Строитель занят'
         : canAfford
           ? ''
-          : 'Недостаточно Matter';
+          : 'Недостаточно материи';
     }
+
     status.textContent = state.statusMessage;
-    status.dataset.tone = state.statusMessage.startsWith('Не') ? 'error' : 'neutral';
+    const isError = state.statusMessage.startsWith('Не') || state.statusMessage.includes('занят');
+    status.dataset.tone = isError ? 'error' : 'neutral';
   };
 
   const toggle = () => {

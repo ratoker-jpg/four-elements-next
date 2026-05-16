@@ -10,7 +10,7 @@ test.describe('NEXT-05 construction', () => {
     await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
   }
 
-  test('shows a visible build entry point and Builder state at game start', async ({ page }) => {
+  test('shows a visible build entry point and builder state at game start', async ({ page }) => {
     await navigateToGameScreen(page);
     await expect(page.locator('#build-menu .build-menu__toggle')).toBeVisible();
 
@@ -25,7 +25,7 @@ test.describe('NEXT-05 construction', () => {
     expect(constructionState.builders).toHaveLength(1);
   });
 
-  test('starts construction from the menu, spends Matter, and completes into a building', async ({ page }) => {
+  test('starts construction from the menu, spends matter, and completes into a building', async ({ page }) => {
     await navigateToGameScreen(page);
     await page.getByRole('button', { name: 'Строительство (B)' }).click();
     await page.getByRole('button', { name: /Сепаратор/ }).click();
@@ -48,7 +48,7 @@ test.describe('NEXT-05 construction', () => {
     expect(started.economy.matter).toBe(20);
 
     await page.evaluate(() => {
-      const debug = (window as Record<string, unknown>).__constructionDebug as {
+      const debug = (window as Record<string, unknown>).__constructionTest as {
         advanceConstruction: (seconds: number) => void;
       };
       debug.advanceConstruction(25);
@@ -82,7 +82,7 @@ test.describe('NEXT-05 construction', () => {
   test('disables unaffordable build options', async ({ page }) => {
     await navigateToGameScreen(page);
     await page.evaluate(() => {
-      const debug = (window as Record<string, unknown>).__constructionDebug as {
+      const debug = (window as Record<string, unknown>).__constructionTest as {
         setMatter: (value: number) => void;
       };
       debug.setMatter(70);
