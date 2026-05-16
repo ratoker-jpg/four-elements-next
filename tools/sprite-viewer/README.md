@@ -9,6 +9,11 @@ It is a tools-only utility:
 - it does not integrate sprite sheets into gameplay;
 - it does not require any committed sprite assets.
 
+Related docs:
+
+- sprite sheet contract: `docs/assets/CIVIL_SPRITE_SHEET_SPEC.md`
+- prompt pack: `tools/sprite-viewer/PROMPTS.md`
+
 ## Files
 
 - `index.html` - single-file viewer with plain HTML, CSS, and JavaScript
