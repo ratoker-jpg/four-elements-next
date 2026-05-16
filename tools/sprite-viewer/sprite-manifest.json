@@ -1,4 +1,9 @@
 {
   "version": 1,
-  "sheets": []
+  "sheets": [
+    {
+      "label": "Builder POC 1024x128",
+      "src": "./samples/builder_poc_1024x128.png"
+    }
+  ]
 }
