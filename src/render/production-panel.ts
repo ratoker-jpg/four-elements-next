@@ -57,17 +57,24 @@ export function createProductionPanel(
   root.dataset.visible = 'false';
   root.dataset.open = 'false';
 
+  const panel = document.createElement('div');
+  panel.className = 'production-panel__panel';
+  panel.style.display = 'none';
+
+  const applyOpenState = (): void => {
+    panel.style.display = root.dataset.open === 'true' ? 'block' : 'none';
+  };
+
   const toggleButton = document.createElement('button');
   toggleButton.className = 'btn production-panel__toggle';
   toggleButton.type = 'button';
   toggleButton.textContent = 'Производство';
   toggleButton.addEventListener('click', () => {
     root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+    applyOpenState();
   });
   root.appendChild(toggleButton);
 
-  const panel = document.createElement('div');
-  panel.className = 'production-panel__panel';
   root.appendChild(panel);
 
   const title = document.createElement('div');
@@ -87,6 +94,7 @@ export function createProductionPanel(
     if (!hasFactories) {
       root.dataset.open = 'false';
     }
+    applyOpenState();
 
     // Rebuild factory list
     factoryList.innerHTML = '';
@@ -110,6 +118,7 @@ export function createProductionPanel(
       // Buttons row
       const buttonsRow = document.createElement('div');
       buttonsRow.className = 'production-panel__buttons';
+      const disabledReasons: string[] = [];
 
       for (const unitType of ['builder', 'harvester'] as ProducibleUnitType[]) {
         const cost = COSTS[unitType];
@@ -120,6 +129,7 @@ export function createProductionPanel(
           factory.queue.length,
           unitType,
         );
+        if (disabledReason && !disabledReasons.includes(disabledReason)) disabledReasons.push(disabledReason);
 
         const btn = document.createElement('button');
         btn.className = 'btn production-panel__produce-btn';
@@ -132,6 +142,13 @@ export function createProductionPanel(
       }
 
       card.appendChild(buttonsRow);
+
+      if (disabledReasons.length > 0) {
+        const reason = document.createElement('div');
+        reason.className = 'production-panel__reason';
+        reason.textContent = disabledReasons[0]!;
+        card.appendChild(reason);
+      }
 
       // Queue display
       const queueInfo = document.createElement('div');
@@ -179,6 +196,7 @@ export function createProductionPanel(
 
   const toggle = () => {
     root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+    applyOpenState();
   };
 
   return { element: root, update, toggle };
