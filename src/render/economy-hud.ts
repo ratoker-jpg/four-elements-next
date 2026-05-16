@@ -1,4 +1,4 @@
-/** Economy + Power + Control HUD: DOM overlay showing resource counts, power balance, and control capacity. */
+/** Economy + Power + Control HUD: DOM overlay showing resource counts, power balance, and control usage. */
 
 import type { ReadonlyEconomyState } from '../systems/economy.js';
 import { getFactionElement } from '../systems/economy.js';
@@ -68,7 +68,15 @@ export function createEconomyHud(): {
   };
 
   const updateControl = (state: ReadonlyControlState) => {
-    controlItem.updateValue(`${state.current}/${state.cap}`);
+    // Show actual occupied control slots instead of current capacity / hard cap.
+    // Example: 2/15 at start, then 3/15 after producing one unit.
+    controlItem.updateValue(`${state.used}/${state.current}`);
+    controlItem.element.title = `Использовано контроля: ${state.used}/${state.current}. Максимум: ${state.cap}`;
+
+    const valueEl = controlItem.element.querySelector('.economy-hud__value') as HTMLElement;
+    if (valueEl) {
+      valueEl.style.color = state.used > state.current ? '#ff6666' : '';
+    }
   };
 
   return { element: hud, updateEconomy, updatePower, updateControl };
