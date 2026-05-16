@@ -55,6 +55,7 @@ This is a docs-only asset specification. It does not change game runtime, `src/`
 - Keep a consistent ground contact point across all frames
 - Recommended anchor: around `x=50%`, `y=84%`
 - Do not let the unit appear to jump, sink, or drift between frames unless the motion itself requires it
+- The standalone viewer exposes configurable anchor controls and defaults to this recommended anchor for inspection
 
 ## Scale Rule
 
@@ -88,3 +89,5 @@ The standalone viewer expects:
 - transparent PNG sheets without overlays or embedded guide marks
 
 If those rules are followed, the sheet should preview correctly in `tools/sprite-viewer/index.html`.
+
+Viewer footprint overlays are optional visual guides only. They are useful for judging perceived placement around the anchor, but they do not define runtime tile dimensions or gameplay footprint rules.

@@ -1,6 +1,6 @@
 # Sprite Viewer
 
-This folder contains a standalone local HTML viewer for previewing future Four Elements civil unit sprite sheets such as Builder and Harvester animations.
+This folder contains a standalone local HTML viewer for previewing Four Elements civil unit sprite sheets such as Builder and Harvester animations.
 
 It is a tools-only utility:
 
@@ -20,13 +20,14 @@ Related docs:
 
 ## How to open locally
 
-1. Open `tools/sprite-viewer/index.html` directly in a browser.
-2. Load a local `.png` sprite sheet using the file picker or drag and drop.
-3. Adjust frame size, row, FPS, frame range, scale, and background mode as needed.
+1. Open `tools/sprite-viewer/index.html` directly in a browser or via `file://`.
+2. Load a primary local `.png` sprite sheet using the file picker or drag and drop.
+3. Optionally load a second `.png` into the comparison slot.
+4. Adjust frame size, direction row, preset window, anchor, footprint guide, FPS, scale, and background mode as needed.
 
 No build step, package install, or dev server is required for the viewer itself.
 
-## Expected sprite sheet layout
+## What the viewer can inspect
 
 The viewer assumes a grid-based sprite sheet:
 
@@ -47,17 +48,21 @@ Default direction row labels:
 7. north
 8. north-east
 
-The tool also shows:
+The tool now includes:
 
-- current animation frame number;
-- current source crop rectangle;
-- optional frame grid;
-- optional anchor marker;
-- a sheet inspector highlighting the active row and current frame.
+- configurable anchor controls with default `x=50%`, `y=84%`;
+- a toggleable crosshair and ground point marker;
+- anchor pixel readouts for the current frame and sheet position;
+- toggleable footprint overlays for `1x1`, `2x2`, and `3x3` visual guides;
+- side-by-side primary and secondary comparison views when a second sheet is loaded;
+- synced preview and sheet-inspector panels for both sheets;
+- optional frame grid and background test surfaces.
+
+Footprint overlays are viewer-only guides. They are meant to help judge grounding and perceived bulk around the anchor point, not to define runtime tile sizes or gameplay footprints.
 
 ## Default Four Elements civil unit contract
 
-The viewer includes presets for the current expected civil animation windows.
+The viewer includes the current expected civil animation windows and makes switching between them easier through unit and state selectors.
 
 ### Builder
 
@@ -73,6 +78,17 @@ The viewer includes presets for the current expected civil animation windows.
 - unload: `startCol 11`, `frames 6`
 
 These presets only configure the viewer UI. They do not connect the sheets to the game.
+
+## Comparison workflow
+
+Use comparison mode when you want to check an older sheet against a regenerated sheet:
+
+1. Load the original PNG as the primary sheet.
+2. Load the regenerated PNG as the secondary sheet.
+3. Choose the same unit preset, state window, direction row, and anchor values.
+4. Watch both previews and both sheet inspectors while the loop advances.
+
+Because both sheets stay locked to the same frame window and anchor guide, vertical drift and grounding changes are much easier to spot.
 
 ## Scope reminder
 

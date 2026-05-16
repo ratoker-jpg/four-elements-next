@@ -15,6 +15,7 @@
         --accent: #7ed6b5;
         --accent-strong: #f1c86a;
         --danger: #ff7c6f;
+        --info: #86c6ff;
         --shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
         --checker-a: rgba(255, 255, 255, 0.12);
         --checker-b: rgba(255, 255, 255, 0.04);
@@ -37,7 +38,7 @@
 
       .layout {
         display: grid;
-        grid-template-columns: minmax(320px, 430px) 1fr;
+        grid-template-columns: minmax(360px, 460px) 1fr;
         gap: 20px;
         padding: 20px;
       }
@@ -68,10 +69,19 @@
         font-size: 1.45rem;
       }
 
+      h2 {
+        font-size: 1rem;
+      }
+
       .lede {
         color: var(--muted);
         line-height: 1.45;
         margin-top: 6px;
+      }
+
+      .dropzone-grid {
+        display: grid;
+        gap: 12px;
       }
 
       .dropzone {
@@ -92,6 +102,18 @@
       .dropzone input[type="file"] {
         width: 100%;
         margin-top: 12px;
+      }
+
+      .dropzone-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .inline-button {
+        padding: 8px 10px;
+        font-size: 0.9rem;
       }
 
       .field-grid {
@@ -133,6 +155,10 @@
         padding: 0;
       }
 
+      button {
+        cursor: pointer;
+      }
+
       .toggles {
         display: flex;
         gap: 14px;
@@ -150,13 +176,19 @@
 
       .preset-row {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr 1fr auto;
         gap: 10px;
       }
 
       .button-secondary {
-        cursor: pointer;
         background: linear-gradient(180deg, rgba(241, 200, 106, 0.2), rgba(241, 200, 106, 0.1));
+      }
+
+      .callout {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(126, 214, 181, 0.08);
+        border: 1px solid rgba(126, 214, 181, 0.14);
       }
 
       .viewer {
@@ -185,7 +217,7 @@
 
       .canvas-grid {
         display: grid;
-        grid-template-columns: minmax(340px, 1.15fr) minmax(280px, 0.85fr);
+        grid-template-columns: repeat(2, minmax(280px, 1fr));
         gap: 18px;
         align-items: start;
       }
@@ -198,7 +230,16 @@
 
       .canvas-card h3 {
         font-size: 0.98rem;
+        margin-bottom: 8px;
+      }
+
+      .canvas-card p {
+        color: var(--muted);
         margin-bottom: 10px;
+      }
+
+      .hidden {
+        display: none;
       }
 
       canvas {
@@ -214,8 +255,7 @@
       }
 
       .sheet-canvas {
-        max-height: 62vh;
-        object-fit: contain;
+        aspect-ratio: 1 / 1;
         background:
           linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
           linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
@@ -256,21 +296,20 @@
         padding: 26px 12px 6px;
       }
 
-      @media (max-width: 1100px) {
+      @media (max-width: 1240px) {
         .layout {
           grid-template-columns: 1fr;
         }
+      }
 
+      @media (max-width: 900px) {
         .canvas-grid {
           grid-template-columns: 1fr;
         }
       }
 
-      @media (max-width: 680px) {
-        .field-grid {
-          grid-template-columns: 1fr;
-        }
-
+      @media (max-width: 740px) {
+        .field-grid,
         .preset-row,
         .stats {
           grid-template-columns: 1fr;
@@ -284,32 +323,46 @@
         <section>
           <h1>Four Elements Sprite Viewer</h1>
           <p class="lede">
-            Standalone local preview tool for civil unit sprite sheets. Load a PNG, pick a direction row,
-            tune the animation window, and inspect frame crops without touching game runtime.
+            Standalone local preview tool for civil unit sprite sheets. Load one or two PNG sheets, sync the
+            same frame window across both, and inspect anchors and visual footprint placement without touching
+            game runtime.
           </p>
         </section>
 
-        <section class="dropzone" id="dropzone">
-          <h2>Load Sprite Sheet</h2>
-          <p class="help">Drop a `.png` here or choose one from disk. Nothing is uploaded or saved.</p>
-          <input id="fileInput" type="file" accept="image/png">
-          <p class="help" id="fileLabel">No sheet loaded yet.</p>
+        <section class="dropzone-grid">
+          <div class="dropzone" id="primaryDropzone">
+            <div class="dropzone-header">
+              <h2>Primary Sheet</h2>
+            </div>
+            <p class="help">Drop a `.png` here or choose one from disk. Nothing is uploaded or saved.</p>
+            <input id="primaryInput" type="file" accept="image/png">
+            <p class="help" id="primaryLabel">No primary sheet loaded yet.</p>
+          </div>
+
+          <div class="dropzone" id="secondaryDropzone">
+            <div class="dropzone-header">
+              <h2>Secondary Compare Sheet</h2>
+              <button class="inline-button" id="clearSecondaryButton" type="button">Clear</button>
+            </div>
+            <p class="help">Optional. Load a second sheet to compare alignment against the primary view.</p>
+            <input id="secondaryInput" type="file" accept="image/png">
+            <p class="help" id="secondaryLabel">No secondary sheet loaded.</p>
+          </div>
         </section>
 
         <section>
           <div class="preset-row">
             <div class="field">
-              <label for="presetSelect">Civil preset</label>
-              <select id="presetSelect">
-                <option value="">Custom</option>
-                <option value="builder-idle">Builder: idle</option>
-                <option value="builder-move">Builder: move</option>
-                <option value="builder-build">Builder: build/work</option>
-                <option value="harvester-idle">Harvester: idle</option>
-                <option value="harvester-move">Harvester: move</option>
-                <option value="harvester-load">Harvester: load</option>
-                <option value="harvester-unload">Harvester: unload</option>
+              <label for="presetUnit">Preset unit</label>
+              <select id="presetUnit">
+                <option value="builder">Builder</option>
+                <option value="harvester">Harvester</option>
+                <option value="custom">Custom</option>
               </select>
+            </div>
+            <div class="field">
+              <label for="presetState">Preset state</label>
+              <select id="presetState"></select>
             </div>
             <button class="button-secondary" id="resetButton" type="button">Reset defaults</button>
           </div>
@@ -333,7 +386,7 @@
             <input id="fps" type="number" min="1" max="60" value="8">
           </div>
           <div class="field">
-            <label for="scale">Scale</label>
+            <label for="scale">Preview scale</label>
             <input id="scale" type="number" min="0.25" max="8" step="0.25" value="2">
           </div>
           <div class="field">
@@ -348,7 +401,23 @@
             <label for="frameCount">Frame count</label>
             <input id="frameCount" type="number" min="1" value="1">
           </div>
-          <div class="field wide">
+          <div class="field">
+            <label for="anchorX">Anchor X (%)</label>
+            <input id="anchorX" type="number" min="0" max="100" step="0.5" value="50">
+          </div>
+          <div class="field">
+            <label for="anchorY">Anchor Y (%)</label>
+            <input id="anchorY" type="number" min="0" max="100" step="0.5" value="84">
+          </div>
+          <div class="field">
+            <label for="footprintPreset">Footprint overlay</label>
+            <select id="footprintPreset">
+              <option value="1x1">1x1 unit guide</option>
+              <option value="2x2">2x2 building/civil guide</option>
+              <option value="3x3">3x3 HQ guide</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="backgroundMode">Background</label>
             <select id="backgroundMode">
               <option value="checker">Transparent checker</option>
@@ -362,16 +431,20 @@
         <section class="toggles">
           <label class="toggle"><input id="showGrid" type="checkbox" checked> Show frame grid</label>
           <label class="toggle"><input id="showAnchor" type="checkbox" checked> Show anchor marker</label>
+          <label class="toggle"><input id="showFootprint" type="checkbox" checked> Show footprint guide</label>
+        </section>
+
+        <section class="callout">
+          <p class="help">
+            Footprint overlays are viewer-only visual guides centered on the anchor marker. They help compare
+            grounding and bulk placement, but they do not define runtime tile size or gameplay footprints.
+          </p>
         </section>
 
         <section class="stats">
           <div class="stat">
-            <span class="key">Expected layout</span>
-            <span>8 direction rows, east to north-east</span>
-          </div>
-          <div class="stat">
-            <span class="key">Presets included</span>
-            <span>Builder and Harvester action windows</span>
+            <span class="key">Preset window</span>
+            <span id="presetInfo">Builder idle</span>
           </div>
           <div class="stat">
             <span class="key">Animation source</span>
@@ -380,6 +453,18 @@
           <div class="stat">
             <span class="key">Crop rectangle</span>
             <span id="cropInfo">x: 0, y: 0, w: 128, h: 128</span>
+          </div>
+          <div class="stat">
+            <span class="key">Anchor pixels</span>
+            <span id="anchorInfo">frame: 64, 108</span>
+          </div>
+          <div class="stat">
+            <span class="key">Primary sheet</span>
+            <span id="primarySize">not loaded</span>
+          </div>
+          <div class="stat">
+            <span class="key">Comparison</span>
+            <span id="comparisonInfo">Primary only</span>
           </div>
         </section>
       </aside>
@@ -391,32 +476,52 @@
             <span id="directionLabel">east</span>
           </div>
           <div>
-            <strong>Sheet size</strong>
-            <span id="sheetSize">not loaded</span>
-          </div>
-          <div>
             <strong>Frame columns</strong>
             <span id="columnInfo">0 to 0</span>
+          </div>
+          <div>
+            <strong>Footprint preset</strong>
+            <span id="footprintInfo">1x1 unit guide</span>
+          </div>
+          <div>
+            <strong>Anchor percent</strong>
+            <span id="anchorPercentInfo">50%, 84%</span>
           </div>
         </div>
 
         <div class="canvas-grid">
           <article class="canvas-card">
-            <h3>Animation Preview</h3>
-            <canvas id="previewCanvas" class="preview-canvas" width="512" height="512"></canvas>
-            <p class="empty-note" id="previewNote">Load a sprite sheet to start previewing the loop.</p>
+            <h3>Primary Preview</h3>
+            <p>Ground anchor stays locked while frames advance so drift is easier to spot.</p>
+            <canvas id="primaryPreviewCanvas" class="preview-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="primaryPreviewNote">Load a primary sprite sheet to start previewing.</p>
+          </article>
+
+          <article class="canvas-card hidden" id="secondaryPreviewCard">
+            <h3>Secondary Preview</h3>
+            <p>Uses the exact same frame, direction, FPS, anchor, and footprint settings as the primary.</p>
+            <canvas id="secondaryPreviewCanvas" class="preview-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="secondaryPreviewNote">Load a secondary sheet to compare it here.</p>
           </article>
 
           <article class="canvas-card">
-            <h3>Sheet Inspector</h3>
-            <canvas id="sheetCanvas" class="sheet-canvas" width="512" height="512"></canvas>
-            <p class="empty-note" id="sheetNote">The source sheet will appear here with row and frame highlights.</p>
+            <h3>Primary Sheet Inspector</h3>
+            <p>Highlights the selected row, active frame, and anchor inside the source grid.</p>
+            <canvas id="primarySheetCanvas" class="sheet-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="primarySheetNote">The primary source sheet will appear here.</p>
+          </article>
+
+          <article class="canvas-card hidden" id="secondarySheetCard">
+            <h3>Secondary Sheet Inspector</h3>
+            <p>Shows the same active frame on the comparison sheet for side-by-side alignment checks.</p>
+            <canvas id="secondarySheetCanvas" class="sheet-canvas" width="512" height="512"></canvas>
+            <p class="empty-note" id="secondarySheetNote">The secondary comparison sheet will appear here.</p>
           </article>
         </div>
 
         <p class="help">
-          Direction rows use the Four Elements civil contract order: east, south-east, south,
-          south-west, west, north-west, north, north-east.
+          Direction rows use the Four Elements civil contract order: east, south-east, south, south-west,
+          west, north-west, north, north-east.
         </p>
       </section>
     </main>
@@ -433,21 +538,42 @@
         "north-east"
       ];
 
-      const PRESETS = {
-        "builder-idle": { startCol: 0, frameCount: 1 },
-        "builder-move": { startCol: 1, frameCount: 4 },
-        "builder-build": { startCol: 5, frameCount: 6 },
-        "harvester-idle": { startCol: 0, frameCount: 1 },
-        "harvester-move": { startCol: 1, frameCount: 4 },
-        "harvester-load": { startCol: 5, frameCount: 6 },
-        "harvester-unload": { startCol: 11, frameCount: 6 }
+      const PRESET_LIBRARY = {
+        builder: {
+          label: "Builder",
+          states: {
+            idle: { label: "idle", startCol: 0, frameCount: 1 },
+            move: { label: "move", startCol: 1, frameCount: 4 },
+            build: { label: "build/work", startCol: 5, frameCount: 6 }
+          }
+        },
+        harvester: {
+          label: "Harvester",
+          states: {
+            idle: { label: "idle", startCol: 0, frameCount: 1 },
+            move: { label: "move", startCol: 1, frameCount: 4 },
+            load: { label: "load", startCol: 5, frameCount: 6 },
+            unload: { label: "unload", startCol: 11, frameCount: 6 }
+          }
+        }
+      };
+
+      const FOOTPRINT_LABELS = {
+        "1x1": "1x1 unit guide",
+        "2x2": "2x2 building/civil guide",
+        "3x3": "3x3 HQ guide"
       };
 
       const els = {
-        dropzone: document.getElementById("dropzone"),
-        fileInput: document.getElementById("fileInput"),
-        fileLabel: document.getElementById("fileLabel"),
-        presetSelect: document.getElementById("presetSelect"),
+        primaryDropzone: document.getElementById("primaryDropzone"),
+        secondaryDropzone: document.getElementById("secondaryDropzone"),
+        primaryInput: document.getElementById("primaryInput"),
+        secondaryInput: document.getElementById("secondaryInput"),
+        primaryLabel: document.getElementById("primaryLabel"),
+        secondaryLabel: document.getElementById("secondaryLabel"),
+        clearSecondaryButton: document.getElementById("clearSecondaryButton"),
+        presetUnit: document.getElementById("presetUnit"),
+        presetState: document.getElementById("presetState"),
         resetButton: document.getElementById("resetButton"),
         frameWidth: document.getElementById("frameWidth"),
         frameHeight: document.getElementById("frameHeight"),
@@ -457,26 +583,47 @@
         rowSelect: document.getElementById("rowSelect"),
         startCol: document.getElementById("startCol"),
         frameCount: document.getElementById("frameCount"),
+        anchorX: document.getElementById("anchorX"),
+        anchorY: document.getElementById("anchorY"),
+        footprintPreset: document.getElementById("footprintPreset"),
         backgroundMode: document.getElementById("backgroundMode"),
         showGrid: document.getElementById("showGrid"),
         showAnchor: document.getElementById("showAnchor"),
-        previewCanvas: document.getElementById("previewCanvas"),
-        sheetCanvas: document.getElementById("sheetCanvas"),
-        previewNote: document.getElementById("previewNote"),
-        sheetNote: document.getElementById("sheetNote"),
+        showFootprint: document.getElementById("showFootprint"),
+        primaryPreviewCanvas: document.getElementById("primaryPreviewCanvas"),
+        secondaryPreviewCanvas: document.getElementById("secondaryPreviewCanvas"),
+        primarySheetCanvas: document.getElementById("primarySheetCanvas"),
+        secondarySheetCanvas: document.getElementById("secondarySheetCanvas"),
+        primaryPreviewNote: document.getElementById("primaryPreviewNote"),
+        secondaryPreviewNote: document.getElementById("secondaryPreviewNote"),
+        primarySheetNote: document.getElementById("primarySheetNote"),
+        secondarySheetNote: document.getElementById("secondarySheetNote"),
+        secondaryPreviewCard: document.getElementById("secondaryPreviewCard"),
+        secondarySheetCard: document.getElementById("secondarySheetCard"),
+        presetInfo: document.getElementById("presetInfo"),
         frameInfo: document.getElementById("frameInfo"),
         cropInfo: document.getElementById("cropInfo"),
+        anchorInfo: document.getElementById("anchorInfo"),
         directionLabel: document.getElementById("directionLabel"),
-        sheetSize: document.getElementById("sheetSize"),
-        columnInfo: document.getElementById("columnInfo")
+        primarySize: document.getElementById("primarySize"),
+        comparisonInfo: document.getElementById("comparisonInfo"),
+        columnInfo: document.getElementById("columnInfo"),
+        footprintInfo: document.getElementById("footprintInfo"),
+        anchorPercentInfo: document.getElementById("anchorPercentInfo")
       };
 
-      const previewCtx = els.previewCanvas.getContext("2d");
-      const sheetCtx = els.sheetCanvas.getContext("2d");
+      const contexts = {
+        primaryPreview: els.primaryPreviewCanvas.getContext("2d"),
+        secondaryPreview: els.secondaryPreviewCanvas.getContext("2d"),
+        primarySheet: els.primarySheetCanvas.getContext("2d"),
+        secondarySheet: els.secondarySheetCanvas.getContext("2d")
+      };
 
       const state = {
-        image: null,
-        imageUrl: null,
+        primaryImage: null,
+        primaryUrl: null,
+        secondaryImage: null,
+        secondaryUrl: null,
         currentFrame: 0,
         lastTick: 0,
         defaults: {
@@ -488,9 +635,15 @@
           row: 0,
           startCol: 0,
           frameCount: 1,
+          anchorX: 50,
+          anchorY: 84,
+          footprintPreset: "1x1",
           backgroundMode: "checker",
           showGrid: true,
-          showAnchor: true
+          showAnchor: true,
+          showFootprint: true,
+          presetUnit: "builder",
+          presetState: "idle"
         }
       };
 
@@ -499,14 +652,45 @@
         const currentValue = readNumber(els.rowSelect, state.defaults.row);
         els.rowSelect.innerHTML = "";
         for (let index = 0; index < rows; index += 1) {
-          const label = DIRECTIONS[index] || `row ${index}`;
+          const label = DIRECTIONS[index] || "row " + index;
           const option = document.createElement("option");
           option.value = String(index);
-          option.textContent = `${index}: ${label}`;
+          option.textContent = index + ": " + label;
           els.rowSelect.append(option);
         }
         els.rowSelect.value = String(clamp(currentValue, 0, rows - 1));
         syncRowOptions();
+      }
+
+      function populatePresetStates() {
+        const unit = els.presetUnit.value;
+        const currentValue = els.presetState.value;
+        els.presetState.innerHTML = "";
+
+        if (unit === "custom") {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Custom window";
+          els.presetState.append(option);
+          els.presetState.disabled = true;
+          els.presetState.value = "";
+          return;
+        }
+
+        const preset = PRESET_LIBRARY[unit];
+        Object.entries(preset.states).forEach(([key, value]) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = value.label;
+          els.presetState.append(option);
+        });
+        els.presetState.disabled = false;
+
+        if (preset.states[currentValue]) {
+          els.presetState.value = currentValue;
+        } else {
+          els.presetState.value = Object.keys(preset.states)[0];
+        }
       }
 
       function syncRowOptions() {
@@ -517,7 +701,7 @@
         }
         const currentValue = clamp(readNumber(els.rowSelect, 0), 0, Math.max(rows - 1, 0));
         els.rowSelect.value = String(currentValue);
-        els.directionLabel.textContent = DIRECTIONS[currentValue] || `row ${currentValue}`;
+        els.directionLabel.textContent = DIRECTIONS[currentValue] || "row " + currentValue;
       }
 
       function readNumber(input, fallback) {
@@ -529,62 +713,119 @@
         return Math.min(Math.max(value, min), max);
       }
 
+      function getPresetWindow(unit, presetState) {
+        if (unit === "custom") {
+          return null;
+        }
+        const preset = PRESET_LIBRARY[unit];
+        return preset && preset.states[presetState] ? preset.states[presetState] : null;
+      }
+
       function resetControls() {
         els.frameWidth.value = String(state.defaults.frameWidth);
         els.frameHeight.value = String(state.defaults.frameHeight);
         els.rows.value = String(state.defaults.rows);
         els.fps.value = String(state.defaults.fps);
         els.scale.value = String(state.defaults.scale);
-        els.rowSelect.value = String(state.defaults.row);
-        els.startCol.value = String(state.defaults.startCol);
-        els.frameCount.value = String(state.defaults.frameCount);
+        els.anchorX.value = String(state.defaults.anchorX);
+        els.anchorY.value = String(state.defaults.anchorY);
+        els.footprintPreset.value = state.defaults.footprintPreset;
         els.backgroundMode.value = state.defaults.backgroundMode;
         els.showGrid.checked = state.defaults.showGrid;
         els.showAnchor.checked = state.defaults.showAnchor;
-        els.presetSelect.value = "";
+        els.showFootprint.checked = state.defaults.showFootprint;
+        els.presetUnit.value = state.defaults.presetUnit;
+        populatePresetStates();
+        els.presetState.value = state.defaults.presetState;
+        els.rowSelect.value = String(state.defaults.row);
+        applySelectedPreset();
         state.currentFrame = 0;
         syncRowOptions();
         render();
       }
 
-      function applyPreset(value) {
-        const preset = PRESETS[value];
-        if (!preset) return;
+      function applySelectedPreset() {
+        const unit = els.presetUnit.value;
+        const presetState = els.presetState.value;
+        const preset = getPresetWindow(unit, presetState);
+        if (!preset) {
+          syncPresetInfo(null);
+          render();
+          return;
+        }
         els.startCol.value = String(preset.startCol);
         els.frameCount.value = String(preset.frameCount);
         state.currentFrame = 0;
+        syncPresetInfo({ unit, presetState, preset });
         render();
       }
 
-      function handleFiles(files) {
-        const file = files && files[0];
-        if (!file) return;
+      function syncPresetInfo(activePreset) {
+        if (!activePreset) {
+          els.presetInfo.textContent = "Custom window";
+          return;
+        }
+        const unitLabel = PRESET_LIBRARY[activePreset.unit].label;
+        els.presetInfo.textContent = unitLabel + " " + activePreset.preset.label;
+      }
+
+      function loadImageFromFile(file, slot) {
+        if (!file) {
+          return;
+        }
         if (file.type !== "image/png") {
-          els.fileLabel.textContent = `Expected PNG. Received: ${file.type || file.name}`;
+          const label = slot === "primary" ? els.primaryLabel : els.secondaryLabel;
+          label.textContent = "Expected PNG. Received: " + (file.type || file.name);
           return;
         }
 
-        if (state.imageUrl) {
-          URL.revokeObjectURL(state.imageUrl);
+        const urlKey = slot + "Url";
+        const imageKey = slot + "Image";
+        if (state[urlKey]) {
+          URL.revokeObjectURL(state[urlKey]);
         }
 
         const url = URL.createObjectURL(file);
         const image = new Image();
         image.onload = () => {
-          state.image = image;
-          state.imageUrl = url;
+          state[imageKey] = image;
+          state[urlKey] = url;
           state.currentFrame = 0;
-          els.fileLabel.textContent = `${file.name} loaded`;
-          els.sheetSize.textContent = `${image.width} x ${image.height}px`;
-          els.previewNote.hidden = true;
-          els.sheetNote.hidden = true;
+          if (slot === "primary") {
+            els.primaryLabel.textContent = file.name + " loaded";
+            els.primarySize.textContent = image.width + " x " + image.height + "px";
+            els.primaryPreviewNote.hidden = true;
+            els.primarySheetNote.hidden = true;
+          } else {
+            els.secondaryLabel.textContent = file.name + " loaded";
+            els.secondaryPreviewCard.classList.remove("hidden");
+            els.secondarySheetCard.classList.remove("hidden");
+            els.secondaryPreviewNote.hidden = true;
+            els.secondarySheetNote.hidden = true;
+          }
           render();
         };
         image.onerror = () => {
-          els.fileLabel.textContent = `Could not load ${file.name}`;
+          const label = slot === "primary" ? els.primaryLabel : els.secondaryLabel;
+          label.textContent = "Could not load " + file.name;
           URL.revokeObjectURL(url);
         };
         image.src = url;
+      }
+
+      function clearSecondarySheet() {
+        if (state.secondaryUrl) {
+          URL.revokeObjectURL(state.secondaryUrl);
+        }
+        state.secondaryUrl = null;
+        state.secondaryImage = null;
+        els.secondaryInput.value = "";
+        els.secondaryLabel.textContent = "No secondary sheet loaded.";
+        els.secondaryPreviewCard.classList.add("hidden");
+        els.secondarySheetCard.classList.add("hidden");
+        els.secondaryPreviewNote.hidden = false;
+        els.secondarySheetNote.hidden = false;
+        render();
       }
 
       function getConfig() {
@@ -596,6 +837,8 @@
         const row = clamp(Math.floor(readNumber(els.rowSelect, 0)), 0, rows - 1);
         const startCol = Math.max(0, Math.floor(readNumber(els.startCol, 0)));
         const frameCount = Math.max(1, Math.floor(readNumber(els.frameCount, 1)));
+        const anchorXPercent = clamp(readNumber(els.anchorX, state.defaults.anchorX), 0, 100);
+        const anchorYPercent = clamp(readNumber(els.anchorY, state.defaults.anchorY), 0, 100);
         return {
           frameWidth,
           frameHeight,
@@ -605,9 +848,13 @@
           row,
           startCol,
           frameCount,
+          anchorXPercent,
+          anchorYPercent,
+          footprintPreset: els.footprintPreset.value,
           backgroundMode: els.backgroundMode.value,
           showGrid: els.showGrid.checked,
-          showAnchor: els.showAnchor.checked
+          showAnchor: els.showAnchor.checked,
+          showFootprint: els.showFootprint.checked
         };
       }
 
@@ -669,28 +916,105 @@
         ctx.restore();
       }
 
-      function drawPreview(config) {
-        const width = els.previewCanvas.width;
-        const height = els.previewCanvas.height;
-        drawBackground(previewCtx, width, height, config.backgroundMode);
-
-        if (!state.image) {
+      function drawFootprintGuide(ctx, anchorX, anchorY, config) {
+        if (!config.showFootprint) {
           return;
         }
 
+        const size = Number(config.footprintPreset.slice(0, 1));
+        const tileWidth = Math.max(28, config.frameWidth * config.scale * 0.26);
+        const tileHeight = tileWidth * 0.5;
+        const centerOffset = (size - 1) / 2;
+
+        ctx.save();
+        ctx.lineWidth = 1.5;
+
+        for (let gy = 0; gy < size; gy += 1) {
+          for (let gx = 0; gx < size; gx += 1) {
+            const localX = gx - centerOffset;
+            const localY = gy - centerOffset;
+            const centerX = anchorX + (localX - localY) * tileWidth * 0.5;
+            const centerY = anchorY + (localX + localY) * tileHeight * 0.5;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - tileHeight * 0.5);
+            ctx.lineTo(centerX + tileWidth * 0.5, centerY);
+            ctx.lineTo(centerX, centerY + tileHeight * 0.5);
+            ctx.lineTo(centerX - tileWidth * 0.5, centerY);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(134, 198, 255, 0.12)";
+            ctx.strokeStyle = "rgba(134, 198, 255, 0.78)";
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+
+        ctx.strokeStyle = "rgba(134, 198, 255, 0.45)";
+        ctx.beginPath();
+        ctx.moveTo(anchorX - tileWidth * (size * 0.65), anchorY);
+        ctx.lineTo(anchorX + tileWidth * (size * 0.65), anchorY);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawAnchorMarker(ctx, anchorX, anchorY) {
+        ctx.save();
+        ctx.strokeStyle = "#ff6b6b";
+        ctx.fillStyle = "#ffb38b";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(anchorX - 12, anchorY);
+        ctx.lineTo(anchorX + 12, anchorY);
+        ctx.moveTo(anchorX, anchorY - 12);
+        ctx.lineTo(anchorX, anchorY + 12);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(anchorX, anchorY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function getFrameMetrics(config) {
         const frameIndex = state.currentFrame % config.frameCount;
         const sourceX = (config.startCol + frameIndex) * config.frameWidth;
         const sourceY = config.row * config.frameHeight;
-        const destWidth = config.frameWidth * config.scale;
-        const destHeight = config.frameHeight * config.scale;
-        const destX = (width - destWidth) / 2;
-        const destY = (height - destHeight) / 2;
-
-        previewCtx.imageSmoothingEnabled = false;
-        previewCtx.drawImage(
-          state.image,
+        const anchorFrameX = Math.round(config.frameWidth * (config.anchorXPercent / 100));
+        const anchorFrameY = Math.round(config.frameHeight * (config.anchorYPercent / 100));
+        return {
+          frameIndex,
           sourceX,
           sourceY,
+          anchorFrameX,
+          anchorFrameY,
+          anchorSheetX: sourceX + anchorFrameX,
+          anchorSheetY: sourceY + anchorFrameY
+        };
+      }
+
+      function drawPreview(image, ctx, canvas, config) {
+        const width = canvas.width;
+        const height = canvas.height;
+        drawBackground(ctx, width, height, config.backgroundMode);
+
+        if (!image) {
+          return;
+        }
+
+        const metrics = getFrameMetrics(config);
+        const destWidth = config.frameWidth * config.scale;
+        const destHeight = config.frameHeight * config.scale;
+        const anchorX = width / 2;
+        const anchorY = height * 0.72;
+        const destX = anchorX - metrics.anchorFrameX * config.scale;
+        const destY = anchorY - metrics.anchorFrameY * config.scale;
+
+        drawFootprintGuide(ctx, anchorX, anchorY, config);
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          image,
+          metrics.sourceX,
+          metrics.sourceY,
           config.frameWidth,
           config.frameHeight,
           destX,
@@ -700,91 +1024,113 @@
         );
 
         if (config.showGrid) {
-          previewCtx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-          previewCtx.lineWidth = 1;
-          previewCtx.strokeRect(destX + 0.5, destY + 0.5, destWidth - 1, destHeight - 1);
+          ctx.save();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(destX + 0.5, destY + 0.5, destWidth - 1, destHeight - 1);
+          ctx.restore();
         }
 
         if (config.showAnchor) {
-          const anchorX = width / 2;
-          const anchorY = destY + destHeight * 0.84;
-          previewCtx.strokeStyle = "#ff6b6b";
-          previewCtx.lineWidth = 2;
-          previewCtx.beginPath();
-          previewCtx.moveTo(anchorX - 10, anchorY);
-          previewCtx.lineTo(anchorX + 10, anchorY);
-          previewCtx.moveTo(anchorX, anchorY - 10);
-          previewCtx.lineTo(anchorX, anchorY + 10);
-          previewCtx.stroke();
-          previewCtx.beginPath();
-          previewCtx.arc(anchorX, anchorY, 4, 0, Math.PI * 2);
-          previewCtx.fillStyle = "#ffb38b";
-          previewCtx.fill();
+          drawAnchorMarker(ctx, anchorX, anchorY);
         }
-
-        els.frameInfo.textContent = `Frame ${frameIndex + 1} of ${config.frameCount}`;
-        els.cropInfo.textContent = `x: ${sourceX}, y: ${sourceY}, w: ${config.frameWidth}, h: ${config.frameHeight}`;
-        els.columnInfo.textContent = `${config.startCol} to ${config.startCol + config.frameCount - 1}`;
       }
 
-      function drawSheet(config) {
-        const width = els.sheetCanvas.width;
-        const height = els.sheetCanvas.height;
-        sheetCtx.clearRect(0, 0, width, height);
+      function drawSheet(image, ctx, canvas, config) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (!state.image) {
+        if (!image) {
           return;
         }
 
-        const scale = Math.min(width / state.image.width, height / state.image.height);
-        const drawWidth = state.image.width * scale;
-        const drawHeight = state.image.height * scale;
-        const offsetX = (width - drawWidth) / 2;
-        const offsetY = (height - drawHeight) / 2;
+        const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
+        const drawWidth = image.width * scale;
+        const drawHeight = image.height * scale;
+        const offsetX = (canvas.width - drawWidth) / 2;
+        const offsetY = (canvas.height - drawHeight) / 2;
 
-        sheetCtx.imageSmoothingEnabled = false;
-        sheetCtx.drawImage(state.image, offsetX, offsetY, drawWidth, drawHeight);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
 
         if (config.showGrid) {
-          sheetCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-          sheetCtx.lineWidth = 1;
-          for (let x = 0; x <= state.image.width; x += config.frameWidth) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+          ctx.lineWidth = 1;
+          for (let x = 0; x <= image.width; x += config.frameWidth) {
             const px = offsetX + x * scale;
-            sheetCtx.beginPath();
-            sheetCtx.moveTo(px, offsetY);
-            sheetCtx.lineTo(px, offsetY + drawHeight);
-            sheetCtx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(px, offsetY);
+            ctx.lineTo(px, offsetY + drawHeight);
+            ctx.stroke();
           }
-          for (let y = 0; y <= state.image.height; y += config.frameHeight) {
+          for (let y = 0; y <= image.height; y += config.frameHeight) {
             const py = offsetY + y * scale;
-            sheetCtx.beginPath();
-            sheetCtx.moveTo(offsetX, py);
-            sheetCtx.lineTo(offsetX + drawWidth, py);
-            sheetCtx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(offsetX, py);
+            ctx.lineTo(offsetX + drawWidth, py);
+            ctx.stroke();
           }
+          ctx.restore();
         }
 
         const rowY = offsetY + config.row * config.frameHeight * scale;
-        sheetCtx.fillStyle = "rgba(126, 214, 181, 0.12)";
-        sheetCtx.fillRect(offsetX, rowY, drawWidth, config.frameHeight * scale);
+        ctx.fillStyle = "rgba(126, 214, 181, 0.12)";
+        ctx.fillRect(offsetX, rowY, drawWidth, config.frameHeight * scale);
 
-        const activeFrame = state.currentFrame % config.frameCount;
-        const sourceX = (config.startCol + activeFrame) * config.frameWidth;
-        const frameX = offsetX + sourceX * scale;
+        const metrics = getFrameMetrics(config);
+        const frameX = offsetX + metrics.sourceX * scale;
         const frameY = rowY;
         const frameW = config.frameWidth * scale;
         const frameH = config.frameHeight * scale;
-        sheetCtx.strokeStyle = "#f1c86a";
-        sheetCtx.lineWidth = 2;
-        sheetCtx.strokeRect(frameX + 1, frameY + 1, Math.max(frameW - 2, 0), Math.max(frameH - 2, 0));
+
+        ctx.strokeStyle = "#f1c86a";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(frameX + 1, frameY + 1, Math.max(frameW - 2, 0), Math.max(frameH - 2, 0));
+
+        if (config.showAnchor) {
+          drawAnchorMarker(
+            ctx,
+            offsetX + metrics.anchorSheetX * scale,
+            offsetY + metrics.anchorSheetY * scale
+          );
+        }
+      }
+
+      function updateSummary(config) {
+        const metrics = getFrameMetrics(config);
+        const preset = getPresetWindow(els.presetUnit.value, els.presetState.value);
+        syncPresetInfo(
+          preset
+            ? { unit: els.presetUnit.value, presetState: els.presetState.value, preset }
+            : null
+        );
+        els.directionLabel.textContent = DIRECTIONS[config.row] || "row " + config.row;
+        els.frameInfo.textContent = "Frame " + (metrics.frameIndex + 1) + " of " + config.frameCount;
+        els.cropInfo.textContent =
+          "x: " + metrics.sourceX +
+          ", y: " + metrics.sourceY +
+          ", w: " + config.frameWidth +
+          ", h: " + config.frameHeight;
+        els.anchorInfo.textContent =
+          "frame: " + metrics.anchorFrameX +
+          ", " + metrics.anchorFrameY +
+          " | sheet: " + metrics.anchorSheetX +
+          ", " + metrics.anchorSheetY;
+        els.columnInfo.textContent = config.startCol + " to " + (config.startCol + config.frameCount - 1);
+        els.footprintInfo.textContent = FOOTPRINT_LABELS[config.footprintPreset];
+        els.anchorPercentInfo.textContent = config.anchorXPercent + "%, " + config.anchorYPercent + "%";
+        els.comparisonInfo.textContent = state.secondaryImage ? "Primary + secondary synced" : "Primary only";
       }
 
       function render() {
         syncRowOptions();
         const config = getConfig();
-        els.directionLabel.textContent = DIRECTIONS[config.row] || `row ${config.row}`;
-        drawPreview(config);
-        drawSheet(config);
+        updateSummary(config);
+
+        drawPreview(state.primaryImage, contexts.primaryPreview, els.primaryPreviewCanvas, config);
+        drawPreview(state.secondaryImage, contexts.secondaryPreview, els.secondaryPreviewCanvas, config);
+        drawSheet(state.primaryImage, contexts.primarySheet, els.primarySheetCanvas, config);
+        drawSheet(state.secondaryImage, contexts.secondarySheet, els.secondarySheetCanvas, config);
       }
 
       function tick(timestamp) {
@@ -798,26 +1144,31 @@
         requestAnimationFrame(tick);
       }
 
-      els.fileInput.addEventListener("change", (event) => {
-        handleFiles(event.target.files);
-      });
-
-      els.dropzone.addEventListener("dragover", (event) => {
-        event.preventDefault();
-        els.dropzone.classList.add("dragover");
-      });
-
-      ["dragleave", "dragend"].forEach((type) => {
-        els.dropzone.addEventListener(type, () => {
-          els.dropzone.classList.remove("dragover");
+      function bindDropzone(dropzone, input, slot) {
+        input.addEventListener("change", (event) => {
+          loadImageFromFile(event.target.files[0], slot);
         });
-      });
 
-      els.dropzone.addEventListener("drop", (event) => {
-        event.preventDefault();
-        els.dropzone.classList.remove("dragover");
-        handleFiles(event.dataTransfer.files);
-      });
+        dropzone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropzone.classList.add("dragover");
+        });
+
+        ["dragleave", "dragend"].forEach((type) => {
+          dropzone.addEventListener(type, () => {
+            dropzone.classList.remove("dragover");
+          });
+        });
+
+        dropzone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropzone.classList.remove("dragover");
+          loadImageFromFile(event.dataTransfer.files[0], slot);
+        });
+      }
+
+      bindDropzone(els.primaryDropzone, els.primaryInput, "primary");
+      bindDropzone(els.secondaryDropzone, els.secondaryInput, "secondary");
 
       [
         els.frameWidth,
@@ -828,21 +1179,41 @@
         els.rowSelect,
         els.startCol,
         els.frameCount,
+        els.anchorX,
+        els.anchorY,
+        els.footprintPreset,
         els.backgroundMode,
         els.showGrid,
-        els.showAnchor
+        els.showAnchor,
+        els.showFootprint
       ].forEach((element) => {
         element.addEventListener("input", render);
         element.addEventListener("change", render);
       });
 
-      els.presetSelect.addEventListener("change", (event) => {
-        applyPreset(event.target.value);
+      els.rows.addEventListener("change", populateDirectionRows);
+      els.presetUnit.addEventListener("change", () => {
+        populatePresetStates();
+        applySelectedPreset();
       });
-
+      els.presetState.addEventListener("change", applySelectedPreset);
+      els.startCol.addEventListener("input", () => {
+        if (els.presetUnit.value !== "custom") {
+          els.presetUnit.value = "custom";
+          populatePresetStates();
+        }
+      });
+      els.frameCount.addEventListener("input", () => {
+        if (els.presetUnit.value !== "custom") {
+          els.presetUnit.value = "custom";
+          populatePresetStates();
+        }
+      });
+      els.clearSecondaryButton.addEventListener("click", clearSecondarySheet);
       els.resetButton.addEventListener("click", resetControls);
 
       populateDirectionRows();
+      populatePresetStates();
       resetControls();
       requestAnimationFrame(tick);
     </script>
