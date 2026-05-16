@@ -1,7 +1,13 @@
 import type { Screen, ScreenTransitionData, FactionSelectData, GameScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 
-const FACTIONS = ['cyan', 'green', 'yellow', 'purple', 'random'] as const;
+const FACTIONS = [
+  { id: 'cyan', label: 'Голубые' },
+  { id: 'green', label: 'Зелёные' },
+  { id: 'yellow', label: 'Жёлтые' },
+  { id: 'purple', label: 'Фиолетовые' },
+  { id: 'random', label: 'Случайная' },
+] as const;
 
 export function createFactionSelectScreen(navigate: NavigateFn): Screen {
   return {
@@ -14,20 +20,23 @@ export function createFactionSelectScreen(navigate: NavigateFn): Screen {
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--faction-select';
 
+      const card = document.createElement('section');
+      card.className = 'menu-card';
+
       const heading = document.createElement('h2');
       heading.className = 'screen__heading';
-      heading.textContent = 'Select Faction';
-      wrapper.appendChild(heading);
+      heading.textContent = 'Выбор фракции';
+      card.appendChild(heading);
 
       const menu = document.createElement('div');
       menu.className = 'screen__menu';
 
       for (const faction of FACTIONS) {
         const btn = document.createElement('button');
-        btn.className = 'btn';
-        btn.textContent = faction.charAt(0).toUpperCase() + faction.slice(1);
+        btn.className = `btn btn--faction btn--faction-${faction.id}`;
+        btn.textContent = faction.label;
         btn.addEventListener('click', () => {
-          const gameData: GameScreenData = { mapSize, faction };
+          const gameData: GameScreenData = { mapSize, faction: faction.id };
           navigate('game-screen', gameData);
         });
         menu.appendChild(btn);
@@ -35,11 +44,12 @@ export function createFactionSelectScreen(navigate: NavigateFn): Screen {
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back';
-      btnBack.textContent = 'Back';
+      btnBack.textContent = 'Назад';
       btnBack.addEventListener('click', () => navigate('map-size', { source: 'main-menu' }));
       menu.appendChild(btnBack);
 
-      wrapper.appendChild(menu);
+      card.appendChild(menu);
+      wrapper.appendChild(card);
       container.appendChild(wrapper);
     },
 
