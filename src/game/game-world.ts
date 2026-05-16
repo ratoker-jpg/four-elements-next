@@ -1,12 +1,19 @@
 /** GameWorld: owns render loop, camera, map, assets, and input for the game screen. */
 
-import { ASSET_MANIFEST, MAP_SIZE_STANDARD } from '../core/constants.js';
+import { ASSET_MANIFEST, MAP_SIZE_STANDARD, MAP_SIZE_LARGE } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import { generateMap } from './mapgen.js';
 import type { MapData, FactionId } from './map-types.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
+
+/** Map the UI map-size string to a grid dimension. */
+function resolveMapSize(mapSize: string): number {
+  // NOTE(NEXT-03+): MAP_SIZE_LARGE is currently the same as MAP_SIZE_STANDARD (48×48).
+  // Differentiate in a future step.
+  return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
+}
 
 export class GameWorld {
   private canvas: HTMLCanvasElement;
@@ -32,20 +39,21 @@ export class GameWorld {
   private boundWheel: (e: WheelEvent) => void;
   private boundResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, _mapSize: string, faction: FactionId | 'random') {
+  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random') {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Cannot get 2D context');
     this.ctx = ctx;
 
-    // Resolve "random" faction immediately
+    // Resolve "random" faction immediately at game start
     const factions: FactionId[] = ['cyan', 'green', 'yellow', 'purple'];
     const resolvedFaction: FactionId = faction === 'random'
       ? factions[Math.floor(Math.random() * factions.length)]!
       : faction;
 
+    const size = resolveMapSize(mapSize);
     this.assets = new AssetStore();
-    this.map = generateMap(MAP_SIZE_STANDARD, MAP_SIZE_STANDARD, resolvedFaction);
+    this.map = generateMap(size, size, resolvedFaction);
     const hqScreen = tileToScreen(
       this.map.hq.tx + 1.5,
       this.map.hq.ty + 1.5,
@@ -93,6 +101,9 @@ export class GameWorld {
     this.canvas.removeEventListener('wheel', this.boundWheel);
     window.removeEventListener('resize', this.boundResize);
     this.keys.clear();
+    // Clean up testing hook
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__cameraPos;
   }
 
   private loop(now: number): void {
@@ -111,7 +122,7 @@ export class GameWorld {
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) dx -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) dx += 1;
     if (dx !== 0 || dy !== 0) this.camera.panDirection(dx, dy, dt);
-    // Expose camera position for E2E testing only
+    // Expose camera position for E2E testing only (cleaned up in destroy)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
   }

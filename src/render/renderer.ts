@@ -1,6 +1,6 @@
 /** Render orchestrator. Delegates to terrain, environment, buildings. */
 
-import { BG_COLOR } from '../core/constants.js';
+import { BG_COLOR, HQ_FOOTPRINT } from '../core/constants.js';
 import type { MapData } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
@@ -10,7 +10,7 @@ import { renderHq } from './buildings.js';
 
 interface SortedEntity {
   sortKey: number;
-  kind: 'hq' | 'resource' | 'decor';
+  render: () => void;
 }
 
 /** Main render function. Orchestrates terrain + sorted entity rendering. */
@@ -29,17 +29,20 @@ export function render(
 
   renderTerrain(ctx, map, camera, assets);
 
+  // Painter's algorithm: sort by (tx+ty) ascending so back entities render first.
+  // HQ uses the front-most tile of its footprint for correct depth ordering.
+  const hqSortKey = map.hq.tx + map.hq.ty + (HQ_FOOTPRINT - 1) * 2;
   const entities: SortedEntity[] = [];
-  entities.push({ sortKey: (map.hq.tx + map.hq.ty) * 10, kind: 'hq' });
-  for (const r of map.resources) entities.push({ sortKey: (r.tx + r.ty) * 10, kind: 'resource' });
-  for (const d of map.decor) entities.push({ sortKey: (d.tx + d.ty) * 10, kind: 'decor' });
+  entities.push({ sortKey: hqSortKey, render: () => renderHq(ctx, map.hq, camera, assets) });
+  for (const r of map.resources) {
+    entities.push({ sortKey: r.tx + r.ty, render: () => renderResourceNode(ctx, r, camera, assets) });
+  }
+  for (const d of map.decor) {
+    entities.push({ sortKey: d.tx + d.ty, render: () => renderDecor(ctx, d, camera, assets) });
+  }
   entities.sort((a, b) => a.sortKey - b.sortKey);
 
-  let resIndex = 0;
-  let decIndex = 0;
   for (const e of entities) {
-    if (e.kind === 'hq') { renderHq(ctx, map.hq, camera, assets); }
-    else if (e.kind === 'resource') { renderResourceNode(ctx, map.resources[resIndex++]!, camera, assets); }
-    else if (e.kind === 'decor') { renderDecor(ctx, map.decor[decIndex++]!, camera, assets); }
+    e.render();
   }
 }

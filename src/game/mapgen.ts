@@ -74,9 +74,9 @@ function markOccupied(occupied: Set<string>, tx: number, ty: number, size: numbe
   }
 }
 
-function placeHq(w: number, _h: number, faction: FactionId, occupied: Set<string>): MapData['hq'] {
+function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>): MapData['hq'] {
   const tx = Math.max(0, Math.min(w - HQ_FOOTPRINT, 4));
-  const ty = Math.max(0, Math.min(w - HQ_FOOTPRINT, 4));
+  const ty = Math.max(0, Math.min(h - HQ_FOOTPRINT, 4));
   markOccupied(occupied, tx, ty, HQ_FOOTPRINT);
   return { tx, ty, faction };
 }
