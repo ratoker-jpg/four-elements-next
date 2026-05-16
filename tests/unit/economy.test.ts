@@ -194,6 +194,7 @@ describe('mapgen integration — buildings in MapData', () => {
   it('buildings are placed adjacent to HQ and do not overlap resources', async () => {
     const { generateMap } = await import('../../src/game/mapgen.js');
     const { HQ_FOOTPRINT } = await import('../../src/core/constants.js');
+    const { getBuildingFootprint } = await import('../../src/config/buildings.js');
     const map = generateMap(48, 48, 'cyan');
     const sep = map.buildings.find((b) => b.type === 'separator')!;
     const sto = map.buildings.find((b) => b.type === 'storage')!;
@@ -202,16 +203,21 @@ describe('mapgen integration — buildings in MapData', () => {
 
     expect(sep.tx).toBe(map.hq.tx + HQ_FOOTPRINT);
     expect(sep.ty).toBe(map.hq.ty);
-    expect(sto.tx).toBe(sep.tx);
-    expect(sto.ty).toBe(sep.ty + 1);
-    expect(pp.tx).toBe(map.hq.tx + 1);
+    expect(sto.tx).toBe(map.hq.tx);
+    expect(sto.ty).toBe(map.hq.ty + HQ_FOOTPRINT);
+    expect(pp.tx).toBe(map.hq.tx + HQ_FOOTPRINT);
     expect(pp.ty).toBe(map.hq.ty + HQ_FOOTPRINT);
-    expect(cr.tx).toBe(pp.tx + 1);
-    expect(cr.ty).toBe(pp.ty);
+    expect(cr.tx).toBe(map.hq.tx);
+    expect(cr.ty).toBe(map.hq.ty - getBuildingFootprint('command-relay'));
 
     for (const b of map.buildings) {
-      const overlap = map.resources.some((r) => r.tx === b.tx && r.ty === b.ty);
-      expect(overlap).toBe(false);
+      const footprint = getBuildingFootprint(b.type);
+      for (let dy = 0; dy < footprint; dy++) {
+        for (let dx = 0; dx < footprint; dx++) {
+          const overlap = map.resources.some((r) => r.tx === b.tx + dx && r.ty === b.ty + dy);
+          expect(overlap).toBe(false);
+        }
+      }
     }
   });
 });

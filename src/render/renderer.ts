@@ -1,14 +1,12 @@
 /** Render orchestrator. Delegates to terrain, environment, buildings. */
 
+import { getBuildingFootprint } from '../config/buildings.js';
 import { BG_COLOR, HQ_FOOTPRINT } from '../core/constants.js';
-import type { MapData } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
-import type { Camera } from './camera.js';
+import type { MapData } from '../game/map-types.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
-import type { ReadonlyPowerState } from '../systems/power.js';
 import { isBuildingOnline } from '../systems/power.js';
-import { renderTerrain } from './terrain.js';
-import { renderResourceNode, renderDecor } from './environment.js';
+import type { ReadonlyPowerState } from '../systems/power.js';
 import {
   renderHq,
   renderSeparator,
@@ -18,13 +16,19 @@ import {
   renderBuilder,
   renderConstructionSite,
 } from './buildings.js';
+import type { Camera } from './camera.js';
+import { renderResourceNode, renderDecor } from './environment.js';
+import { renderTerrain } from './terrain.js';
 
 interface SortedEntity {
   sortKey: number;
   render: () => void;
 }
 
-/** Main render function. Orchestrates terrain + sorted entity rendering. */
+function getFootprintSortKey(tx: number, ty: number, footprint: number): number {
+  return tx + ty + (footprint - 1) * 2;
+}
+
 export function render(
   ctx: CanvasRenderingContext2D,
   map: MapData,
@@ -42,36 +46,36 @@ export function render(
 
   renderTerrain(ctx, map, camera, assets);
 
-  // Painter's algorithm: sort by (tx+ty) ascending so back entities render first.
-  // HQ uses the front-most tile of its footprint for correct depth ordering.
-  const hqSortKey = map.hq.tx + map.hq.ty + (HQ_FOOTPRINT - 1) * 2;
   const entities: SortedEntity[] = [];
-  entities.push({ sortKey: hqSortKey, render: () => renderHq(ctx, map.hq, camera, assets) });
+  entities.push({
+    sortKey: getFootprintSortKey(map.hq.tx, map.hq.ty, HQ_FOOTPRINT),
+    render: () => renderHq(ctx, map.hq, camera, assets),
+  });
 
-  // Buildings — 1×1 footprint
   for (const b of map.buildings) {
     const online = isBuildingOnline(power, b.tx, b.ty);
+    const footprint = getBuildingFootprint(b.type);
     if (b.type === 'separator') {
       const sepState = economy.separators.find((s) => s.tx === b.tx && s.ty === b.ty);
       const active = online && (sepState?.active ?? false);
       const progress = sepState?.progress ?? 0;
       entities.push({
-        sortKey: b.tx + b.ty,
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online),
       });
     } else if (b.type === 'storage') {
       entities.push({
-        sortKey: b.tx + b.ty,
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderStorage(ctx, b.tx, b.ty, camera, online),
       });
     } else if (b.type === 'power-plant') {
       entities.push({
-        sortKey: b.tx + b.ty,
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderPowerPlant(ctx, b.tx, b.ty, camera, online),
       });
     } else if (b.type === 'command-relay') {
       entities.push({
-        sortKey: b.tx + b.ty,
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online),
       });
     }
@@ -79,7 +83,7 @@ export function render(
 
   for (const site of map.constructionSites) {
     entities.push({
-      sortKey: site.tx + site.ty,
+      sortKey: getFootprintSortKey(site.tx, site.ty, getBuildingFootprint(site.type)),
       render: () => renderConstructionSite(ctx, site, camera),
     });
   }
@@ -97,6 +101,7 @@ export function render(
   for (const d of map.decor) {
     entities.push({ sortKey: d.tx + d.ty, render: () => renderDecor(ctx, d, camera, assets) });
   }
+
   entities.sort((a, b) => a.sortKey - b.sortKey);
 
   for (const e of entities) {
