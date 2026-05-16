@@ -1,7 +1,7 @@
 /** Production panel: DOM overlay showing factory production queues and controls. Minimal UI. */
 
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
-import { canProduce, QUEUE_LIMIT, PRODUCTION_COSTS as COSTS } from '../systems/production.js';
+import { QUEUE_LIMIT, PRODUCTION_COSTS as COSTS } from '../systems/production.js';
 import { isBuildingOnline } from '../systems/power.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
 import type { ReadonlyPowerState } from '../systems/power.js';
@@ -24,28 +24,69 @@ const UNIT_SHORT: Record<ProducibleUnitType, string> = {
   harvester: 'HRV',
 };
 
+function getDisabledReason(
+  state: ProductionPanelState,
+  factoryTx: number,
+  factoryTy: number,
+  queueLength: number,
+  unitType: ProducibleUnitType,
+): string | null {
+  if (!isBuildingOnline(state.power, factoryTx, factoryTy)) return 'Фабрика без питания';
+  if (queueLength >= QUEUE_LIMIT) return 'Очередь заполнена';
+
+  const cost = COSTS[unitType];
+  if (state.economy.resources.matter < cost.matter) return 'Недостаточно материи';
+
+  const activeElement = state.economy.resources.elements[state.economy.faction];
+  if (activeElement < cost.element) return 'Недостаточно элемента фракции';
+
+  if (state.control.current - state.control.used < cost.control) return 'Недостаточно контроля';
+
+  return null;
+}
+
 export function createProductionPanel(
   onProduce: (factoryTx: number, factoryTy: number, unitType: ProducibleUnitType) => void,
 ): {
   element: HTMLElement;
   update: (state: ProductionPanelState) => void;
+  toggle: () => void;
 } {
   const root = document.createElement('div');
   root.className = 'production-panel';
   root.dataset.visible = 'false';
+  root.dataset.open = 'false';
+
+  const toggleButton = document.createElement('button');
+  toggleButton.className = 'btn production-panel__toggle';
+  toggleButton.type = 'button';
+  toggleButton.textContent = 'Производство';
+  toggleButton.addEventListener('click', () => {
+    root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+  });
+  root.appendChild(toggleButton);
+
+  const panel = document.createElement('div');
+  panel.className = 'production-panel__panel';
+  root.appendChild(panel);
 
   const title = document.createElement('div');
   title.className = 'production-panel__title';
   title.textContent = 'Производство';
-  root.appendChild(title);
+  panel.appendChild(title);
 
   const factoryList = document.createElement('div');
   factoryList.className = 'production-panel__list';
-  root.appendChild(factoryList);
+  panel.appendChild(factoryList);
 
   const update = (state: ProductionPanelState): void => {
     const hasFactories = state.factories.length > 0;
     root.dataset.visible = hasFactories ? 'true' : 'false';
+    toggleButton.textContent = `Производство${hasFactories ? ` (${state.factories.length})` : ''}`;
+
+    if (!hasFactories) {
+      root.dataset.open = 'false';
+    }
 
     // Rebuild factory list
     factoryList.innerHTML = '';
@@ -72,13 +113,11 @@ export function createProductionPanel(
 
       for (const unitType of ['builder', 'harvester'] as ProducibleUnitType[]) {
         const cost = COSTS[unitType];
-        const canAfford = canProduce(
-          state.economy,
-          state.control,
-          state.power,
-          factory.queue.length,
+        const disabledReason = getDisabledReason(
+          state,
           factory.tx,
           factory.ty,
+          factory.queue.length,
           unitType,
         );
 
@@ -86,8 +125,8 @@ export function createProductionPanel(
         btn.className = 'btn production-panel__produce-btn';
         btn.type = 'button';
         btn.textContent = `${UNIT_LABELS[unitType]} • ${cost.matter}M/${cost.element}E • ${cost.duration}с`;
-        btn.disabled = !canAfford;
-        btn.title = !canAfford ? 'Недостаточно ресурсов или контроля' : '';
+        btn.disabled = disabledReason !== null;
+        btn.title = disabledReason ?? '';
         btn.addEventListener('click', () => onProduce(factory.tx, factory.ty, unitType));
         buttonsRow.appendChild(btn);
       }
@@ -138,5 +177,9 @@ export function createProductionPanel(
     }
   };
 
-  return { element: root, update };
+  const toggle = () => {
+    root.dataset.open = root.dataset.open === 'true' ? 'false' : 'true';
+  };
+
+  return { element: root, update, toggle };
 }
