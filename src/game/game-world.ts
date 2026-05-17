@@ -1,6 +1,6 @@
 /** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST } from '../core/constants.js';
+import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
@@ -26,6 +26,9 @@ import {
 } from '../systems/production.js';
 import { runSystems } from '../systems/system-runner.js';
 
+/** Empty readonly map passed to render() when the spritesheet flag is OFF. */
+const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
+
 export class GameWorld {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -40,6 +43,10 @@ export class GameWorld {
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
+  /** Monotonic tick counter for sprite animation. */
+  private ticks = 0;
+  /** Previous harvester positions (by index) for direction computation. */
+  private prevHarvesterPositions = new Map<number, { tx: number; ty: number }>();
 
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
   onPowerUpdate?: (state: ReadonlyPowerState) => void;
@@ -87,6 +94,9 @@ export class GameWorld {
 
   async init(): Promise<void> {
     await this.assets.loadManifest(ASSET_MANIFEST);
+    if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+      await this.assets.loadManifest(CIVIL_8X8_256_MANIFEST);
+    }
   }
 
   start(): void {
@@ -173,7 +183,22 @@ export class GameWorld {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters);
+    this.ticks++;
+    // Only pass prev positions when spritesheet flag is ON — direction bookkeeping
+    // is visual-only and irrelevant when rendering with fallback geometry.
+    const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
+      ? this.prevHarvesterPositions
+      : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions);
+    // Snapshot current harvester positions for next frame's direction computation
+    // only when the spritesheet flag is ON (no point burning cycles otherwise).
+    if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+      this.prevHarvesterPositions.clear();
+      for (let i = 0; i < this.state.harvesters.length; i++) {
+        const h = this.state.harvesters[i]!;
+        this.prevHarvesterPositions.set(i, { tx: h.tx, ty: h.ty });
+      }
+    }
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
