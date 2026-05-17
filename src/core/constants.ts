@@ -37,6 +37,11 @@ export const SPRITE_PROFILES = {
   sand_bump_01: { size: [50, 28], groundOffset: -8 },
   builder_base: { size: [256, 256], groundOffset: 20 },
   harvester_base: { size: [256, 256], groundOffset: 16 },
+  building_separator: { size: [140, 140], groundOffset: 24 },
+  building_storage: { size: [140, 140], groundOffset: 24 },
+  building_power_plant: { size: [140, 140], groundOffset: 24 },
+  building_command_relay: { size: [140, 140], groundOffset: 24 },
+  building_units_factory: { size: [140, 140], groundOffset: 24 },
 } as const;
 
 // Terrain rendering
@@ -80,8 +85,8 @@ export function assetPath(path: string): string {
 
 // ── Civil unit 8×8 256 spritesheet feature flag ──────────────────────
 
-/** When false (default), builder and harvester render with fallback geometry. */
-export const FE_CIVIL_8X8_256_SHEETS_ENABLED = false;
+/** When true (default), builder and harvester render from faction spritesheets. Falls back to iso-box geometry when OFF or asset missing. */
+export const FE_CIVIL_8X8_256_SHEETS_ENABLED = true;
 
 /** Manifest for 8 civil unit spritesheets (4 builder + 4 harvester). Only loaded when FE_CIVIL_8X8_256_SHEETS_ENABLED is true. */
 export const CIVIL_8X8_256_MANIFEST: Record<string, string> = {
@@ -93,4 +98,33 @@ export const CIVIL_8X8_256_MANIFEST: Record<string, string> = {
   harvester_green: 'assets/factions/green/units/harvester_8x8_256.png',
   harvester_yellow: 'assets/factions/yellow/units/harvester_8x8_256.png',
   harvester_purple: 'assets/factions/purple/units/harvester_8x8_256.png',
+};
+
+// ── Building sprite feature flag ──────────────────────────────────────
+
+/** When true (default), buildings render from faction PNG sprites. Falls back to iso-box geometry when OFF or asset missing. */
+export const FE_BUILDING_SPRITES_ENABLED = true;
+
+/** Manifest for building PNG sprites (5 types × 4 factions = 20 entries). Only loaded when FE_BUILDING_SPRITES_ENABLED is true. */
+export const BUILDING_ASSET_MANIFEST: Record<string, string> = {
+  building_cyan_separator: 'assets/factions/cyan/buildings/separator.png',
+  building_green_separator: 'assets/factions/green/buildings/separator.png',
+  building_yellow_separator: 'assets/factions/yellow/buildings/separator.png',
+  building_purple_separator: 'assets/factions/purple/buildings/separator.png',
+  building_cyan_storage: 'assets/factions/cyan/buildings/matter_storage.png',
+  building_green_storage: 'assets/factions/green/buildings/matter_storage.png',
+  building_yellow_storage: 'assets/factions/yellow/buildings/matter_storage.png',
+  building_purple_storage: 'assets/factions/purple/buildings/matter_storage.png',
+  building_cyan_power_plant: 'assets/factions/cyan/buildings/power_plant.png',
+  building_green_power_plant: 'assets/factions/green/buildings/power_plant.png',
+  building_yellow_power_plant: 'assets/factions/yellow/buildings/power_plant.png',
+  building_purple_power_plant: 'assets/factions/purple/buildings/power_plant.png',
+  building_cyan_command_relay: 'assets/factions/cyan/buildings/command_relay.png',
+  building_green_command_relay: 'assets/factions/green/buildings/command_relay.png',
+  building_yellow_command_relay: 'assets/factions/yellow/buildings/command_relay.png',
+  building_purple_command_relay: 'assets/factions/purple/buildings/command_relay.png',
+  building_cyan_units_factory: 'assets/factions/cyan/buildings/units_factory.png',
+  building_green_units_factory: 'assets/factions/green/buildings/units_factory.png',
+  building_yellow_units_factory: 'assets/factions/yellow/buildings/units_factory.png',
+  building_purple_units_factory: 'assets/factions/purple/buildings/units_factory.png',
 };

@@ -1,6 +1,6 @@
 /** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED } from '../core/constants.js';
+import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED, BUILDING_ASSET_MANIFEST, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
@@ -96,6 +96,9 @@ export class GameWorld {
     await this.assets.loadManifest(ASSET_MANIFEST);
     if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
       await this.assets.loadManifest(CIVIL_8X8_256_MANIFEST);
+    }
+    if (FE_BUILDING_SPRITES_ENABLED) {
+      await this.assets.loadManifest(BUILDING_ASSET_MANIFEST);
     }
   }
 
