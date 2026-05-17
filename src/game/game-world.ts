@@ -26,6 +26,9 @@ import {
 } from '../systems/production.js';
 import { runSystems } from '../systems/system-runner.js';
 
+/** Empty readonly map passed to render() when the spritesheet flag is OFF. */
+const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
+
 export class GameWorld {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -181,12 +184,20 @@ export class GameWorld {
     this.lastTime = now;
     this.update(dt);
     this.ticks++;
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, this.prevHarvesterPositions);
+    // Only pass prev positions when spritesheet flag is ON — direction bookkeeping
+    // is visual-only and irrelevant when rendering with fallback geometry.
+    const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
+      ? this.prevHarvesterPositions
+      : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions);
     // Snapshot current harvester positions for next frame's direction computation
-    this.prevHarvesterPositions.clear();
-    for (let i = 0; i < this.state.harvesters.length; i++) {
-      const h = this.state.harvesters[i]!;
-      this.prevHarvesterPositions.set(i, { tx: h.tx, ty: h.ty });
+    // only when the spritesheet flag is ON (no point burning cycles otherwise).
+    if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+      this.prevHarvesterPositions.clear();
+      for (let i = 0; i < this.state.harvesters.length; i++) {
+        const h = this.state.harvesters[i]!;
+        this.prevHarvesterPositions.set(i, { tx: h.tx, ty: h.ty });
+      }
     }
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
