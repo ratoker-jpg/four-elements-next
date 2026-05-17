@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, cp, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
@@ -19,6 +19,8 @@ function publishSpriteViewer() {
     async closeBundle() {
       const sourceDir = path.resolve(repoRoot, 'tools', 'sprite-viewer');
       const targetDir = path.resolve(outDir, 'tools', 'sprite-viewer');
+      const sourceSamplesDir = path.resolve(sourceDir, 'samples');
+      const targetSamplesDir = path.resolve(targetDir, 'samples');
 
       await mkdir(targetDir, { recursive: true });
 
@@ -27,6 +29,8 @@ function publishSpriteViewer() {
           copyFile(path.resolve(sourceDir, fileName), path.resolve(targetDir, fileName)),
         ),
       );
+
+      await cp(sourceSamplesDir, targetSamplesDir, { recursive: true });
     },
   };
 }
