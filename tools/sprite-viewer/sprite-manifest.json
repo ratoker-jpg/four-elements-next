@@ -4,6 +4,130 @@
     {
       "label": "Builder POC 2048x256",
       "src": "./samples/builder_poc_2048x256.png"
+    },
+    {
+      "name": "builder-cyan-8x8-256",
+      "label": "Builder Cyan 8x8 256",
+      "src": "./samples/builder_cyan_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": [
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+        "north",
+        "north-east"
+      ],
+      "columnLabels": [
+        "idle",
+        "move1",
+        "move2",
+        "move3",
+        "move4",
+        "build1",
+        "build2",
+        "build3"
+      ]
+    },
+    {
+      "name": "builder-green-8x8-256",
+      "label": "Builder Green 8x8 256",
+      "src": "./samples/builder_green_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": [
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+        "north",
+        "north-east"
+      ],
+      "columnLabels": [
+        "idle",
+        "move1",
+        "move2",
+        "move3",
+        "move4",
+        "build1",
+        "build2",
+        "build3"
+      ]
+    },
+    {
+      "name": "builder-yellow-8x8-256",
+      "label": "Builder Yellow 8x8 256",
+      "src": "./samples/builder_yellow_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": [
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+        "north",
+        "north-east"
+      ],
+      "columnLabels": [
+        "idle",
+        "move1",
+        "move2",
+        "move3",
+        "move4",
+        "build1",
+        "build2",
+        "build3"
+      ]
+    },
+    {
+      "name": "builder-purple-8x8-256",
+      "label": "Builder Purple 8x8 256",
+      "src": "./samples/builder_purple_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": [
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+        "north",
+        "north-east"
+      ],
+      "columnLabels": [
+        "idle",
+        "move1",
+        "move2",
+        "move3",
+        "move4",
+        "build1",
+        "build2",
+        "build3"
+      ]
     }
   ]
 }
