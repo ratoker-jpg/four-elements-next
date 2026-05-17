@@ -5,10 +5,10 @@ test.describe('CIVIL-ANIM-03 sprite viewer publish path', () => {
     const errors: string[] = [];
     const expectedRepositorySheets = [
       'Builder POC 2048x256',
-      'Builder Cyan 8x8 256',
-      'Builder Green 8x8 256',
-      'Builder Yellow 8x8 256',
-      'Builder Purple 8x8 256'
+      'Builder Tracked Cyan 8x8 256 v01',
+      'Builder Tracked Green 8x8 256 v01',
+      'Builder Tracked Yellow 8x8 256 v01',
+      'Builder Tracked Purple 8x8 256 v01'
     ];
 
     page.on('console', (msg) => {
@@ -36,9 +36,9 @@ test.describe('CIVIL-ANIM-03 sprite viewer publish path', () => {
 
     await expect(page.getByRole('button', { name: 'Load primary' })).toBeEnabled();
 
-    await page.locator('#repositorySheetSelect').selectOption({ label: 'Builder Green 8x8 256' });
+    await page.locator('#repositorySheetSelect').selectOption({ label: 'Builder Tracked Green 8x8 256 v01' });
     await page.getByRole('button', { name: 'Load primary' }).click();
-    await expect(page.locator('#primaryLabel')).toHaveText('Builder Green 8x8 256 loaded');
+    await expect(page.locator('#primaryLabel')).toHaveText('Builder Tracked Green 8x8 256 v01 loaded');
     await expect(page.locator('#primarySize')).toHaveText('2048 x 2048px');
 
     expect(errors).toEqual([]);
