@@ -15,26 +15,8 @@
       "columns": 8,
       "startColumn": 0,
       "frameCount": 8,
-      "directions": [
-        "east",
-        "south-east",
-        "south",
-        "south-west",
-        "west",
-        "north-west",
-        "north",
-        "north-east"
-      ],
-      "columnLabels": [
-        "idle",
-        "move1",
-        "move2",
-        "move3",
-        "move4",
-        "build1",
-        "build2",
-        "build3"
-      ]
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "build1", "build2", "build3"]
     },
     {
       "name": "builder-green-8x8-256",
@@ -46,26 +28,8 @@
       "columns": 8,
       "startColumn": 0,
       "frameCount": 8,
-      "directions": [
-        "east",
-        "south-east",
-        "south",
-        "south-west",
-        "west",
-        "north-west",
-        "north",
-        "north-east"
-      ],
-      "columnLabels": [
-        "idle",
-        "move1",
-        "move2",
-        "move3",
-        "move4",
-        "build1",
-        "build2",
-        "build3"
-      ]
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "build1", "build2", "build3"]
     },
     {
       "name": "builder-yellow-8x8-256",
@@ -77,26 +41,8 @@
       "columns": 8,
       "startColumn": 0,
       "frameCount": 8,
-      "directions": [
-        "east",
-        "south-east",
-        "south",
-        "south-west",
-        "west",
-        "north-west",
-        "north",
-        "north-east"
-      ],
-      "columnLabels": [
-        "idle",
-        "move1",
-        "move2",
-        "move3",
-        "move4",
-        "build1",
-        "build2",
-        "build3"
-      ]
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "build1", "build2", "build3"]
     },
     {
       "name": "builder-purple-8x8-256",
@@ -108,26 +54,60 @@
       "columns": 8,
       "startColumn": 0,
       "frameCount": 8,
-      "directions": [
-        "east",
-        "south-east",
-        "south",
-        "south-west",
-        "west",
-        "north-west",
-        "north",
-        "north-east"
-      ],
-      "columnLabels": [
-        "idle",
-        "move1",
-        "move2",
-        "move3",
-        "move4",
-        "build1",
-        "build2",
-        "build3"
-      ]
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "build1", "build2", "build3"]
+    },
+    {
+      "name": "harvester-cyan-8x8-256",
+      "label": "Harvester Cyan 8x8 256",
+      "src": "./samples/harvester_cyan_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "unload1", "unload2", "unload3"]
+    },
+    {
+      "name": "harvester-green-8x8-256",
+      "label": "Harvester Green 8x8 256",
+      "src": "./samples/harvester_green_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "unload1", "unload2", "unload3"]
+    },
+    {
+      "name": "harvester-yellow-8x8-256",
+      "label": "Harvester Yellow 8x8 256",
+      "src": "./samples/harvester_yellow_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "unload1", "unload2", "unload3"]
+    },
+    {
+      "name": "harvester-purple-8x8-256",
+      "label": "Harvester Purple 8x8 256",
+      "src": "./samples/harvester_purple_8x8_256.png",
+      "frameWidth": 256,
+      "frameHeight": 256,
+      "rows": 8,
+      "columns": 8,
+      "startColumn": 0,
+      "frameCount": 8,
+      "directions": ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
+      "columnLabels": ["idle", "move1", "move2", "move3", "move4", "unload1", "unload2", "unload3"]
     }
   ]
 }
