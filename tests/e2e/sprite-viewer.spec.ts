@@ -36,6 +36,11 @@ test.describe('CIVIL-ANIM-03 sprite viewer publish path', () => {
 
     await expect(page.getByRole('button', { name: 'Load primary' })).toBeEnabled();
 
+    await page.locator('#repositorySheetSelect').selectOption({ label: 'Builder Green 8x8 256' });
+    await page.getByRole('button', { name: 'Load primary' }).click();
+    await expect(page.locator('#primaryLabel')).toHaveText('Builder Green 8x8 256 loaded');
+    await expect(page.locator('#primarySize')).toHaveText('2048 x 2048px');
+
     expect(errors).toEqual([]);
   });
 });
