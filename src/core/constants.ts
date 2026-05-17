@@ -35,6 +35,8 @@ export const SPRITE_PROFILES = {
   rock_cluster_small_01: { size: [58, 46], groundOffset: 0 },
   dry_bush_01: { size: [34, 28], groundOffset: -12 },
   sand_bump_01: { size: [50, 28], groundOffset: -8 },
+  builder_base: { size: [256, 256], groundOffset: 20 },
+  harvester_base: { size: [256, 256], groundOffset: 16 },
 } as const;
 
 // Terrain rendering
@@ -75,3 +77,20 @@ export const ASSET_MANIFEST: Record<string, string> = {
 export function assetPath(path: string): string {
   return `${import.meta.env.BASE_URL}${path}`;
 }
+
+// ── Civil unit 8×8 256 spritesheet feature flag ──────────────────────
+
+/** When false (default), builder and harvester render with fallback geometry. */
+export const FE_CIVIL_8X8_256_SHEETS_ENABLED = false;
+
+/** Manifest for 8 civil unit spritesheets (4 builder + 4 harvester). Only loaded when FE_CIVIL_8X8_256_SHEETS_ENABLED is true. */
+export const CIVIL_8X8_256_MANIFEST: Record<string, string> = {
+  builder_cyan: 'assets/factions/cyan/units/builder_8x8_256.png',
+  builder_green: 'assets/factions/green/units/builder_8x8_256.png',
+  builder_yellow: 'assets/factions/yellow/units/builder_8x8_256.png',
+  builder_purple: 'assets/factions/purple/units/builder_8x8_256.png',
+  harvester_cyan: 'assets/factions/cyan/units/harvester_8x8_256.png',
+  harvester_green: 'assets/factions/green/units/harvester_8x8_256.png',
+  harvester_yellow: 'assets/factions/yellow/units/harvester_8x8_256.png',
+  harvester_purple: 'assets/factions/purple/units/harvester_8x8_256.png',
+};

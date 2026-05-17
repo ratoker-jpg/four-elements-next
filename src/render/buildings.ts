@@ -1,18 +1,33 @@
 /** Building rendering: faction HQ, civil buildings, builder, and construction sites. */
 
 import { getBuildingFootprint } from '../config/buildings.js';
-import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR } from '../core/constants.js';
+import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
 import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
+import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimColumn } from './spritesheet.js';
 
 const HQ_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'hq_cyan',
   green: 'hq_green',
   yellow: 'hq_yellow',
   purple: 'hq_purple',
+};
+
+const BUILDER_ASSET_KEYS: Record<FactionId, string> = {
+  cyan: 'builder_cyan',
+  green: 'builder_green',
+  yellow: 'builder_yellow',
+  purple: 'builder_purple',
+};
+
+const HARVESTER_ASSET_KEYS: Record<FactionId, string> = {
+  cyan: 'harvester_cyan',
+  green: 'harvester_green',
+  yellow: 'harvester_yellow',
+  purple: 'harvester_purple',
 };
 
 function dimColor(hex: string, factor: number): string {
@@ -367,10 +382,28 @@ export function renderBuilder(
   ctx: CanvasRenderingContext2D,
   builder: BuilderPlacement,
   camera: Camera,
+  assets: AssetStore,
+  faction: FactionId,
+  ticks: number,
 ): void {
   const scr = tileToScreen(builder.tx + 0.5, builder.ty + 0.5);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+
+  // Try spritesheet rendering when feature flag is ON and asset exists
+  if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+    const assetKey = BUILDER_ASSET_KEYS[faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profile = SPRITE_PROFILES.builder_base;
+      const row = 2; // default direction: south
+      const col = builderAnimColumn(builder.busy, ticks);
+      drawSpritesheetFrame(ctx, sprite, row, col, cv.x, cv.y, z, profile);
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   const boxHeight = 8 * z;
 
   drawIsoBox(
@@ -469,15 +502,37 @@ function harvesterTopColor(phase: HarvesterState['phase']): string {
   }
 }
 
-/** Render a Harvester unit with fallback geometry (no sprite). */
+/** Render a Harvester unit with sprite (when available) or fallback geometry. */
 export function renderHarvester(
   ctx: CanvasRenderingContext2D,
   harvester: HarvesterState,
   camera: Camera,
+  assets: AssetStore,
+  faction: FactionId,
+  ticks: number,
+  prevTx: number,
+  prevTy: number,
 ): void {
   const scr = tileToScreen(harvester.tx, harvester.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
+
+  // Try spritesheet rendering when feature flag is ON and asset exists
+  if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+    const assetKey = HARVESTER_ASSET_KEYS[faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profile = SPRITE_PROFILES.harvester_base;
+      const dx = harvester.tx - prevTx;
+      const dy = harvester.ty - prevTy;
+      const row = directionToRow(dx, dy);
+      const col = harvesterAnimColumn(harvester.phase, ticks);
+      drawSpritesheetFrame(ctx, sprite, row, col, cv.x, cv.y, z, profile);
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   const boxHeight = 7 * z;
 
   drawIsoBox(

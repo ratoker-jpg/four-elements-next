@@ -1,6 +1,6 @@
 /** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST } from '../core/constants.js';
+import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
@@ -40,6 +40,10 @@ export class GameWorld {
   private panStartY = 0;
   private camPanStartX = 0;
   private camPanStartY = 0;
+  /** Monotonic tick counter for sprite animation. */
+  private ticks = 0;
+  /** Previous harvester positions (by index) for direction computation. */
+  private prevHarvesterPositions = new Map<number, { tx: number; ty: number }>();
 
   onEconomyUpdate?: (state: ReadonlyEconomyState) => void;
   onPowerUpdate?: (state: ReadonlyPowerState) => void;
@@ -87,6 +91,9 @@ export class GameWorld {
 
   async init(): Promise<void> {
     await this.assets.loadManifest(ASSET_MANIFEST);
+    if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
+      await this.assets.loadManifest(CIVIL_8X8_256_MANIFEST);
+    }
   }
 
   start(): void {
@@ -173,7 +180,14 @@ export class GameWorld {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
     this.update(dt);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters);
+    this.ticks++;
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, this.prevHarvesterPositions);
+    // Snapshot current harvester positions for next frame's direction computation
+    this.prevHarvesterPositions.clear();
+    for (let i = 0; i < this.state.harvesters.length; i++) {
+      const h = this.state.harvesters[i]!;
+      this.prevHarvesterPositions.set(i, { tx: h.tx, ty: h.ty });
+    }
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 

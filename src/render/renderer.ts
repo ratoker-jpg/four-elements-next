@@ -40,6 +40,8 @@ export function render(
   economy: ReadonlyEconomyState,
   power: ReadonlyPowerState,
   harvesters: readonly HarvesterState[],
+  ticks: number,
+  prevHarvesterPositions: ReadonlyMap<number, { tx: number; ty: number }>,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -97,17 +99,21 @@ export function render(
     });
   }
 
+  const faction = map.hq.faction;
+
   for (const builder of map.builders) {
     entities.push({
       sortKey: builder.tx + builder.ty,
-      render: () => renderBuilder(ctx, builder, camera),
+      render: () => renderBuilder(ctx, builder, camera, assets, faction, ticks),
     });
   }
 
-  for (const harvester of harvesters) {
+  for (let i = 0; i < harvesters.length; i++) {
+    const harvester = harvesters[i]!;
+    const prev = prevHarvesterPositions.get(i) ?? { tx: harvester.tx, ty: harvester.ty };
     entities.push({
       sortKey: harvester.tx + harvester.ty,
-      render: () => renderHarvester(ctx, harvester, camera),
+      render: () => renderHarvester(ctx, harvester, camera, assets, faction, ticks, prev.tx, prev.ty),
     });
   }
 
