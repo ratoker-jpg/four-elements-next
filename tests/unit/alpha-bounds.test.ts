@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAlphaBounds } from '../../src/core/assets.js';
+import { computeAlphaBounds, shouldComputeAlphaMeta } from '../../src/core/assets.js';
 
 /** Create a Uint8ClampedArray representing an RGBA image with the given dimensions. */
 function makePixelData(
@@ -109,6 +109,57 @@ describe('computeAlphaBounds', () => {
     expect(result.y).toBe(padT);
     expect(result.w).toBe(visW);
     expect(result.h).toBe(visH);
+  });
+});
+
+describe('shouldComputeAlphaMeta', () => {
+  it('returns true for building_cyan_power_plant', () => {
+    expect(shouldComputeAlphaMeta('building_cyan_power_plant')).toBe(true);
+  });
+
+  it('returns true for building_green_separator', () => {
+    expect(shouldComputeAlphaMeta('building_green_separator')).toBe(true);
+  });
+
+  it('returns true for HQ keys (hq_cyan)', () => {
+    expect(shouldComputeAlphaMeta('hq_cyan')).toBe(true);
+  });
+
+  it('returns true for HQ keys (hq_purple)', () => {
+    expect(shouldComputeAlphaMeta('hq_purple')).toBe(true);
+  });
+
+  it('returns true for all 6 building types across factions', () => {
+    const types = ['separator', 'raw_storage', 'matter_storage', 'power_plant', 'command_relay', 'units_factory'];
+    const factions = ['cyan', 'green', 'yellow', 'purple'];
+    for (const type of types) {
+      for (const faction of factions) {
+        expect(shouldComputeAlphaMeta(`building_${faction}_${type}`)).toBe(true);
+      }
+    }
+  });
+
+  it('returns false for terrain_sand', () => {
+    expect(shouldComputeAlphaMeta('terrain_sand')).toBe(false);
+  });
+
+  it('returns false for mineral_small', () => {
+    expect(shouldComputeAlphaMeta('mineral_small')).toBe(false);
+  });
+
+  it('returns false for builder spritesheet keys', () => {
+    expect(shouldComputeAlphaMeta('builder_cyan')).toBe(false);
+  });
+
+  it('returns false for harvester spritesheet keys', () => {
+    expect(shouldComputeAlphaMeta('harvester_green')).toBe(false);
+  });
+
+  it('returns false for environment/decor keys', () => {
+    expect(shouldComputeAlphaMeta('mountain_large_01')).toBe(false);
+    expect(shouldComputeAlphaMeta('dry_bush_01')).toBe(false);
+    expect(shouldComputeAlphaMeta('sand_bump_01')).toBe(false);
+    expect(shouldComputeAlphaMeta('rock_cluster_small_01')).toBe(false);
   });
 });
 

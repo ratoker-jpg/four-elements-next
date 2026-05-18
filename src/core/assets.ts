@@ -50,6 +50,15 @@ export function computeAlphaBounds(
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+/**
+ * Determine whether alpha-bounds metadata should be computed for a given asset key.
+ * Only building and HQ sprites need alpha-bounds; terrain, environment, and
+ * unit spritesheets do not consume metadata yet, so scanning them is wasteful.
+ */
+export function shouldComputeAlphaMeta(key: string): boolean {
+  return key.startsWith('building_') || key.startsWith('hq_');
+}
+
 export class AssetStore {
   private cache = new Map<string, HTMLImageElement>();
   private metaCache = new Map<string, AssetMeta>();
@@ -92,7 +101,9 @@ export class AssetStore {
       img.onload = () => {
         this.cache.set(key, img);
         this.pending.delete(key);
-        this.computeAndStoreMeta(key, img);
+        if (shouldComputeAlphaMeta(key)) {
+          this.computeAndStoreMeta(key, img);
+        }
         resolve();
       };
       img.onerror = () => {
