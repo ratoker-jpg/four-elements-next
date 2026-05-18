@@ -34,7 +34,7 @@ test.describe('NEXT-06B harvester raw delivery', () => {
     expect(harvesterState).not.toBeNull();
     expect(harvesterState!.harvesters.length).toBeGreaterThanOrEqual(1);
     // Phase may already be 'moving-to-resource' since the RAF loop starts before data-ready
-    const validPhases = ['idle', 'moving-to-resource', 'gathering', 'moving-to-hq', 'delivering'];
+    const validPhases = ['idle', 'moving-to-resource', 'gathering', 'moving-to-dropoff', 'delivering', 'waiting-full-storage'];
     expect(validPhases).toContain(harvesterState!.harvesters[0]!.phase);
     expect(harvesterState!.resourceNodes.length).toBeGreaterThanOrEqual(1);
   });
@@ -52,7 +52,7 @@ test.describe('NEXT-06B harvester raw delivery', () => {
     // Harvester should have left idle state
     const phases = harvesterState!.harvesters.map((h) => h.phase);
     const hasActivePhase = phases.some((p) =>
-      p === 'moving-to-resource' || p === 'gathering' || p === 'moving-to-hq' || p === 'delivering',
+      p === 'moving-to-resource' || p === 'gathering' || p === 'moving-to-dropoff' || p === 'delivering' || p === 'waiting-full-storage',
     );
     expect(hasActivePhase).toBe(true);
   });

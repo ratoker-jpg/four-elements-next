@@ -305,6 +305,8 @@ export class GameWorld {
         targetNodeIndex: h.targetNodeIndex,
         gatherProgress: h.gatherProgress,
         carry: h.carry,
+        targetDropoffTx: h.targetDropoffTx,
+        targetDropoffTy: h.targetDropoffTy,
       })),
       resourceNodes: this.state.resourceNodes.map((n) => ({
         tx: n.tx,

@@ -759,8 +759,9 @@ function harvesterPhaseLabel(phase: HarvesterState['phase']): string {
     case 'idle': return 'IDLE';
     case 'moving-to-resource': return 'GO';
     case 'gathering': return 'DIG';
-    case 'moving-to-hq': return 'RET';
+    case 'moving-to-dropoff': return 'RET';
     case 'delivering': return 'DLV';
+    case 'waiting-full-storage': return 'WAIT';
   }
 }
 
@@ -770,8 +771,9 @@ function harvesterTopColor(phase: HarvesterState['phase']): string {
     case 'idle': return '#9ad8ff';
     case 'moving-to-resource': return '#d6c83e';
     case 'gathering': return '#e89040';
-    case 'moving-to-hq': return '#d68f3e';
+    case 'moving-to-dropoff': return '#d68f3e';
     case 'delivering': return '#5ee89a';
+    case 'waiting-full-storage': return '#e87070';
   }
 }
 

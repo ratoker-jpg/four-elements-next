@@ -118,27 +118,30 @@ export function builderAnimColumn(busy: boolean, ticks: number): number {
  * Compute the animation column for a harvester.
  * Harvester phases map to columns:
  *   idle → col 0
- *   moving-to-resource / moving-to-hq → cols 1-4 cycling
+ *   moving-to-resource / moving-to-dropoff → cols 1-4 cycling
  *   gathering → col 0 (idle pose)
  *   delivering → cols 5-7 cycling
+ *   waiting-full-storage → col 0 (idle pose)
  *
  * @param phase - Current harvester phase
  * @param ticks - Monotonic tick counter for animation cycling
  * @returns Column index 0-7
  */
 export function harvesterAnimColumn(
-  phase: 'idle' | 'moving-to-resource' | 'gathering' | 'moving-to-hq' | 'delivering',
+  phase: 'idle' | 'moving-to-resource' | 'gathering' | 'moving-to-dropoff' | 'delivering' | 'waiting-full-storage',
   ticks: number,
 ): number {
   switch (phase) {
     case 'idle':
       return 0;
     case 'moving-to-resource':
-    case 'moving-to-hq':
+    case 'moving-to-dropoff':
       return 1 + (Math.floor(ticks / 10) % 4);
     case 'gathering':
       return 0;
     case 'delivering':
       return 5 + (Math.floor(ticks / 12) % 3);
+    case 'waiting-full-storage':
+      return 0;
   }
 }

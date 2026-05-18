@@ -3,6 +3,7 @@ import {
   tickHarvesting,
   createInitialHarvesters,
   createResourceNodeStates,
+  findNearestDropoff,
   HARVESTER_CONTROL_COST,
   HARVESTER_SPEED,
   HARVESTER_GATHER_TIME,
@@ -20,6 +21,9 @@ function createState(): GameState {
   return createGameState('standard', 'cyan');
 }
 
+/** Default dropoff fields for test harvester construction. */
+const DEFAULT_DROPOFF = { targetDropoffTx: 0, targetDropoffTy: 0 };
+
 /** Create a minimal GameState with a harvester at a specific position and resource nodes. */
 function createTestState(
   harvesterTx: number,
@@ -35,6 +39,7 @@ function createTestState(
     targetNodeIndex: -1,
     gatherProgress: 0,
     carry: 0,
+    ...DEFAULT_DROPOFF,
   }];
   state.resourceNodes = nodes.map((n) => ({
     tx: n.tx,
@@ -71,6 +76,12 @@ describe('createInitialHarvesters', () => {
   it('initial harvester has no carry', () => {
     const state = createState();
     expect(state.harvesters[0]!.carry).toBe(0);
+  });
+
+  it('initial harvester has targetDropoffTx and targetDropoffTy fields', () => {
+    const state = createState();
+    expect(state.harvesters[0]!).toHaveProperty('targetDropoffTx');
+    expect(state.harvesters[0]!).toHaveProperty('targetDropoffTy');
   });
 });
 
@@ -197,7 +208,7 @@ describe('tickHarvesting gathering phase', () => {
     expect(state.harvesters[0]!.gatherProgress).toBeGreaterThan(0);
   });
 
-  it('transitions to moving-to-hq when gathering complete', () => {
+  it('transitions to moving-to-dropoff when gathering complete', () => {
     const state = createTestState(10.45, 10.45, 'idle', [
       { tx: 10, ty: 10, type: 'small' },
     ]);
@@ -205,7 +216,7 @@ describe('tickHarvesting gathering phase', () => {
     tickHarvesting(state, 0.1); // arrive → gathering
     // Complete gathering
     tickHarvesting(state, HARVESTER_GATHER_TIME + 0.1);
-    expect(state.harvesters[0]!.phase).toBe('moving-to-hq');
+    expect(state.harvesters[0]!.phase).toBe('moving-to-dropoff');
     expect(state.harvesters[0]!.carry).toBe(HARVESTER_CARRY_AMOUNT);
   });
 
@@ -264,41 +275,59 @@ describe('tickHarvesting gathering phase', () => {
     expect(state.harvesters[0]!.carry).toBe(7);
     expect(state.resourceNodes[0]!.remaining).toBe(0);
   });
-});
 
-// ── tickHarvesting — moving-to-hq ───────────────────────────────────
-
-describe('tickHarvesting moving-to-hq phase', () => {
-  it('moves harvester toward HQ center', () => {
+  it('stores dropoff target when transitioning to moving-to-dropoff', () => {
     const state = createTestState(10.45, 10.45, 'idle', [
       { tx: 10, ty: 10, type: 'small' },
     ]);
-    // Complete gathering to reach moving-to-hq
     tickHarvesting(state, 0.1); // idle → moving-to-resource
     tickHarvesting(state, 0.1); // arrive → gathering
-    tickHarvesting(state, HARVESTER_GATHER_TIME + 0.1); // gathering → moving-to-hq
-    expect(state.harvesters[0]!.phase).toBe('moving-to-hq');
+    tickHarvesting(state, HARVESTER_GATHER_TIME + 0.1); // gathering → moving-to-dropoff
+    expect(state.harvesters[0]!.phase).toBe('moving-to-dropoff');
+    // targetDropoffTx/Ty should be set (not default 0,0)
+    const dropoff = findNearestDropoff(state.harvesters[0]!, state.map);
+    expect(state.harvesters[0]!.targetDropoffTx).toBe(dropoff.tx);
+    expect(state.harvesters[0]!.targetDropoffTy).toBe(dropoff.ty);
+  });
+});
 
-    const hqCenterTx = state.map.hq.tx + 1.5;
-    const hqCenterTy = state.map.hq.ty + 1.5;
-    const distBefore = Math.hypot(hqCenterTx - state.harvesters[0]!.tx, hqCenterTy - state.harvesters[0]!.ty);
+// ── tickHarvesting — moving-to-dropoff ───────────────────────────────
+
+describe('tickHarvesting moving-to-dropoff phase', () => {
+  it('moves harvester toward dropoff target', () => {
+    const state = createTestState(10.45, 10.45, 'idle', [
+      { tx: 10, ty: 10, type: 'small' },
+    ]);
+    // Complete gathering to reach moving-to-dropoff
+    tickHarvesting(state, 0.1); // idle → moving-to-resource
+    tickHarvesting(state, 0.1); // arrive → gathering
+    tickHarvesting(state, HARVESTER_GATHER_TIME + 0.1); // gathering → moving-to-dropoff
+    expect(state.harvesters[0]!.phase).toBe('moving-to-dropoff');
+
+    const dropoffTx = state.harvesters[0]!.targetDropoffTx;
+    const dropoffTy = state.harvesters[0]!.targetDropoffTy;
+    const distBefore = Math.hypot(dropoffTx - state.harvesters[0]!.tx, dropoffTy - state.harvesters[0]!.ty);
     tickHarvesting(state, 1.0);
-    const distAfter = Math.hypot(hqCenterTx - state.harvesters[0]!.tx, hqCenterTy - state.harvesters[0]!.ty);
+    const distAfter = Math.hypot(dropoffTx - state.harvesters[0]!.tx, dropoffTy - state.harvesters[0]!.ty);
     expect(distAfter).toBeLessThan(distBefore);
   });
 
-  it('transitions to delivering when harvester arrives at HQ', () => {
-    // Place harvester near HQ center
+  it('transitions to delivering when harvester arrives at dropoff', () => {
+    // Place harvester near dropoff target
     const state = createState();
-    const hqCx = state.map.hq.tx + 1.5;
-    const hqCy = state.map.hq.ty + 1.5;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
     state.harvesters = [{
-      tx: hqCx + 0.05,
-      ty: hqCy + 0.05,
-      phase: 'moving-to-hq',
+      tx: dropoff.tx + 0.05,
+      ty: dropoff.ty + 0.05,
+      phase: 'moving-to-dropoff',
       targetNodeIndex: 0,
       gatherProgress: 0,
       carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
     }];
     state.resourceNodes = createResourceNodeStates(state.map.resources);
     tickHarvesting(state, 0.1);
@@ -312,44 +341,67 @@ describe('tickHarvesting delivering phase', () => {
   it('adds carry to economy.resources.raw', () => {
     const state = createState();
     const initialRaw = state.economy.resources.raw;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
     state.harvesters = [{
-      tx: state.map.hq.tx + 1.5,
-      ty: state.map.hq.ty + 1.5,
+      tx: dropoff.tx,
+      ty: dropoff.ty,
       phase: 'delivering',
       targetNodeIndex: 0,
       gatherProgress: 0,
       carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
     }];
     state.resourceNodes = createResourceNodeStates(state.map.resources);
     tickHarvesting(state, 0.1);
     expect(state.economy.resources.raw).toBe(initialRaw + HARVESTER_CARRY_AMOUNT);
   });
 
-  it('clamps raw to rawCap', () => {
+  it('deposits partial carry when raw cap is nearly full and preserves remainder', () => {
     const state = createState();
     state.economy.resources.raw = state.economy.resources.rawCap - 3;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
     state.harvesters = [{
-      tx: state.map.hq.tx + 1.5,
-      ty: state.map.hq.ty + 1.5,
+      tx: dropoff.tx,
+      ty: dropoff.ty,
       phase: 'delivering',
       targetNodeIndex: 0,
       gatherProgress: 0,
       carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
     }];
     state.resourceNodes = createResourceNodeStates(state.map.resources);
     tickHarvesting(state, 0.1);
+    // Raw should be capped
     expect(state.economy.resources.raw).toBe(state.economy.resources.rawCap);
+    // Remaining carry should be preserved (10 - 3 = 7)
+    expect(state.harvesters[0]!.carry).toBe(HARVESTER_CARRY_AMOUNT - 3);
+    // Should be in waiting-full-storage, not idle
+    expect(state.harvesters[0]!.phase).toBe('waiting-full-storage');
   });
 
-  it('resets carry and transitions to idle', () => {
+  it('resets carry and transitions to idle when full deposit fits', () => {
     const state = createState();
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
     state.harvesters = [{
-      tx: state.map.hq.tx + 1.5,
-      ty: state.map.hq.ty + 1.5,
+      tx: dropoff.tx,
+      ty: dropoff.ty,
       phase: 'delivering',
       targetNodeIndex: 0,
       gatherProgress: 0,
       carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
     }];
     state.resourceNodes = createResourceNodeStates(state.map.resources);
     tickHarvesting(state, 0.1);
@@ -357,22 +409,217 @@ describe('tickHarvesting delivering phase', () => {
     expect(state.harvesters[0]!.phase).toBe('idle');
     expect(state.harvesters[0]!.targetNodeIndex).toBe(-1);
   });
+
+  it('enters waiting-full-storage when raw cap is completely full', () => {
+    const state = createState();
+    state.economy.resources.raw = state.economy.resources.rawCap;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
+    state.harvesters = [{
+      tx: dropoff.tx,
+      ty: dropoff.ty,
+      phase: 'delivering',
+      targetNodeIndex: 0,
+      gatherProgress: 0,
+      carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
+    }];
+    state.resourceNodes = createResourceNodeStates(state.map.resources);
+    tickHarvesting(state, 0.1);
+    // Raw stays at cap — nothing deposited
+    expect(state.economy.resources.raw).toBe(state.economy.resources.rawCap);
+    // Carry preserved
+    expect(state.harvesters[0]!.carry).toBe(HARVESTER_CARRY_AMOUNT);
+    // Phase is waiting-full-storage
+    expect(state.harvesters[0]!.phase).toBe('waiting-full-storage');
+  });
+});
+
+// ── tickHarvesting — waiting-full-storage ─────────────────────────────
+
+describe('tickHarvesting waiting-full-storage phase', () => {
+  it('stays in waiting-full-storage while raw cap is full', () => {
+    const state = createState();
+    state.economy.resources.raw = state.economy.resources.rawCap;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
+    state.harvesters = [{
+      tx: dropoff.tx,
+      ty: dropoff.ty,
+      phase: 'waiting-full-storage',
+      targetNodeIndex: 0,
+      gatherProgress: 0,
+      carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
+    }];
+    state.resourceNodes = createResourceNodeStates(state.map.resources);
+    // Tick several times — raw cap still full
+    for (let i = 0; i < 5; i++) {
+      tickHarvesting(state, 0.1);
+      expect(state.harvesters[0]!.phase).toBe('waiting-full-storage');
+      expect(state.harvesters[0]!.carry).toBe(HARVESTER_CARRY_AMOUNT);
+    }
+  });
+
+  it('resumes delivering when raw cap frees up', () => {
+    const state = createState();
+    state.economy.resources.raw = state.economy.resources.rawCap;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
+    state.harvesters = [{
+      tx: dropoff.tx,
+      ty: dropoff.ty,
+      phase: 'waiting-full-storage',
+      targetNodeIndex: 0,
+      gatherProgress: 0,
+      carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
+    }];
+    state.resourceNodes = createResourceNodeStates(state.map.resources);
+    // Free up space in raw cap (simulate separator consuming raw)
+    state.economy.resources.raw -= HARVESTER_CARRY_AMOUNT;
+    tickHarvesting(state, 0.1);
+    // Should transition to delivering first
+    expect(state.harvesters[0]!.phase).toBe('delivering');
+    // Then on next tick, complete delivery
+    tickHarvesting(state, 0.1);
+    expect(state.harvesters[0]!.phase).toBe('idle');
+    expect(state.harvesters[0]!.carry).toBe(0);
+  });
+
+  it('delivers partial carry and waits again when only some space frees up', () => {
+    const state = createState();
+    state.economy.resources.raw = state.economy.resources.rawCap;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
+    state.harvesters = [{
+      tx: dropoff.tx,
+      ty: dropoff.ty,
+      phase: 'waiting-full-storage',
+      targetNodeIndex: 0,
+      gatherProgress: 0,
+      carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
+    }];
+    state.resourceNodes = createResourceNodeStates(state.map.resources);
+    // Free up only 3 raw worth of space
+    state.economy.resources.raw -= 3;
+    tickHarvesting(state, 0.1);
+    // Should transition to delivering
+    expect(state.harvesters[0]!.phase).toBe('delivering');
+    // Next tick: partial deposit (3), remaining carry (7) → waiting-full-storage
+    tickHarvesting(state, 0.1);
+    expect(state.economy.resources.raw).toBe(state.economy.resources.rawCap);
+    expect(state.harvesters[0]!.carry).toBe(HARVESTER_CARRY_AMOUNT - 3);
+    expect(state.harvesters[0]!.phase).toBe('waiting-full-storage');
+  });
+});
+
+// ── findNearestDropoff ────────────────────────────────────────────────
+
+describe('findNearestDropoff', () => {
+  it('prefers nearest raw-storage over HQ', () => {
+    const state = createState();
+    // Default map has one raw-storage adjacent to HQ
+    const rawStorage = state.map.buildings.find((b) => b.type === 'raw-storage')!;
+    expect(rawStorage).toBeDefined();
+
+    // Place harvester closer to raw-storage than to HQ
+    const harvester: HarvesterState = {
+      tx: rawStorage.tx + 1, // at raw-storage center
+      ty: rawStorage.ty + 1,
+      phase: 'idle',
+      targetNodeIndex: -1,
+      gatherProgress: 0,
+      carry: 0,
+      ...DEFAULT_DROPOFF,
+    };
+    const dropoff = findNearestDropoff(harvester, state.map);
+    // Should be raw-storage center, not HQ center
+    const rawStorageCenterTx = rawStorage.tx + 1;
+    const rawStorageCenterTy = rawStorage.ty + 1;
+    expect(dropoff.tx).toBe(rawStorageCenterTx);
+    expect(dropoff.ty).toBe(rawStorageCenterTy);
+  });
+
+  it('falls back to HQ when no raw-storage exists', () => {
+    const state = createState();
+    // Remove all raw-storage buildings
+    state.map.buildings = state.map.buildings.filter((b) => b.type !== 'raw-storage');
+    const harvester: HarvesterState = {
+      tx: 10,
+      ty: 10,
+      phase: 'idle',
+      targetNodeIndex: -1,
+      gatherProgress: 0,
+      carry: 0,
+      ...DEFAULT_DROPOFF,
+    };
+    const dropoff = findNearestDropoff(harvester, state.map);
+    // Should be HQ center
+    expect(dropoff.tx).toBe(state.map.hq.tx + 1.5);
+    expect(dropoff.ty).toBe(state.map.hq.ty + 1.5);
+  });
+});
+
+// ── no Raw loss ───────────────────────────────────────────────────────
+
+describe('no Raw loss in harvester delivery', () => {
+  it('total raw in system (economy + carry) never decreases during delivery', () => {
+    const state = createState();
+    state.economy.resources.raw = state.economy.resources.rawCap - 3;
+    const dropoff = findNearestDropoff(
+      { tx: state.map.hq.tx + 1.5, ty: state.map.hq.ty + 1.5, phase: 'idle', targetNodeIndex: -1, gatherProgress: 0, carry: 0, ...DEFAULT_DROPOFF },
+      state.map,
+    );
+    state.harvesters = [{
+      tx: dropoff.tx,
+      ty: dropoff.ty,
+      phase: 'delivering',
+      targetNodeIndex: 0,
+      gatherProgress: 0,
+      carry: HARVESTER_CARRY_AMOUNT,
+      targetDropoffTx: dropoff.tx,
+      targetDropoffTy: dropoff.ty,
+    }];
+    state.resourceNodes = createResourceNodeStates(state.map.resources);
+
+    const totalBefore = state.economy.resources.raw + state.harvesters[0]!.carry;
+
+    // Tick through delivering → waiting-full-storage
+    tickHarvesting(state, 0.1);
+
+    const totalAfter = state.economy.resources.raw + state.harvesters[0]!.carry;
+    expect(totalAfter).toBe(totalBefore);
+    // Economy got partial deposit
+    expect(state.economy.resources.raw).toBe(state.economy.resources.rawCap);
+    // Harvester kept the remainder
+    expect(state.harvesters[0]!.carry).toBe(totalBefore - state.economy.resources.rawCap);
+  });
 });
 
 // ── tickHarvesting — full cycle ─────────────────────────────────────
 
 describe('tickHarvesting full delivery cycle', () => {
-  it('completes a full idle→resource→gather→hq→deliver→idle cycle', () => {
+  it('completes a full idle→resource→gather→dropoff→deliver→idle cycle', () => {
     const state = createTestState(5.5, 5.5, 'idle', [
       { tx: 7, ty: 7, type: 'infinite' },
     ]);
     const initialRaw = state.economy.resources.raw;
 
     // Run enough ticks to complete a full cycle
-    // Distance from (5.5,5.5) to (7.5,7.5) = ~2.83 tiles
-    // At 2.5 tiles/s, that's ~1.13s each way
-    // Plus 3s gathering + 0.1s delivering
-    // Total ≈ 1.13 + 3 + 1.13 + 0.1 ≈ 5.36s
     for (let i = 0; i < 60; i++) {
       tickHarvesting(state, 0.1);
     }
