@@ -198,7 +198,7 @@ Out of scope:
 
 ### Stage A — STORAGE-SPLIT-01
 
-Status: implemented as PR #36.
+Status: implemented and merged as PR #36.
 
 Purpose:
 
@@ -210,7 +210,7 @@ Purpose:
 
 ### Stage B — HARVESTER-DROPOFF-01
 
-Status: in progress as PR #37.
+Status: implemented and merged as PR #37.
 
 Purpose:
 
@@ -219,22 +219,22 @@ Purpose:
 - Add `waiting-full-storage`.
 - Preserve carry and prevent Raw loss when Raw cap is full.
 
-Important PR hygiene issue encountered:
+Important PR hygiene issue encountered and resolved:
 
 - PR #37 was initially based on a dirty/diverged branch and included already-merged Stage A changes.
-- This must be fixed by clean rebase/recreate from latest `main` before merge.
+- It was recreated from latest `main` and merged only after the diff was clean.
 
 ### Stage C — MULTI-BUILDER + HQ POWER
 
-Planned.
+Planned next.
 
 Purpose:
 
 - Let any available builder construct, not only the first builder.
 - Make produced builders useful.
-- Add small HQ base power if still desired by approved audit.
+- Add small HQ base power if still desired by the approved CIVIL-SANDBOX-ARCH-01 audit.
 
-No new full audit needed if Stage B merges cleanly and assumptions still hold.
+No new full audit needed if assumptions still hold. Use approved Big Audit stage implementation prompt.
 
 ### Stage D — RELAY FOOTPRINT / BALANCE / HUD POLISH
 
