@@ -4,6 +4,7 @@ import { getBuildingFootprint } from '../config/buildings.js';
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
+import type { AssetMeta } from '../core/assets.js';
 import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId, BuildingType } from '../game/map-types.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
@@ -86,7 +87,7 @@ const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> 
  *  groundOffset: positive = sprite moves up from baseY (floats), negative = moves down (sinks)
  *  Sprite bottom = baseY - groundOffset * zoom
  *  Sprite top = baseY - drawHeight - groundOffset * zoom
- *  Contain-fit preserves the PNG's natural aspect ratio inside profile.size bounding box.
+ *  When meta is provided, uses alpha-bounds for containFit and draws only visible source rect.
  */
 function drawBuildingSprite(
   ctx: CanvasRenderingContext2D,
@@ -97,19 +98,30 @@ function drawBuildingSprite(
   zoom: number,
   online: boolean,
   footprint: number,
+  meta?: AssetMeta | null,
 ): void {
   const profile = SPRITE_PROFILES[profileKey];
   const maxW = profile.size[0] * zoom;
   const maxH = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
   const baseY = cy + (TILE_H / 2) * footprint * zoom;
-  const { drawWidth: w, drawHeight: h } = containFit(
-    sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
-  );
+  // Use alpha-bounds dimensions for containFit when meta is available
+  const nw = meta ? meta.visibleW : sprite.naturalWidth;
+  const nh = meta ? meta.visibleH : sprite.naturalHeight;
+  const { drawWidth: w, drawHeight: h } = containFit(nw, nh, maxW, maxH);
   if (!online) {
     ctx.globalAlpha = 0.45;
   }
-  ctx.drawImage(sprite, cx - w / 2, baseY - h - offY, w, h);
+  // Draw only visible source rect when meta is available
+  if (meta && meta.visibleW > 0 && meta.visibleH > 0) {
+    ctx.drawImage(
+      sprite,
+      meta.visibleX, meta.visibleY, meta.visibleW, meta.visibleH,
+      cx - w / 2, baseY - h - offY, w, h,
+    );
+  } else {
+    ctx.drawImage(sprite, cx - w / 2, baseY - h - offY, w, h);
+  }
   if (!online) {
     ctx.globalAlpha = 1;
   }
@@ -208,14 +220,23 @@ export function renderHq(
   const profile = SPRITE_PROFILES.hq_base;
 
   if (sprite) {
+    const meta = assets.getMeta(assetKey);
     const maxW = profile.size[0] * z;
     const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
     const baseY = cv.y + (TILE_H / 2) * HQ_FOOTPRINT * z;
-    const { drawWidth: w, drawHeight: h } = containFit(
-      sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
-    );
-    ctx.drawImage(sprite, cv.x - w / 2, baseY - h - offY, w, h);
+    const nw = meta ? meta.visibleW : sprite.naturalWidth;
+    const nh = meta ? meta.visibleH : sprite.naturalHeight;
+    const { drawWidth: w, drawHeight: h } = containFit(nw, nh, maxW, maxH);
+    if (meta && meta.visibleW > 0 && meta.visibleH > 0) {
+      ctx.drawImage(
+        sprite,
+        meta.visibleX, meta.visibleY, meta.visibleW, meta.visibleH,
+        cv.x - w / 2, baseY - h - offY, w, h,
+      );
+    } else {
+      ctx.drawImage(sprite, cv.x - w / 2, baseY - h - offY, w, h);
+    }
   } else {
     renderHqFallback(ctx, cv.x, cv.y, z);
   }
@@ -299,11 +320,14 @@ export function renderSeparator(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['separator'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Compute sprite top for overlay positioning (footprint-based anchor)
       const profile = SPRITE_PROFILES[profileKey];
       const baseY = cv.y + (TILE_H / 2) * footprint * z;
-      const { drawHeight: sepDrawH } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+      const nw = meta ? meta.visibleW : sprite.naturalWidth;
+      const nh = meta ? meta.visibleH : sprite.naturalHeight;
+      const { drawHeight: sepDrawH } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
       const spriteTopY = baseY - sepDrawH - profile.groundOffset * z;
       // Overlay: progress bar
       if (online && progress > 0) {
@@ -397,12 +421,15 @@ export function renderRawStorage(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['raw-storage'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const nw = meta ? meta.visibleW : sprite.naturalWidth;
+        const nh = meta ? meta.visibleH : sprite.naturalHeight;
+        const { drawHeight } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
         const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
@@ -448,12 +475,15 @@ export function renderMatterStorage(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['matter-storage'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const nw = meta ? meta.visibleW : sprite.naturalWidth;
+        const nh = meta ? meta.visibleH : sprite.naturalHeight;
+        const { drawHeight } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
         const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
@@ -499,12 +529,15 @@ export function renderPowerPlant(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['power-plant'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Overlay: lightning bolt when online
       if (online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const nw = meta ? meta.visibleW : sprite.naturalWidth;
+        const nh = meta ? meta.visibleH : sprite.naturalHeight;
+        const { drawHeight } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
         const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ffff44';
         ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
@@ -562,12 +595,15 @@ export function renderCommandRelay(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['command-relay'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const nw = meta ? meta.visibleW : sprite.naturalWidth;
+        const nh = meta ? meta.visibleH : sprite.naturalHeight;
+        const { drawHeight } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
         const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
@@ -625,12 +661,15 @@ export function renderUnitsFactory(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['units-factory'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      const meta = assets.getMeta(assetKey);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const nw = meta ? meta.visibleW : sprite.naturalWidth;
+        const nh = meta ? meta.visibleH : sprite.naturalHeight;
+        const { drawHeight } = containFit(nw, nh, profile.size[0] * z, profile.size[1] * z);
         const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
