@@ -1,10 +1,10 @@
 /** Building rendering: faction HQ, civil buildings, builder, and construction sites. */
 
 import { getBuildingFootprint } from '../config/buildings.js';
-import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED } from '../core/constants.js';
+import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
-import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId } from '../game/map-types.js';
+import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId, BuildingType } from '../game/map-types.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
 import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimColumn } from './spritesheet.js';
@@ -29,6 +29,72 @@ const HARVESTER_ASSET_KEYS: Record<FactionId, string> = {
   yellow: 'harvester_yellow',
   purple: 'harvester_purple',
 };
+
+/** Building type → faction → asset key mapping. */
+const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
+  separator: {
+    cyan: 'building_cyan_separator',
+    green: 'building_green_separator',
+    yellow: 'building_yellow_separator',
+    purple: 'building_purple_separator',
+  },
+  storage: {
+    cyan: 'building_cyan_storage',
+    green: 'building_green_storage',
+    yellow: 'building_yellow_storage',
+    purple: 'building_purple_storage',
+  },
+  'power-plant': {
+    cyan: 'building_cyan_power_plant',
+    green: 'building_green_power_plant',
+    yellow: 'building_yellow_power_plant',
+    purple: 'building_purple_power_plant',
+  },
+  'command-relay': {
+    cyan: 'building_cyan_command_relay',
+    green: 'building_green_command_relay',
+    yellow: 'building_yellow_command_relay',
+    purple: 'building_purple_command_relay',
+  },
+  'units-factory': {
+    cyan: 'building_cyan_units_factory',
+    green: 'building_green_units_factory',
+    yellow: 'building_yellow_units_factory',
+    purple: 'building_purple_units_factory',
+  },
+};
+
+/** Profile key for each building type. */
+const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> = {
+  separator: 'building_separator',
+  storage: 'building_storage',
+  'power-plant': 'building_power_plant',
+  'command-relay': 'building_command_relay',
+  'units-factory': 'building_units_factory',
+};
+
+/** Draw a building sprite centered on (cx, cy), dimmed when offline. Returns true if sprite was drawn. */
+function drawBuildingSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: HTMLImageElement,
+  profileKey: keyof typeof SPRITE_PROFILES,
+  cx: number,
+  cy: number,
+  zoom: number,
+  online: boolean,
+): void {
+  const profile = SPRITE_PROFILES[profileKey];
+  const w = profile.size[0] * zoom;
+  const h = profile.size[1] * zoom;
+  const offY = profile.groundOffset * zoom;
+  if (!online) {
+    ctx.globalAlpha = 0.45;
+  }
+  ctx.drawImage(sprite, cx - w / 2, cy - h / 2 - offY, w, h);
+  if (!online) {
+    ctx.globalAlpha = 1;
+  }
+}
 
 function dimColor(hex: string, factor: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -194,6 +260,8 @@ export function renderSeparator(
   active: boolean,
   progress: number,
   online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
 ): void {
   const footprint = getBuildingFootprint('separator');
   const center = getFootprintCenter(tx, ty, footprint);
@@ -202,6 +270,45 @@ export function renderSeparator(
   const z = camera.zoom;
   const boxHeight = 12 * z;
 
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['separator'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['separator'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      // Overlay: progress bar
+      if (online && progress > 0) {
+        const profile = SPRITE_PROFILES[profileKey];
+        const barW = 28 * z;
+        const barH = 4 * z;
+        const barX = cv.x - barW / 2;
+        const barY = cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 2 * z;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(barX, barY, barW, barH);
+
+        ctx.fillStyle = active ? '#5ee89a' : '#888';
+        ctx.fillRect(barX, barY, barW * Math.min(progress, 1), barH);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+      }
+      // Overlay: OFF label
+      if (!online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        ctx.fillStyle = '#ff4444';
+        ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   drawIsoBox(
     ctx,
     cv.x,
@@ -248,6 +355,8 @@ export function renderStorage(
   ty: number,
   camera: Camera,
   online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
 ): void {
   const footprint = getBuildingFootprint('storage');
   const center = getFootprintCenter(tx, ty, footprint);
@@ -256,6 +365,27 @@ export function renderStorage(
   const z = camera.zoom;
   const boxHeight = 10 * z;
 
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['storage'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['storage'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      // Overlay: OFF label
+      if (!online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        ctx.fillStyle = '#ff4444';
+        ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   drawIsoBox(ctx, cv.x, cv.y, z, '#6b5a3a', '#554828', '#8b7a50', boxHeight, 'STO', online, footprint);
 
   if (!online) {
@@ -273,6 +403,8 @@ export function renderPowerPlant(
   ty: number,
   camera: Camera,
   online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
 ): void {
   const footprint = getBuildingFootprint('power-plant');
   const center = getFootprintCenter(tx, ty, footprint);
@@ -281,6 +413,27 @@ export function renderPowerPlant(
   const z = camera.zoom;
   const boxHeight = 14 * z;
 
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['power-plant'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['power-plant'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      // Overlay: lightning bolt when online
+      if (online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        ctx.fillStyle = '#ffff44';
+        ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('\u26A1', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   drawIsoBox(
     ctx,
     cv.x,
@@ -310,6 +463,8 @@ export function renderCommandRelay(
   ty: number,
   camera: Camera,
   online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
 ): void {
   const footprint = getBuildingFootprint('command-relay');
   const center = getFootprintCenter(tx, ty, footprint);
@@ -318,6 +473,27 @@ export function renderCommandRelay(
   const z = camera.zoom;
   const boxHeight = 11 * z;
 
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['command-relay'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['command-relay'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      // Overlay: OFF label
+      if (!online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        ctx.fillStyle = '#ff4444';
+        ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   drawIsoBox(
     ctx,
     cv.x,
@@ -347,6 +523,8 @@ export function renderUnitsFactory(
   ty: number,
   camera: Camera,
   online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
 ): void {
   const footprint = getBuildingFootprint('units-factory');
   const center = getFootprintCenter(tx, ty, footprint);
@@ -355,6 +533,27 @@ export function renderUnitsFactory(
   const z = camera.zoom;
   const boxHeight = 13 * z;
 
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['units-factory'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['units-factory'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      // Overlay: OFF label
+      if (!online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        ctx.fillStyle = '#ff4444';
+        ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
   drawIsoBox(
     ctx,
     cv.x,

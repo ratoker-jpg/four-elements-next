@@ -58,6 +58,8 @@ export function render(
     render: () => renderHq(ctx, map.hq, camera, assets),
   });
 
+  const faction = map.hq.faction;
+
   for (const b of map.buildings) {
     const online = isBuildingOnline(power, b.tx, b.ty);
     const footprint = getBuildingFootprint(b.type);
@@ -67,27 +69,27 @@ export function render(
       const progress = sepState?.progress ?? 0;
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online),
+        render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online, assets, faction),
       });
     } else if (b.type === 'storage') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderStorage(ctx, b.tx, b.ty, camera, online),
+        render: () => renderStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'power-plant') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderPowerPlant(ctx, b.tx, b.ty, camera, online),
+        render: () => renderPowerPlant(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'command-relay') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online),
+        render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'units-factory') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderUnitsFactory(ctx, b.tx, b.ty, camera, online),
+        render: () => renderUnitsFactory(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     }
   }
@@ -98,8 +100,6 @@ export function render(
       render: () => renderConstructionSite(ctx, site, camera),
     });
   }
-
-  const faction = map.hq.faction;
 
   for (const builder of map.builders) {
     entities.push({
