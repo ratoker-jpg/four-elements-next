@@ -23,6 +23,7 @@ import type { Camera } from './camera.js';
 import { renderResourceNode, renderDecor } from './environment.js';
 import { renderTerrain } from './terrain.js';
 import type { HarvesterState } from '../systems/harvesting.js';
+import { isAssetPreviewEnabled, drawAssetPreview } from '../dev/asset-preview.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -134,5 +135,10 @@ export function render(
 
   for (const e of entities) {
     e.render();
+  }
+
+  // ASSET-PREVIEW-01: debug-only candidate preview overlay (zero effect when disabled)
+  if (isAssetPreviewEnabled()) {
+    drawAssetPreview(ctx, camera, canvasW, canvasH, map.hq.tx, map.hq.ty);
   }
 }
