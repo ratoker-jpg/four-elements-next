@@ -8,6 +8,7 @@ import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionI
 import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
 import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimColumn } from './spritesheet.js';
+import { containFit } from './contain-fit.js';
 
 const HQ_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'hq_cyan',
@@ -83,7 +84,9 @@ const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> 
 /** Draw a building sprite anchored to the footprint's south vertex, dimmed when offline.
  *  baseY = cy + (TILE_H/2) * footprint * zoom  (south vertex of isometric diamond)
  *  groundOffset: positive = sprite moves up from baseY (floats), negative = moves down (sinks)
- *  Sprite top = baseY - h - groundOffset * zoom
+ *  Sprite bottom = baseY - groundOffset * zoom
+ *  Sprite top = baseY - drawHeight - groundOffset * zoom
+ *  Contain-fit preserves the PNG's natural aspect ratio inside profile.size bounding box.
  */
 function drawBuildingSprite(
   ctx: CanvasRenderingContext2D,
@@ -96,10 +99,13 @@ function drawBuildingSprite(
   footprint: number,
 ): void {
   const profile = SPRITE_PROFILES[profileKey];
-  const w = profile.size[0] * zoom;
-  const h = profile.size[1] * zoom;
+  const maxW = profile.size[0] * zoom;
+  const maxH = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
   const baseY = cy + (TILE_H / 2) * footprint * zoom;
+  const { drawWidth: w, drawHeight: h } = containFit(
+    sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
+  );
   if (!online) {
     ctx.globalAlpha = 0.45;
   }
@@ -202,10 +208,13 @@ export function renderHq(
   const profile = SPRITE_PROFILES.hq_base;
 
   if (sprite) {
-    const w = profile.size[0] * z;
-    const h = profile.size[1] * z;
+    const maxW = profile.size[0] * z;
+    const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
     const baseY = cv.y + (TILE_H / 2) * HQ_FOOTPRINT * z;
+    const { drawWidth: w, drawHeight: h } = containFit(
+      sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
+    );
     ctx.drawImage(sprite, cv.x - w / 2, baseY - h - offY, w, h);
   } else {
     renderHqFallback(ctx, cv.x, cv.y, z);
@@ -294,7 +303,8 @@ export function renderSeparator(
       // Compute sprite top for overlay positioning (footprint-based anchor)
       const profile = SPRITE_PROFILES[profileKey];
       const baseY = cv.y + (TILE_H / 2) * footprint * z;
-      const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+      const { drawHeight: sepDrawH } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+      const spriteTopY = baseY - sepDrawH - profile.groundOffset * z;
       // Overlay: progress bar
       if (online && progress > 0) {
         const barW = 28 * z;
@@ -392,7 +402,8 @@ export function renderRawStorage(
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
@@ -442,7 +453,8 @@ export function renderMatterStorage(
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
@@ -492,7 +504,8 @@ export function renderPowerPlant(
       if (online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ffff44';
         ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
@@ -554,7 +567,8 @@ export function renderCommandRelay(
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
@@ -616,7 +630,8 @@ export function renderUnitsFactory(
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
-        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        const { drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, profile.size[0] * z, profile.size[1] * z);
+        const spriteTopY = baseY - drawHeight - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
