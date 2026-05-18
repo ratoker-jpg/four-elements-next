@@ -6,6 +6,9 @@
  * render pipeline: alpha-bounds, containFit, profile size, footprint,
  * vertical offset.
  *
+ * Position controls: Position X/Y sliders (tile offset from default HQ-adjacent
+ * position), plus left-click drag on canvas to reposition the candidate.
+ *
  * Toggle: press 0 (zero key), or call toggleAssetPreview().
  * No gameplay changes. No production asset changes. No profile tuning.
  */
@@ -26,6 +29,8 @@ interface PreviewState {
   footprint: number;            // 1, 2, or 3
   profileSize: number;          // adjustable profile size (px at zoom=1)
   verticalOffset: number;       // adjustable groundOffset (px at zoom=1)
+  posOffsetX: number;           // tile offset from default position (X/east direction)
+  posOffsetY: number;           // tile offset from default position (Y/south direction)
   showFootprintOutline: boolean;
   showPlatform: boolean;
   showAlphaBoundsRect: boolean;
@@ -39,6 +44,8 @@ const state: PreviewState = {
   footprint: 2,
   profileSize: 128,
   verticalOffset: 0,
+  posOffsetX: 0,
+  posOffsetY: 0,
   showFootprintOutline: true,
   showPlatform: true,
   showAlphaBoundsRect: false,
@@ -294,6 +301,7 @@ function drawMetadata(
     `Profile: ${profileSize}px`,
     `Footprint: ${footprint}x${footprint}`,
     `GroundOffset: ${verticalOffset}`,
+    `Pos offset: (${state.posOffsetX}, ${state.posOffsetY})`,
   ];
 
   const lineH = fontSize + 2;
@@ -301,7 +309,7 @@ function drawMetadata(
   const padY = 3;
   const panelX = fullX(cx, fullW) + fullW + 6;
   const panelY = fullY;
-  const panelW = 220;
+  const panelW = 240;
   const panelH = lines.length * lineH + padY * 2;
 
   ctx.save();
@@ -346,15 +354,18 @@ export function drawAssetPreview(
 
   const meta = state.alphaBounds;
 
-  // Place preview footprint to the right of HQ
-  const previewTx = hqTx + (state.footprint === 3 ? 4 : 3);
-  const previewTy = hqTy;
+  // Place preview footprint to the right of HQ, plus position offsets
+  const previewTx = hqTx + (state.footprint === 3 ? 4 : 3) + state.posOffsetX;
+  const previewTy = hqTy + state.posOffsetY;
   const centerTx = previewTx + state.footprint / 2;
   const centerTy = previewTy + state.footprint / 2;
 
   const scr = tileToScreen(centerTx, centerTy);
   const cv = camera.toCanvas(scr.x, scr.y, canvasWidth, canvasHeight);
   const z = camera.zoom;
+
+  // Snapshot camera for drag calculations
+  dragCamera = { x: camera.x, y: camera.y, zoom: camera.zoom };
 
   // 1. Construction platform (under candidate)
   if (state.showPlatform) {
@@ -386,11 +397,86 @@ export function toggleAssetPreview(): void {
   if (state.enabled) {
     createPanel();
     panelEl!.style.display = 'block';
-    console.warn('[ASSET PREVIEW] ON — press 0 to toggle');
+    installDragListeners();
+    console.warn('[ASSET PREVIEW] ON — press 0 to toggle; left-click drag to reposition');
   } else {
     if (panelEl) panelEl.style.display = 'none';
+    removeDragListeners();
     console.warn('[ASSET PREVIEW] OFF');
   }
+}
+
+// ── Mouse drag for repositioning candidate ─────────────────────────
+
+let dragInstalled = false;
+let dragging = false;
+let dragStartCanvasX = 0;
+let dragStartCanvasY = 0;
+let dragStartOffsetX = 0;
+let dragStartOffsetY = 0;
+let dragCamera: { x: number; y: number; zoom: number } | null = null;
+
+/** Convert canvas-pixel delta to tile delta (isometric). */
+function canvasDeltaToTileDelta(dx: number, dy: number, zoom: number): { dtx: number; dty: number } {
+  // Canvas → world pixel delta
+  const wsx = dx / zoom;
+  const wsy = dy / zoom;
+  // World screen delta → tile delta (inverse of tileToScreen which is linear)
+  const halfW = TILE_W / 2;
+  const halfH = TILE_H / 2;
+  return {
+    dtx: (wsx / halfW + wsy / halfH) / 2,
+    dty: (wsy / halfH - wsx / halfW) / 2,
+  };
+}
+
+function onDragMouseDown(e: MouseEvent): void {
+  if (!state.enabled || e.button !== 0) return;
+  // Don't capture drag if the click is on the UI panel
+  const target = e.target as HTMLElement;
+  if (target.id === 'fe-asset-preview-panel' || target.closest('#fe-asset-preview-panel')) return;
+
+  dragging = true;
+  dragStartCanvasX = e.clientX;
+  dragStartCanvasY = e.clientY;
+  dragStartOffsetX = state.posOffsetX;
+  dragStartOffsetY = state.posOffsetY;
+  e.preventDefault();
+}
+
+function onDragMouseMove(e: MouseEvent): void {
+  if (!dragging || !dragCamera) return;
+  const dx = e.clientX - dragStartCanvasX;
+  const dy = e.clientY - dragStartCanvasY;
+  const { dtx, dty } = canvasDeltaToTileDelta(dx, dy, dragCamera.zoom);
+  state.posOffsetX = Math.round((dragStartOffsetX + dtx) * 2) / 2; // snap to 0.5 tiles
+  state.posOffsetY = Math.round((dragStartOffsetY + dty) * 2) / 2;
+  // Clamp to slider range
+  state.posOffsetX = Math.max(-20, Math.min(20, state.posOffsetX));
+  state.posOffsetY = Math.max(-20, Math.min(20, state.posOffsetY));
+  // Update slider UI
+  updatePositionSliders();
+}
+
+function onDragMouseUp(): void {
+  dragging = false;
+}
+
+function installDragListeners(): void {
+  if (dragInstalled) return;
+  dragInstalled = true;
+  window.addEventListener('mousedown', onDragMouseDown);
+  window.addEventListener('mousemove', onDragMouseMove);
+  window.addEventListener('mouseup', onDragMouseUp);
+}
+
+function removeDragListeners(): void {
+  if (!dragInstalled) return;
+  dragInstalled = false;
+  dragging = false;
+  window.removeEventListener('mousedown', onDragMouseDown);
+  window.removeEventListener('mousemove', onDragMouseMove);
+  window.removeEventListener('mouseup', onDragMouseUp);
 }
 
 // ── UI Panel ──────────────────────────────────────────────────────
@@ -399,6 +485,10 @@ let panelEl: HTMLDivElement | null = null;
 let metadataEl: HTMLDivElement | null = null;
 let sizeLabelEl: HTMLDivElement | null = null;
 let offsetLabelEl: HTMLDivElement | null = null;
+let posXLabelEl: HTMLDivElement | null = null;
+let posYLabelEl: HTMLDivElement | null = null;
+let posXSliderEl: HTMLInputElement | null = null;
+let posYSliderEl: HTMLInputElement | null = null;
 
 function createPanel(): void {
   if (panelEl) return;
@@ -493,6 +583,24 @@ function createPanel(): void {
     if (offsetLabelEl) offsetLabelEl.textContent = `Vertical Offset: ${v}px`;
   }));
 
+  // Position X slider (tile offset)
+  posXLabelEl = makeLabel(`Position X: ${state.posOffsetX} tiles`);
+  panelEl.appendChild(posXLabelEl);
+  posXSliderEl = makeSlider(-20, 20, state.posOffsetX, 0.5, (v) => {
+    state.posOffsetX = v;
+    if (posXLabelEl) posXLabelEl.textContent = `Position X: ${v} tiles`;
+  });
+  panelEl.appendChild(posXSliderEl);
+
+  // Position Y slider (tile offset)
+  posYLabelEl = makeLabel(`Position Y: ${state.posOffsetY} tiles`);
+  panelEl.appendChild(posYLabelEl);
+  posYSliderEl = makeSlider(-20, 20, state.posOffsetY, 0.5, (v) => {
+    state.posOffsetY = v;
+    if (posYLabelEl) posYLabelEl.textContent = `Position Y: ${v} tiles`;
+  });
+  panelEl.appendChild(posYSliderEl);
+
   // Toggles
   panelEl.appendChild(makeToggle('Footprint Outline', state.showFootprintOutline, (v) => { state.showFootprintOutline = v; }));
   panelEl.appendChild(makeToggle('Construction Platform', state.showPlatform, (v) => { state.showPlatform = v; }));
@@ -506,8 +614,11 @@ function createPanel(): void {
     state.candidateImage = null;
     state.candidateFileName = '';
     state.alphaBounds = null;
+    state.posOffsetX = 0;
+    state.posOffsetY = 0;
     fileLabel.textContent = 'Load PNG Candidate...';
     fileInput.value = '';
+    updatePositionSliders();
   });
   panelEl.appendChild(clearBtn);
 
@@ -526,15 +637,29 @@ function makeLabel(text: string): HTMLDivElement {
   return el;
 }
 
-function makeSlider(min: number, max: number, val: number, onChange: (v: number) => void): HTMLInputElement {
+function makeSlider(min: number, max: number, val: number, stepOrOnChange: number | ((v: number) => void), onChange?: (v: number) => void): HTMLInputElement {
   const el = document.createElement('input');
   el.type = 'range';
   el.min = String(min);
   el.max = String(max);
   el.value = String(val);
+  // Overloaded: makeSlider(min, max, val, onChange) or makeSlider(min, max, val, step, onChange)
+  if (typeof stepOrOnChange === 'function') {
+    onChange = stepOrOnChange;
+  } else {
+    el.step = String(stepOrOnChange);
+  }
   Object.assign(el.style, { width: '100%', marginBottom: '6px', accentColor: '#f0c96a' });
-  el.addEventListener('input', () => { onChange(Number(el.value)); });
+  el.addEventListener('input', () => { onChange?.(Number(el.value)); });
   return el;
+}
+
+/** Update position slider UI from current state (called after drag). */
+function updatePositionSliders(): void {
+  if (posXSliderEl) posXSliderEl.value = String(state.posOffsetX);
+  if (posYSliderEl) posYSliderEl.value = String(state.posOffsetY);
+  if (posXLabelEl) posXLabelEl.textContent = `Position X: ${state.posOffsetX} tiles`;
+  if (posYLabelEl) posYLabelEl.textContent = `Position Y: ${state.posOffsetY} tiles`;
 }
 
 function makeToggle(label: string, initial: boolean, onChange: (v: boolean) => void): HTMLDivElement {
