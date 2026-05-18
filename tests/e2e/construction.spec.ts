@@ -75,7 +75,7 @@ test.describe('NEXT-05 construction', () => {
       builderBusy: false,
       siteCount: 0,
       separatorCount: 2,
-      netPower: 1,
+      netPower: 3,
     });
   });
 

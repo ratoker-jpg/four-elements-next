@@ -37,10 +37,10 @@ test.describe('NEXT-04 power and control', () => {
       } | null;
     });
     expect(powerState).not.toBeNull();
-    // 1 Power Plant (supply=4), 1 Separator (demand=1), 1 Command Relay (demand=1)
-    expect(powerState!.totalSupply).toBe(4);
+    // HQ (supply=2) + 1 Power Plant (supply=4), 1 Separator (demand=1), 1 Command Relay (demand=1)
+    expect(powerState!.totalSupply).toBe(6);
     expect(powerState!.totalDemand).toBe(2);
-    expect(powerState!.netPower).toBe(2);
+    expect(powerState!.netPower).toBe(4);
   });
 
   test('control state shows 15 with one online Command Relay', async ({ page }) => {
@@ -58,10 +58,10 @@ test.describe('NEXT-04 power and control', () => {
     expect(controlState!.used).toBe(2); // 1 builder + 1 harvester
   });
 
-  test('power HUD shows net power as +2', async ({ page }) => {
+  test('power HUD shows net power as +4', async ({ page }) => {
     await navigateToGameScreen(page);
     const powerValue = page.locator('.economy-hud__item--power .economy-hud__value');
-    await expect(powerValue).toHaveText('+2');
+    await expect(powerValue).toHaveText('+4');
   });
 
   test('control HUD shows used/current control', async ({ page }) => {

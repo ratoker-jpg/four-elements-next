@@ -32,6 +32,7 @@ describe('construction system', () => {
     expect(map.builders[0]!.busy).toBe(true);
     expect(map.constructionSites).toHaveLength(1);
     expect(map.constructionSites[0]!.type).toBe('separator');
+    expect(map.constructionSites[0]!.builderIndex).toBe(0);
   });
 
   it('rejects construction when matter is insufficient', () => {
@@ -49,7 +50,7 @@ describe('construction system', () => {
     expect(map.builders[0]!.busy).toBe(false);
   });
 
-  it('rejects a second construction while the builder is busy', () => {
+  it('rejects a second construction while the single builder is busy', () => {
     const { map, economy } = createBaseline();
     expect(startConstruction(map, economy, 'separator').ok).toBe(true);
 
@@ -115,5 +116,165 @@ describe('construction system', () => {
     expect(map.constructionSites).toHaveLength(0);
     expect(map.builders[0]!.busy).toBe(false);
     expect(map.buildings.some((building) => building.type === 'command-relay')).toBe(true);
+  });
+});
+
+// ── Multi-builder construction ────────────────────────────────────────
+
+describe('multi-builder construction', () => {
+  function createMultiBuilderBaseline() {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const economy = createEconomyState(
+      getSeparatorPositions(map.buildings),
+      getRawStorageCount(map.buildings),
+      getMatterStorageCount(map.buildings),
+      'cyan',
+    );
+    // Place second builder at the first builder's position offset by a few tiles
+    // to guarantee findAutoPlacement works from a different position
+    const firstBuilder = map.builders[0]!;
+    map.builders.push({ tx: firstBuilder.tx + 2, ty: firstBuilder.ty + 2, busy: false });
+    // Give plenty of matter for multiple constructions
+    economy.resources.matter = 500;
+    return { map, economy };
+  }
+
+  const HQ_FOOTPRINT = 3; // match the constant
+
+  it('uses second builder when first is busy', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    // Start first construction with builder 0
+    const result1 = startConstruction(map, economy, 'separator');
+    expect(result1.ok).toBe(true);
+    expect(map.builders[0]!.busy).toBe(true);
+    expect(map.builders[1]!.busy).toBe(false);
+    expect(map.constructionSites[0]!.builderIndex).toBe(0);
+
+    // Start second construction — should use builder 1
+    const result2 = startConstruction(map, economy, 'separator');
+    expect(result2.ok).toBe(true);
+    expect(map.builders[1]!.busy).toBe(true);
+    expect(map.constructionSites).toHaveLength(2);
+    expect(map.constructionSites[1]!.builderIndex).toBe(1);
+  });
+
+  it('returns busy only when all builders are busy', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    // Use both builders
+    startConstruction(map, economy, 'separator');
+    startConstruction(map, economy, 'separator');
+    expect(map.builders[0]!.busy).toBe(true);
+    expect(map.builders[1]!.busy).toBe(true);
+
+    // Third construction should fail with busy
+    const result = startConstruction(map, economy, 'raw-storage');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('busy');
+  });
+
+  it('two builders can run two construction sites in parallel', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    startConstruction(map, economy, 'separator');
+    startConstruction(map, economy, 'raw-storage');
+
+    expect(map.constructionSites).toHaveLength(2);
+    expect(map.builders[0]!.busy).toBe(true);
+    expect(map.builders[1]!.busy).toBe(true);
+
+    // Advance time but not enough to complete either
+    tickConstruction(map, 5);
+    expect(map.constructionSites).toHaveLength(2);
+    expect(map.builders[0]!.busy).toBe(true);
+    expect(map.builders[1]!.busy).toBe(true);
+  });
+
+  it('completing one construction frees only its assigned builder', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    // Start two constructions with different build times
+    startConstruction(map, economy, 'separator');    // 25s build time
+    startConstruction(map, economy, 'command-relay'); // 18s build time
+
+    expect(map.constructionSites[0]!.builderIndex).toBe(0);
+    expect(map.constructionSites[1]!.builderIndex).toBe(1);
+
+    // Complete only the command-relay (18s)
+    tickConstruction(map, 19);
+
+    // Command-relay site should be gone, separator still building
+    expect(map.constructionSites).toHaveLength(1);
+    expect(map.constructionSites[0]!.type).toBe('separator');
+
+    // Builder 1 (assigned to command-relay) should be free, builder 0 still busy
+    // Note: builderIndex assignments may vary, find the one assigned to the completed site
+    const busyBuilders = map.builders.filter((b) => b.busy);
+    const freeBuilders = map.builders.filter((b) => !b.busy);
+    expect(busyBuilders).toHaveLength(1); // only separator builder still busy
+    expect(freeBuilders).toHaveLength(1); // command-relay builder freed
+  });
+
+  it('all builders free when all sites complete', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    startConstruction(map, economy, 'separator');
+    startConstruction(map, economy, 'separator');
+
+    // Complete both (25s build time)
+    tickConstruction(map, 26);
+
+    expect(map.constructionSites).toHaveLength(0);
+    expect(map.builders[0]!.busy).toBe(false);
+    expect(map.builders[1]!.busy).toBe(false);
+  });
+
+  it('produced builder can be used for construction', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    // Simulate a produced builder added to the map — place near first builder
+    const firstBuilder = map.builders[0]!;
+    map.builders.push({ tx: firstBuilder.tx + 4, ty: firstBuilder.ty, busy: false });
+    expect(map.builders).toHaveLength(3);
+
+    // Use builders 0 and 1
+    startConstruction(map, economy, 'separator');
+    startConstruction(map, economy, 'separator');
+
+    // Builder 2 (produced) should be available
+    expect(map.builders[2]!.busy).toBe(false);
+
+    // Start third construction with produced builder
+    const result = startConstruction(map, economy, 'raw-storage');
+    expect(result.ok).toBe(true);
+    expect(map.builders[2]!.busy).toBe(true);
+    expect(map.constructionSites[2]!.builderIndex).toBe(2);
+  });
+
+  it('returns no-placement when no builders exist', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const economy = createEconomyState(
+      getSeparatorPositions(map.buildings),
+      getRawStorageCount(map.buildings),
+      getMatterStorageCount(map.buildings),
+      'cyan',
+    );
+    // Remove all builders
+    map.builders.length = 0;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-placement');
+  });
+
+  it('freed builder can start new construction immediately', () => {
+    const { map, economy } = createMultiBuilderBaseline();
+    // Builder 0 starts a separator
+    startConstruction(map, economy, 'separator');
+    expect(map.builders[0]!.busy).toBe(true);
+
+    // Complete it (25s build time)
+    tickConstruction(map, 26);
+    expect(map.builders[0]!.busy).toBe(false);
+
+    // Builder 0 can start another construction
+    const result = startConstruction(map, economy, 'raw-storage');
+    expect(result.ok).toBe(true);
+    expect(map.builders[0]!.busy).toBe(true);
   });
 });

@@ -293,6 +293,7 @@ export class GameWorld {
         ty: site.ty,
         type: site.type,
         progress: site.progress,
+        builderIndex: site.builderIndex,
       })),
       statusMessage: this.state.constructionStatusMessage,
     };
