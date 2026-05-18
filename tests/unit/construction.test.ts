@@ -277,4 +277,72 @@ describe('multi-builder construction', () => {
     expect(result.ok).toBe(true);
     expect(map.builders[0]!.busy).toBe(true);
   });
+
+  it('succeeds with second builder when first idle builder has no placement but second does', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const economy = createEconomyState(
+      getSeparatorPositions(map.buildings),
+      getRawStorageCount(map.buildings),
+      getMatterStorageCount(map.buildings),
+      'cyan',
+    );
+    economy.resources.matter = 500;
+    const firstBuilder = map.builders[0]!;
+    // Place second builder far away (beyond AUTO_BUILD_MAX_RADIUS of first)
+    // so blocking around first builder does NOT block around second builder
+    const secondBuilderTx = firstBuilder.tx + AUTO_BUILD_MAX_RADIUS * 2 + 5;
+    const secondBuilderTy = firstBuilder.ty;
+    map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
+
+    // Block all tiles within AUTO_BUILD_MAX_RADIUS of the first builder with decor
+    for (let ty = firstBuilder.ty - AUTO_BUILD_MAX_RADIUS; ty <= firstBuilder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
+      for (let tx = firstBuilder.tx - AUTO_BUILD_MAX_RADIUS; tx <= firstBuilder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (tx === firstBuilder.tx && ty === firstBuilder.ty) continue;
+        map.decor.push({ tx, ty, type: 'bush' });
+      }
+    }
+    // Second builder is far away and should have open tiles
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    // Should NOT be builder 0 (which has no placement), should be builder 1
+    expect(result.site!.builderIndex).toBe(1);
+    expect(map.builders[1]!.busy).toBe(true);
+    expect(map.builders[0]!.busy).toBe(false); // first builder stays idle
+  });
+
+  it('returns no-placement when idle builders exist but none can place', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const economy = createEconomyState(
+      getSeparatorPositions(map.buildings),
+      getRawStorageCount(map.buildings),
+      getMatterStorageCount(map.buildings),
+      'cyan',
+    );
+    economy.resources.matter = 500;
+    const firstBuilder = map.builders[0]!;
+    // Place second builder far away but block its area too
+    const secondBuilderTx = firstBuilder.tx + AUTO_BUILD_MAX_RADIUS * 2 + 5;
+    const secondBuilderTy = firstBuilder.ty;
+    map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
+
+    // Block all tiles around BOTH builders
+    for (const builder of map.builders) {
+      for (let ty = builder.ty - AUTO_BUILD_MAX_RADIUS; ty <= builder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
+        for (let tx = builder.tx - AUTO_BUILD_MAX_RADIUS; tx <= builder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
+          if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+          if (tx === builder.tx && ty === builder.ty) continue;
+          map.decor.push({ tx, ty, type: 'bush' });
+        }
+      }
+    }
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-placement');
+    // Both builders should remain idle (not assigned)
+    expect(map.builders[0]!.busy).toBe(false);
+    expect(map.builders[1]!.busy).toBe(false);
+  });
 });
