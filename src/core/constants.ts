@@ -37,12 +37,12 @@ export const SPRITE_PROFILES = {
   sand_bump_01: { size: [50, 28], groundOffset: -8 },
   builder_base: { size: [76, 76], groundOffset: 20 },
   harvester_base: { size: [82, 82], groundOffset: 16 },
-  building_separator: { size: [140, 140], groundOffset: 0 },
-  building_raw_storage: { size: [140, 140], groundOffset: 0 },
-  building_matter_storage: { size: [140, 140], groundOffset: 0 },
-  building_power_plant: { size: [140, 140], groundOffset: 0 },
-  building_command_relay: { size: [140, 140], groundOffset: 0 },
-  building_units_factory: { size: [140, 140], groundOffset: 0 },
+  building_separator: { size: [132, 132], groundOffset: 0 },
+  building_raw_storage: { size: [138, 138], groundOffset: 0 },
+  building_matter_storage: { size: [136, 136], groundOffset: 0 },
+  building_power_plant: { size: [124, 124], groundOffset: 0 },
+  building_command_relay: { size: [96, 96], groundOffset: 0 },
+  building_units_factory: { size: [142, 142], groundOffset: 0 },
 } as const;
 
 // Terrain rendering
