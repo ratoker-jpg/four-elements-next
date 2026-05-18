@@ -72,10 +72,10 @@ export const ASSET_MANIFEST: Record<string, string> = {
   rock_cluster_small_01: 'assets/environment/rock_cluster_small_01.png',
   dry_bush_01: 'assets/environment/dry_bush_01.png',
   sand_bump_01: 'assets/environment/sand_bump_01.png',
-  hq_cyan: 'assets/factions/cyan/buildings/hq_base.png',
-  hq_green: 'assets/factions/green/buildings/hq_base.png',
-  hq_yellow: 'assets/factions/yellow/buildings/hq_base.png',
-  hq_purple: 'assets/factions/purple/buildings/hq_base.png',
+  hq_cyan: 'assets/factions/cyan/buildings/hq_t1.png',
+  hq_green: 'assets/factions/green/buildings/hq_t1.png',
+  hq_yellow: 'assets/factions/yellow/buildings/hq_t1.png',
+  hq_purple: 'assets/factions/purple/buildings/hq_t1.png',
 };
 
 /** Prepend Vite's BASE_URL to a public-dir-relative path. Works locally and on GitHub Pages. */
