@@ -2,11 +2,12 @@
  * Contain-fit helper: compute draw dimensions that preserve a source image's
  * natural aspect ratio within a maximum bounding box.
  *
- * Used by building and environment render paths so that non-square PNG sprites
- * are not stretched to fill a square profile.size bounding box.
+ * Used by building, environment, and spritesheet render paths so that source
+ * content is not stretched to fill a non-square profile.size bounding box.
  *
- * Spritesheet frames (256×256 fixed cells) do NOT use this helper — they are
- * uniform source rectangles and must be drawn at profile.size exactly.
+ * Spritesheet frames pass FRAME_SIZE × FRAME_SIZE (256×256) as natural
+ * dimensions, ensuring the square source frame is contained properly even
+ * if profile.size becomes non-square.
  */
 
 export interface ContainFitResult {
