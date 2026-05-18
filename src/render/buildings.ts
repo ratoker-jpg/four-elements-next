@@ -38,11 +38,17 @@ const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
     yellow: 'building_yellow_separator',
     purple: 'building_purple_separator',
   },
-  storage: {
-    cyan: 'building_cyan_storage',
-    green: 'building_green_storage',
-    yellow: 'building_yellow_storage',
-    purple: 'building_purple_storage',
+  'raw-storage': {
+    cyan: 'building_cyan_raw_storage',
+    green: 'building_green_raw_storage',
+    yellow: 'building_yellow_raw_storage',
+    purple: 'building_purple_raw_storage',
+  },
+  'matter-storage': {
+    cyan: 'building_cyan_matter_storage',
+    green: 'building_green_matter_storage',
+    yellow: 'building_yellow_matter_storage',
+    purple: 'building_purple_matter_storage',
   },
   'power-plant': {
     cyan: 'building_cyan_power_plant',
@@ -67,7 +73,8 @@ const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
 /** Profile key for each building type. */
 const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> = {
   separator: 'building_separator',
-  storage: 'building_storage',
+  'raw-storage': 'building_raw_storage',
+  'matter-storage': 'building_matter_storage',
   'power-plant': 'building_power_plant',
   'command-relay': 'building_command_relay',
   'units-factory': 'building_units_factory',
@@ -358,7 +365,7 @@ export function renderSeparator(
   }
 }
 
-export function renderStorage(
+export function renderRawStorage(
   ctx: CanvasRenderingContext2D,
   tx: number,
   ty: number,
@@ -367,7 +374,7 @@ export function renderStorage(
   assets: AssetStore,
   faction: FactionId,
 ): void {
-  const footprint = getBuildingFootprint('storage');
+  const footprint = getBuildingFootprint('raw-storage');
   const center = getFootprintCenter(tx, ty, footprint);
   const scr = tileToScreen(center.tx, center.ty);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
@@ -376,10 +383,10 @@ export function renderStorage(
 
   // Try sprite rendering when feature flag is ON and asset exists
   if (FE_BUILDING_SPRITES_ENABLED) {
-    const assetKey = BUILDING_ASSET_KEYS['storage'][faction];
+    const assetKey = BUILDING_ASSET_KEYS['raw-storage'][faction];
     const sprite = assets.get(assetKey);
     if (sprite) {
-      const profileKey = BUILDING_PROFILE_KEYS['storage'];
+      const profileKey = BUILDING_PROFILE_KEYS['raw-storage'];
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
       // Overlay: OFF label
       if (!online) {
@@ -397,7 +404,57 @@ export function renderStorage(
   }
 
   // Fallback: exact existing isometric box geometry
-  drawIsoBox(ctx, cv.x, cv.y, z, '#6b5a3a', '#554828', '#8b7a50', boxHeight, 'STO', online, footprint);
+  drawIsoBox(ctx, cv.x, cv.y, z, '#6b5a3a', '#554828', '#8b7a50', boxHeight, 'RSR', online, footprint);
+
+  if (!online) {
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFF', cv.x, cv.y - boxHeight - 10 * z);
+  }
+}
+
+export function renderMatterStorage(
+  ctx: CanvasRenderingContext2D,
+  tx: number,
+  ty: number,
+  camera: Camera,
+  online: boolean,
+  assets: AssetStore,
+  faction: FactionId,
+): void {
+  const footprint = getBuildingFootprint('matter-storage');
+  const center = getFootprintCenter(tx, ty, footprint);
+  const scr = tileToScreen(center.tx, center.ty);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  const z = camera.zoom;
+  const boxHeight = 10 * z;
+
+  // Try sprite rendering when feature flag is ON and asset exists
+  if (FE_BUILDING_SPRITES_ENABLED) {
+    const assetKey = BUILDING_ASSET_KEYS['matter-storage'][faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const profileKey = BUILDING_PROFILE_KEYS['matter-storage'];
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      // Overlay: OFF label
+      if (!online) {
+        const profile = SPRITE_PROFILES[profileKey];
+        const baseY = cv.y + (TILE_H / 2) * footprint * z;
+        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
+        ctx.fillStyle = '#ff4444';
+        ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('OFF', cv.x, spriteTopY - 4 * z);
+      }
+      return;
+    }
+  }
+
+  // Fallback: exact existing isometric box geometry
+  drawIsoBox(ctx, cv.x, cv.y, z, '#5a6b3a', '#485528', '#7a8b50', boxHeight, 'MST', online, footprint);
 
   if (!online) {
     ctx.fillStyle = '#ff4444';

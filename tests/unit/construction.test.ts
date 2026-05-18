@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateMap } from '../../src/game/mapgen.js';
-import { createEconomyState, getSeparatorPositions, getStorageCount } from '../../src/systems/economy.js';
+import { createEconomyState, getSeparatorPositions, getRawStorageCount, getMatterStorageCount } from '../../src/systems/economy.js';
 import {
   AUTO_BUILD_MAX_RADIUS,
   buildOccupiedTileSet,
@@ -16,7 +16,8 @@ describe('construction system', () => {
     const map = generateMap(48, 48, 'cyan', 42);
     const economy = createEconomyState(
       getSeparatorPositions(map.buildings),
-      getStorageCount(map.buildings),
+      getRawStorageCount(map.buildings),
+      getMatterStorageCount(map.buildings),
       'cyan',
     );
     return { map, economy };
@@ -52,12 +53,12 @@ describe('construction system', () => {
     const { map, economy } = createBaseline();
     expect(startConstruction(map, economy, 'separator').ok).toBe(true);
 
-    const result = startConstruction(map, economy, 'storage');
+    const result = startConstruction(map, economy, 'raw-storage');
 
     expect(result).toEqual({
       ok: false,
       reason: 'busy',
-      buildingType: 'storage',
+      buildingType: 'raw-storage',
     });
     expect(map.constructionSites).toHaveLength(1);
   });

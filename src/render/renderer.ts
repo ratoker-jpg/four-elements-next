@@ -10,7 +10,8 @@ import type { ReadonlyPowerState } from '../systems/power.js';
 import {
   renderHq,
   renderSeparator,
-  renderStorage,
+  renderRawStorage,
+  renderMatterStorage,
   renderPowerPlant,
   renderCommandRelay,
   renderUnitsFactory,
@@ -71,10 +72,15 @@ export function render(
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
         render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online, assets, faction),
       });
-    } else if (b.type === 'storage') {
+    } else if (b.type === 'raw-storage') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
-        render: () => renderStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
+        render: () => renderRawStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
+      });
+    } else if (b.type === 'matter-storage') {
+      entities.push({
+        sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        render: () => renderMatterStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'power-plant') {
       entities.push({

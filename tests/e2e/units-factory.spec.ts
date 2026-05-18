@@ -39,23 +39,28 @@ test.describe('NEXT-06C1 units factory building', () => {
     await page.getByRole('button', { name: /Фабрика юнитов/ }).click();
 
     // Verify construction started
-    const started = await page.evaluate(() => {
-      return {
-        construction: (window as Record<string, unknown>).__constructionState as {
+    await expect.poll(async () => {
+      return page.evaluate(() => {
+        const construction = (window as Record<string, unknown>).__constructionState as {
           builderBusy: boolean;
           sites: Array<{ type: string; progress: number }>;
-        },
-        economy: (window as Record<string, unknown>).__economyState as {
+        };
+        const economy = (window as Record<string, unknown>).__economyState as {
           matter: number;
-        },
-      };
+        };
+        return {
+          builderBusy: construction.builderBusy,
+          siteCount: construction.sites.length,
+          siteType: construction.sites[0]?.type ?? '',
+          matter: economy.matter,
+        };
+      });
+    }).toEqual({
+      builderBusy: true,
+      siteCount: 1,
+      siteType: 'units-factory',
+      matter: 50, // 200 matter - 150 cost = 50 remaining
     });
-
-    expect(started.construction.builderBusy).toBe(true);
-    expect(started.construction.sites).toHaveLength(1);
-    expect(started.construction.sites[0]!.type).toBe('units-factory');
-    // 200 matter - 150 cost = 50 remaining
-    expect(started.economy.matter).toBe(50);
 
     // Advance time to complete construction (30 seconds build time)
     await page.evaluate(() => {

@@ -91,7 +91,7 @@ describe('runSystems', () => {
 
   it('handles large dt that completes construction', () => {
     const state = createState();
-    startConstruction(state.map, state.economy, 'storage');
+    startConstruction(state.map, state.economy, 'raw-storage');
 
     runSystems(state, 100);
 

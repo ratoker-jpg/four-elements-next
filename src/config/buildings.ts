@@ -18,12 +18,20 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
     shortCode: 'SEP',
     footprint: 2,
   },
-  storage: {
-    type: 'storage',
-    label: 'Склад',
+  'raw-storage': {
+    type: 'raw-storage',
+    label: 'Сырьевой склад',
     costMatter: 100,
     buildTimeSeconds: 20,
-    shortCode: 'STO',
+    shortCode: 'RSR',
+    footprint: 2,
+  },
+  'matter-storage': {
+    type: 'matter-storage',
+    label: 'Склад материи',
+    costMatter: 100,
+    buildTimeSeconds: 20,
+    shortCode: 'MST',
     footprint: 2,
   },
   'power-plant': {
@@ -54,7 +62,8 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
 
 export const BUILD_MENU_ORDER: BuildingType[] = [
   'separator',
-  'storage',
+  'raw-storage',
+  'matter-storage',
   'power-plant',
   'command-relay',
   'units-factory',

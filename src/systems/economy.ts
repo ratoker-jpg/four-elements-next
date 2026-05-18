@@ -42,10 +42,12 @@ export const HQ_RAW_CAP = 200;
 export const HQ_MATTER_CAP = 200;
 export const HQ_ELEMENT_CAP = 10;
 
-/** Capacity bonus per Storage building. */
-export const STORAGE_RAW_BONUS = 200;
-export const STORAGE_MATTER_BONUS = 200;
-export const STORAGE_ELEMENT_BONUS = 10;
+/** Capacity bonus per Raw Storage building. */
+export const RAW_STORAGE_RAW_BONUS = 200;
+
+/** Capacity bonus per Matter Storage building. */
+export const MATTER_STORAGE_MATTER_BONUS = 200;
+export const MATTER_STORAGE_ELEMENT_BONUS = 10;
 
 /** Starting resources. */
 export const START_RAW = 0;
@@ -74,12 +76,13 @@ function createStartingElements(faction: FactionId, elementCap: number): Faction
 /** Create initial EconomyState from building placements. */
 export function createEconomyState(
   separatorPositions: ReadonlyArray<{ readonly tx: number; readonly ty: number }>,
-  storageCount: number,
+  rawStorageCount: number,
+  matterStorageCount: number,
   faction: FactionId,
 ): EconomyState {
-  const rawCap = HQ_RAW_CAP + storageCount * STORAGE_RAW_BONUS;
-  const matterCap = HQ_MATTER_CAP + storageCount * STORAGE_MATTER_BONUS;
-  const elementCap = HQ_ELEMENT_CAP + storageCount * STORAGE_ELEMENT_BONUS;
+  const rawCap = HQ_RAW_CAP + rawStorageCount * RAW_STORAGE_RAW_BONUS;
+  const matterCap = HQ_MATTER_CAP + matterStorageCount * MATTER_STORAGE_MATTER_BONUS;
+  const elementCap = HQ_ELEMENT_CAP + matterStorageCount * MATTER_STORAGE_ELEMENT_BONUS;
 
   return {
     faction,
@@ -164,11 +167,14 @@ export function applyCompletedBuildingToEconomy(
     return;
   }
 
-  if (building.type === 'storage') {
-    state.resources.rawCap += STORAGE_RAW_BONUS;
-    state.resources.matterCap += STORAGE_MATTER_BONUS;
-    state.resources.elementCap += STORAGE_ELEMENT_BONUS;
+  if (building.type === 'raw-storage') {
+    state.resources.rawCap += RAW_STORAGE_RAW_BONUS;
     state.resources.raw = Math.min(state.resources.raw, state.resources.rawCap);
+  }
+
+  if (building.type === 'matter-storage') {
+    state.resources.matterCap += MATTER_STORAGE_MATTER_BONUS;
+    state.resources.elementCap += MATTER_STORAGE_ELEMENT_BONUS;
     state.resources.matter = Math.min(state.resources.matter, state.resources.matterCap);
     for (const faction of FACTION_IDS) {
       state.resources.elements[faction] = Math.min(
@@ -179,8 +185,12 @@ export function applyCompletedBuildingToEconomy(
   }
 }
 
-export function getStorageCount(buildings: ReadonlyArray<Pick<BuildingPlacement, 'type'>>): number {
-  return buildings.filter((building) => building.type === 'storage').length;
+export function getRawStorageCount(buildings: ReadonlyArray<Pick<BuildingPlacement, 'type'>>): number {
+  return buildings.filter((building) => building.type === 'raw-storage').length;
+}
+
+export function getMatterStorageCount(buildings: ReadonlyArray<Pick<BuildingPlacement, 'type'>>): number {
+  return buildings.filter((building) => building.type === 'matter-storage').length;
 }
 
 export function getSeparatorPositions(

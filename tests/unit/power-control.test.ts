@@ -22,7 +22,8 @@ describe('power constants', () => {
   it('building power values are correct', () => {
     expect(BUILDING_POWER.hq).toBe(0);
     expect(BUILDING_POWER.separator).toBe(-1);
-    expect(BUILDING_POWER.storage).toBe(0);
+    expect(BUILDING_POWER['raw-storage']).toBe(0);
+    expect(BUILDING_POWER['matter-storage']).toBe(0);
     expect(BUILDING_POWER['power-plant']).toBe(4);
     expect(BUILDING_POWER['command-relay']).toBe(-1);
     expect(BUILDING_POWER['units-factory']).toBe(-2);
@@ -34,7 +35,8 @@ describe('power constants', () => {
     expect(POWER_PRIORITY['command-relay']).toBe(70);
     expect(POWER_PRIORITY['units-factory']).toBe(60);
     expect(POWER_PRIORITY.separator).toBe(50);
-    expect(POWER_PRIORITY.storage).toBe(30);
+    expect(POWER_PRIORITY['raw-storage']).toBe(30);
+    expect(POWER_PRIORITY['matter-storage']).toBe(30);
   });
 });
 
@@ -44,7 +46,7 @@ describe('createPowerState', () => {
       { tx: 4, ty: 4 },
       [
         { tx: 7, ty: 4, type: 'separator' },
-        { tx: 7, ty: 5, type: 'storage' },
+        { tx: 7, ty: 5, type: 'raw-storage' },
         { tx: 5, ty: 7, type: 'power-plant' },
         { tx: 6, ty: 7, type: 'command-relay' },
       ],

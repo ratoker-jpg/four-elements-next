@@ -6,9 +6,9 @@ import {
   HQ_RAW_CAP,
   HQ_MATTER_CAP,
   HQ_ELEMENT_CAP,
-  STORAGE_RAW_BONUS,
-  STORAGE_MATTER_BONUS,
-  STORAGE_ELEMENT_BONUS,
+  RAW_STORAGE_RAW_BONUS,
+  MATTER_STORAGE_MATTER_BONUS,
+  MATTER_STORAGE_ELEMENT_BONUS,
   START_RAW,
   START_MATTER,
   START_ELEMENT,
@@ -26,10 +26,13 @@ describe('economy constants', () => {
     expect(HQ_ELEMENT_CAP).toBe(10);
   });
 
-  it('Storage bonuses are correct', () => {
-    expect(STORAGE_RAW_BONUS).toBe(200);
-    expect(STORAGE_MATTER_BONUS).toBe(200);
-    expect(STORAGE_ELEMENT_BONUS).toBe(10);
+  it('Raw Storage bonuses are correct', () => {
+    expect(RAW_STORAGE_RAW_BONUS).toBe(200);
+  });
+
+  it('Matter Storage bonuses are correct', () => {
+    expect(MATTER_STORAGE_MATTER_BONUS).toBe(200);
+    expect(MATTER_STORAGE_ELEMENT_BONUS).toBe(10);
   });
 
   it('starting resources are correct', () => {
@@ -48,26 +51,45 @@ describe('economy constants', () => {
 
 describe('createEconomyState', () => {
   it('creates state with HQ-only caps when no storages', () => {
-    const state = createEconomyState([{ tx: 7, ty: 4 }], 0, 'cyan');
+    const state = createEconomyState([{ tx: 7, ty: 4 }], 0, 0, 'cyan');
     expect(state.resources.rawCap).toBe(200);
     expect(state.resources.matterCap).toBe(200);
     expect(state.resources.elementCap).toBe(10);
   });
 
-  it('creates state with correct caps for storages', () => {
-    const one = createEconomyState([{ tx: 7, ty: 4 }], 1, 'cyan');
+  it('creates state with correct caps for raw-storage', () => {
+    const one = createEconomyState([{ tx: 7, ty: 4 }], 1, 0, 'cyan');
     expect(one.resources.rawCap).toBe(400);
+    expect(one.resources.matterCap).toBe(200);
+    expect(one.resources.elementCap).toBe(10);
+
+    const two = createEconomyState([{ tx: 7, ty: 4 }], 2, 0, 'cyan');
+    expect(two.resources.rawCap).toBe(600);
+    expect(two.resources.matterCap).toBe(200);
+    expect(two.resources.elementCap).toBe(10);
+  });
+
+  it('creates state with correct caps for matter-storage', () => {
+    const one = createEconomyState([{ tx: 7, ty: 4 }], 0, 1, 'cyan');
+    expect(one.resources.rawCap).toBe(200);
     expect(one.resources.matterCap).toBe(400);
     expect(one.resources.elementCap).toBe(20);
 
-    const two = createEconomyState([{ tx: 7, ty: 4 }], 2, 'cyan');
-    expect(two.resources.rawCap).toBe(600);
+    const two = createEconomyState([{ tx: 7, ty: 4 }], 0, 2, 'cyan');
+    expect(two.resources.rawCap).toBe(200);
     expect(two.resources.matterCap).toBe(600);
     expect(two.resources.elementCap).toBe(30);
   });
 
+  it('creates state with correct caps for mixed storage types', () => {
+    const state = createEconomyState([{ tx: 7, ty: 4 }], 1, 1, 'cyan');
+    expect(state.resources.rawCap).toBe(400);
+    expect(state.resources.matterCap).toBe(400);
+    expect(state.resources.elementCap).toBe(20);
+  });
+
   it('sets starting raw, matter and active faction element only', () => {
-    const state = createEconomyState([{ tx: 7, ty: 4 }], 1, 'green');
+    const state = createEconomyState([{ tx: 7, ty: 4 }], 1, 0, 'green');
     expect(state.faction).toBe('green');
     expect(state.resources.raw).toBe(0);
     expect(state.resources.matter).toBe(100);
@@ -76,7 +98,7 @@ describe('createEconomyState', () => {
   });
 
   it('creates separator states from positions', () => {
-    const state = createEconomyState([{ tx: 7, ty: 4 }, { tx: 10, ty: 5 }], 0, 'cyan');
+    const state = createEconomyState([{ tx: 7, ty: 4 }, { tx: 10, ty: 5 }], 0, 0, 'cyan');
     expect(state.separators).toHaveLength(2);
     expect(state.separators[0]!.tx).toBe(7);
     expect(state.separators[0]!.ty).toBe(4);
@@ -88,8 +110,8 @@ describe('createEconomyState', () => {
 });
 
 describe('tickEconomy', () => {
-  function createStateWithRaw(raw: number, storageCount = 1, faction: 'cyan' | 'green' | 'yellow' | 'purple' = 'cyan'): EconomyState {
-    const state = createEconomyState([{ tx: 7, ty: 4 }], storageCount, faction);
+  function createStateWithRaw(raw: number, rawStorageCount = 1, matterStorageCount = 0, faction: 'cyan' | 'green' | 'yellow' | 'purple' = 'cyan'): EconomyState {
+    const state = createEconomyState([{ tx: 7, ty: 4 }], rawStorageCount, matterStorageCount, faction);
     state.resources.raw = raw;
     return state;
   }
@@ -109,7 +131,7 @@ describe('tickEconomy', () => {
   });
 
   it('separator completes cycle after 6 seconds and adds active faction element', () => {
-    const state = createStateWithRaw(100, 1, 'purple');
+    const state = createStateWithRaw(100, 1, 0, 'purple');
     tickEconomy(state, 6);
 
     expect(state.resources.raw).toBe(100 - SEP_RAW_COST);
@@ -120,7 +142,7 @@ describe('tickEconomy', () => {
   });
 
   it('separator pauses when active faction element cap is reached', () => {
-    const state = createStateWithRaw(100, 1, 'yellow');
+    const state = createStateWithRaw(100, 1, 0, 'yellow');
     state.resources.elements.yellow = state.resources.elementCap;
     tickEconomy(state, 1);
     expect(state.separators[0]!.active).toBe(false);
@@ -150,7 +172,7 @@ describe('tickEconomy', () => {
   });
 
   it('multiple separators cannot overspend raw in the same tick', () => {
-    const state = createEconomyState([{ tx: 7, ty: 4 }, { tx: 10, ty: 5 }], 1, 'cyan');
+    const state = createEconomyState([{ tx: 7, ty: 4 }, { tx: 10, ty: 5 }], 1, 0, 'cyan');
     state.resources.raw = 15;
     tickEconomy(state, 6);
     expect(state.resources.raw).toBe(0);
@@ -185,7 +207,7 @@ describe('mapgen integration — buildings in MapData', () => {
     const { generateMap } = await import('../../src/game/mapgen.js');
     const map = generateMap(48, 48, 'cyan');
     expect(map.buildings.filter((b) => b.type === 'separator')).toHaveLength(1);
-    expect(map.buildings.filter((b) => b.type === 'storage')).toHaveLength(1);
+    expect(map.buildings.filter((b) => b.type === 'raw-storage')).toHaveLength(1);
     expect(map.buildings.filter((b) => b.type === 'power-plant')).toHaveLength(1);
     expect(map.buildings.filter((b) => b.type === 'command-relay')).toHaveLength(1);
     expect(map.buildings).toHaveLength(4);
@@ -197,7 +219,7 @@ describe('mapgen integration — buildings in MapData', () => {
     const { getBuildingFootprint } = await import('../../src/config/buildings.js');
     const map = generateMap(48, 48, 'cyan');
     const sep = map.buildings.find((b) => b.type === 'separator')!;
-    const sto = map.buildings.find((b) => b.type === 'storage')!;
+    const sto = map.buildings.find((b) => b.type === 'raw-storage')!;
     const pp = map.buildings.find((b) => b.type === 'power-plant')!;
     const cr = map.buildings.find((b) => b.type === 'command-relay')!;
 

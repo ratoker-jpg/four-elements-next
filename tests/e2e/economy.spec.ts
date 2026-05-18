@@ -26,8 +26,8 @@ test.describe('NEXT-03 economy baseline', () => {
     await navigateToGameScreen(page);
     const values = page.locator('.economy-hud__value');
     await expect(values.nth(0)).toHaveText('0/400');
-    await expect(values.nth(1)).toHaveText('100/400');
-    await expect(values.nth(2)).toHaveText('3/20');
+    await expect(values.nth(1)).toHaveText('100/200');
+    await expect(values.nth(2)).toHaveText('3/10');
   });
 
   test('economy HUD labels are in Russian and show active faction element', async ({ page }) => {
@@ -59,8 +59,8 @@ test.describe('NEXT-03 economy baseline', () => {
     expect(economyState!.elements).toEqual({ cyan: 3, green: 0, yellow: 0, purple: 0 });
     expect(economyState!.activeElement).toBe(3);
     expect(economyState!.rawCap).toBe(400);
-    expect(economyState!.matterCap).toBe(400);
-    expect(economyState!.elementCap).toBe(20);
+    expect(economyState!.matterCap).toBe(200);
+    expect(economyState!.elementCap).toBe(10);
   });
 
   test('green faction starts with green element only', async ({ page }) => {

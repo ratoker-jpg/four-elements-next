@@ -62,7 +62,7 @@ describe('applyCompletedBuildingToProduction', () => {
   it('does nothing for non-units-factory buildings', () => {
     const state = createProductionState();
     applyCompletedBuildingToProduction(state, { tx: 5, ty: 6, type: 'separator' });
-    applyCompletedBuildingToProduction(state, { tx: 5, ty: 6, type: 'storage' });
+    applyCompletedBuildingToProduction(state, { tx: 5, ty: 6, type: 'raw-storage' });
     applyCompletedBuildingToProduction(state, { tx: 5, ty: 6, type: 'power-plant' });
     expect(state.factories).toHaveLength(0);
   });
@@ -432,7 +432,7 @@ describe('tickProduction', () => {
         }
         if (tx < 0 || ty < 0 || tx >= state.map.width || ty >= state.map.height) continue;
         // Add a building to every adjacent tile
-        state.map.buildings.push({ tx, ty, type: 'storage' });
+        state.map.buildings.push({ tx, ty, type: 'raw-storage' });
       }
     }
 
@@ -451,7 +451,7 @@ describe('tickProduction', () => {
     const factoryTy = 10;
 
     // Block all adjacent tiles
-    const blockerBuildings: Array<{ tx: number; ty: number; type: 'storage' }> = [];
+    const blockerBuildings: Array<{ tx: number; ty: number; type: 'raw-storage' }> = [];
     const footprint = getBuildingFootprint('units-factory');
     for (let ty = factoryTy - 2; ty <= factoryTy + footprint + 1; ty++) {
       for (let tx = factoryTx - 2; tx <= factoryTx + footprint + 1; tx++) {
@@ -459,7 +459,7 @@ describe('tickProduction', () => {
           continue;
         }
         if (tx < 0 || ty < 0 || tx >= state.map.width || ty >= state.map.height) continue;
-        const b = { tx, ty, type: 'storage' as const };
+        const b = { tx, ty, type: 'raw-storage' as const };
         blockerBuildings.push(b);
         state.map.buildings.push(b);
       }
@@ -474,7 +474,7 @@ describe('tickProduction', () => {
     // Remove blockers
     for (const b of blockerBuildings) {
       const idx = state.map.buildings.findIndex(
-        (mb) => mb.tx === b.tx && mb.ty === b.ty && mb.type === 'storage',
+        (mb) => mb.tx === b.tx && mb.ty === b.ty && mb.type === 'raw-storage',
       );
       if (idx >= 0) state.map.buildings.splice(idx, 1);
     }
