@@ -10,6 +10,7 @@ import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
 import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimColumn } from './spritesheet.js';
 import { containFit } from './contain-fit.js';
+import { isDebugOverlayEnabled, drawBuildingDebugOverlay } from './debug-overlay.js';
 
 const HQ_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'hq_cyan',
@@ -292,6 +293,9 @@ export function renderHq(
     } else {
       ctx.drawImage(sprite, fullRect.x, fullRect.y, fullRect.w, fullRect.h);
     }
+    if (isDebugOverlayEnabled()) {
+      drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint: HQ_FOOTPRINT, isHq: true });
+    }
   } else {
     renderHqFallback(ctx, cv.x, cv.y, z);
   }
@@ -377,6 +381,7 @@ export function renderSeparator(
       const profileKey = BUILDING_PROFILE_KEYS['separator'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       const baseY = cv.y + (TILE_H / 2) * footprint * z;
       const spriteTopY = getVisibleSpriteTopY(sprite, profileKey, cv.x, baseY, z, meta);
       // Overlay: progress bar
@@ -473,6 +478,7 @@ export function renderRawStorage(
       const profileKey = BUILDING_PROFILE_KEYS['raw-storage'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       // Overlay: OFF label
       if (!online) {
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
@@ -523,6 +529,7 @@ export function renderMatterStorage(
       const profileKey = BUILDING_PROFILE_KEYS['matter-storage'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       // Overlay: OFF label
       if (!online) {
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
@@ -573,6 +580,7 @@ export function renderPowerPlant(
       const profileKey = BUILDING_PROFILE_KEYS['power-plant'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       // Overlay: lightning bolt when online
       if (online) {
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
@@ -635,6 +643,7 @@ export function renderCommandRelay(
       const profileKey = BUILDING_PROFILE_KEYS['command-relay'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       // Overlay: OFF label
       if (!online) {
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
@@ -697,6 +706,7 @@ export function renderUnitsFactory(
       const profileKey = BUILDING_PROFILE_KEYS['units-factory'];
       const meta = assets.getMeta(assetKey);
       drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint, meta);
+      if (isDebugOverlayEnabled()) { drawBuildingDebugOverlay(ctx, { assetKey, profileKey, sprite, meta, cx: cv.x, cy: cv.y, zoom: z, footprint }); }
       // Overlay: OFF label
       if (!online) {
         const baseY = cv.y + (TILE_H / 2) * footprint * z;
