@@ -1,8 +1,9 @@
 /** Harvesting system: harvester state machine, resource node runtime state, raw delivery. Pure logic, no DOM. */
 
-import type { ResourceType } from '../game/map-types.js';
+import type { ResourceType, MapData } from '../game/map-types.js';
 import type { GameState } from '../game/game-state.js';
 import { HQ_FOOTPRINT } from '../core/constants.js';
+import { getBuildingFootprint } from '../config/buildings.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -36,8 +37,9 @@ export type HarvesterPhase =
   | 'idle'
   | 'moving-to-resource'
   | 'gathering'
-  | 'moving-to-hq'
-  | 'delivering';
+  | 'moving-to-dropoff'
+  | 'delivering'
+  | 'waiting-full-storage';
 
 /** Runtime state for a single Harvester unit. */
 export interface HarvesterState {
@@ -52,6 +54,10 @@ export interface HarvesterState {
   gatherProgress: number;
   /** Amount of raw currently being carried. */
   carry: number;
+  /** Stored dropoff target X (tile-center). Computed once at gathering→moving-to-dropoff transition. */
+  targetDropoffTx: number;
+  /** Stored dropoff target Y (tile-center). Computed once at gathering→moving-to-dropoff transition. */
+  targetDropoffTy: number;
 }
 
 /** Runtime state for a resource node on the map. */
@@ -112,6 +118,8 @@ export function createInitialHarvesters(
       targetNodeIndex: -1,
       gatherProgress: 0,
       carry: 0,
+      targetDropoffTx: 0,
+      targetDropoffTy: 0,
     }];
   }
 
@@ -123,6 +131,8 @@ export function createInitialHarvesters(
     targetNodeIndex: -1,
     gatherProgress: 0,
     carry: 0,
+    targetDropoffTx: 0,
+    targetDropoffTy: 0,
   }];
 }
 
@@ -131,16 +141,18 @@ export function createInitialHarvesters(
 /**
  * Advance all harvesters by `dt` seconds.
  *
- * State machine: idle → moving-to-resource → gathering → moving-to-hq → delivering → idle
+ * State machine: idle → moving-to-resource → gathering → moving-to-dropoff → delivering → idle
+ *   delivering may transition to waiting-full-storage if raw cap is full.
+ *   waiting-full-storage transitions back to delivering when cap frees up.
+ *
  * - idle: find nearest non-depleted resource node
  * - moving-to-resource: move toward target node center
  * - gathering: wait for HARVESTER_GATHER_TIME, then extract raw from node
- * - moving-to-hq: move toward HQ center
- * - delivering: add carry to economy.resources.raw (clamped by rawCap), reset to idle
+ * - moving-to-dropoff: move toward nearest raw-storage center (fallback HQ)
+ * - delivering: deposit carry into economy.resources.raw (no raw loss)
+ * - waiting-full-storage: wait at dropoff until raw cap has free space
  */
 export function tickHarvesting(state: GameState, dt: number): void {
-  const hqCenterTx = state.map.hq.tx + HQ_FOOTPRINT / 2;
-  const hqCenterTy = state.map.hq.ty + HQ_FOOTPRINT / 2;
 
   for (const harvester of state.harvesters) {
     switch (harvester.phase) {
@@ -188,13 +200,17 @@ export function tickHarvesting(state: GameState, dt: number): void {
           }
           harvester.carry = extract;
           harvester.gatherProgress = 0;
-          harvester.phase = 'moving-to-hq';
+          // Compute and store dropoff target (nearest raw-storage, fallback HQ)
+          const dropoff = findNearestDropoff(harvester, state.map);
+          harvester.targetDropoffTx = dropoff.tx;
+          harvester.targetDropoffTy = dropoff.ty;
+          harvester.phase = 'moving-to-dropoff';
         }
         break;
       }
 
-      case 'moving-to-hq': {
-        if (moveToward(harvester, hqCenterTx, hqCenterTy, dt)) {
+      case 'moving-to-dropoff': {
+        if (moveToward(harvester, harvester.targetDropoffTx, harvester.targetDropoffTy, dt)) {
           harvester.phase = 'delivering';
         }
         break;
@@ -203,11 +219,27 @@ export function tickHarvesting(state: GameState, dt: number): void {
       case 'delivering': {
         if (harvester.carry > 0) {
           const r = state.economy.resources;
-          r.raw = Math.min(r.raw + harvester.carry, r.rawCap);
-          harvester.carry = 0;
+          const space = r.rawCap - r.raw;
+          const deposit = Math.min(harvester.carry, space);
+          r.raw += deposit;
+          harvester.carry -= deposit;
+          if (harvester.carry > 0) {
+            // Storage filled up during partial deposit — wait for space
+            harvester.phase = 'waiting-full-storage';
+            break;
+          }
         }
         harvester.phase = 'idle';
         harvester.targetNodeIndex = -1;
+        break;
+      }
+
+      case 'waiting-full-storage': {
+        const r = state.economy.resources;
+        if (r.raw < r.rawCap) {
+          // Space freed up — attempt delivery
+          harvester.phase = 'delivering';
+        }
         break;
       }
     }
@@ -215,6 +247,40 @@ export function tickHarvesting(state: GameState, dt: number): void {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Find the nearest valid dropoff target for a harvester carrying Raw.
+ * Prefers nearest completed raw-storage center; falls back to HQ center.
+ * Offline raw-storage still counts as valid physical storage.
+ * Construction sites are not valid dropoff targets.
+ */
+export function findNearestDropoff(
+  harvester: HarvesterState,
+  map: MapData,
+): { tx: number; ty: number } {
+  let bestDist = Infinity;
+  let bestCenter: { tx: number; ty: number } | null = null;
+
+  for (const building of map.buildings) {
+    if (building.type !== 'raw-storage') continue;
+    const footprint = getBuildingFootprint(building.type);
+    const centerTx = building.tx + footprint / 2;
+    const centerTy = building.ty + footprint / 2;
+    const dist = Math.hypot(centerTx - harvester.tx, centerTy - harvester.ty);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestCenter = { tx: centerTx, ty: centerTy };
+    }
+  }
+
+  if (bestCenter) return bestCenter;
+
+  // Fallback: HQ center
+  return {
+    tx: map.hq.tx + HQ_FOOTPRINT / 2,
+    ty: map.hq.ty + HQ_FOOTPRINT / 2,
+  };
+}
 
 /** Find the nearest non-depleted resource node. Returns -1 if none available. */
 function findNearestNode(

@@ -234,6 +234,8 @@ function trySpawnUnit(
       targetNodeIndex: -1,
       gatherProgress: 0,
       carry: 0,
+      targetDropoffTx: 0,
+      targetDropoffTy: 0,
     });
   }
 
