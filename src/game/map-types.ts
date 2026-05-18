@@ -35,7 +35,7 @@ export interface DecorPlacement {
 }
 
 /** Building types that have game logic (economy, production, etc.). */
-export type BuildingType = 'separator' | 'storage' | 'power-plant' | 'command-relay' | 'units-factory';
+export type BuildingType = 'separator' | 'raw-storage' | 'matter-storage' | 'power-plant' | 'command-relay' | 'units-factory';
 
 export interface BuildingPlacement {
   tx: number;

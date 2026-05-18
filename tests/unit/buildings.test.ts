@@ -9,7 +9,8 @@ describe('building definitions', () => {
   it('all building types have definitions', () => {
     const types: Array<keyof typeof BUILDING_DEFINITIONS> = [
       'separator',
-      'storage',
+      'raw-storage',
+      'matter-storage',
       'power-plant',
       'command-relay',
       'units-factory',
@@ -37,11 +38,12 @@ describe('building definitions', () => {
 
   it('BUILD_MENU_ORDER includes all building types', () => {
     expect(BUILD_MENU_ORDER).toContain('separator');
-    expect(BUILD_MENU_ORDER).toContain('storage');
+    expect(BUILD_MENU_ORDER).toContain('raw-storage');
+    expect(BUILD_MENU_ORDER).toContain('matter-storage');
     expect(BUILD_MENU_ORDER).toContain('power-plant');
     expect(BUILD_MENU_ORDER).toContain('command-relay');
     expect(BUILD_MENU_ORDER).toContain('units-factory');
-    expect(BUILD_MENU_ORDER).toHaveLength(5);
+    expect(BUILD_MENU_ORDER).toHaveLength(6);
   });
 
   it('units-factory is last in build menu order', () => {
@@ -50,7 +52,8 @@ describe('building definitions', () => {
 
   it('getBuildingFootprint returns 2 for all civil buildings', () => {
     expect(getBuildingFootprint('separator')).toBe(2);
-    expect(getBuildingFootprint('storage')).toBe(2);
+    expect(getBuildingFootprint('raw-storage')).toBe(2);
+    expect(getBuildingFootprint('matter-storage')).toBe(2);
     expect(getBuildingFootprint('power-plant')).toBe(2);
     expect(getBuildingFootprint('command-relay')).toBe(2);
     expect(getBuildingFootprint('units-factory')).toBe(2);

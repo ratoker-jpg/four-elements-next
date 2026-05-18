@@ -8,7 +8,8 @@ import type { BuildingType } from '../game/map-types.js';
 export const BUILDING_POWER: Record<BuildingType | 'hq', number> = {
   hq: 0,
   separator: -1,
-  storage: 0,
+  'raw-storage': 0,
+  'matter-storage': 0,
   'power-plant': 4,
   'command-relay': -1,
   'units-factory': -2,
@@ -21,7 +22,8 @@ export const POWER_PRIORITY: Record<BuildingType | 'hq', number> = {
   'command-relay': 70, // high — Control is important
   'units-factory': 60, // medium-high — production facility
   separator: 50,    // medium
-  storage: 30,      // passive — lowest
+  'raw-storage': 30,   // passive — lowest
+  'matter-storage': 30, // passive — lowest
 };
 
 // ── State types ──────────────────────────────────────────────────────
@@ -148,7 +150,7 @@ function recalculate(state: PowerState): void {
         b.online = false;
       }
     } else {
-      // Zero demand (e.g. storage) — always online if there's any supply
+      // Zero demand (e.g. raw-storage, matter-storage) — always online if there's any supply
       b.online = true;
     }
   }

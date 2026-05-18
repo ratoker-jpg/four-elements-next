@@ -174,6 +174,9 @@ export class GameWorld {
   }
 
   private debugSetMatter(value: number): void {
+    if (value > this.state.economy.resources.matterCap) {
+      this.state.economy.resources.matterCap = value;
+    }
     this.state.economy.resources.matter = Math.max(0, Math.min(value, this.state.economy.resources.matterCap));
     this.publishUiState();
   }

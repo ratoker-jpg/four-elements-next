@@ -6,7 +6,8 @@ import type { MapData, FactionId } from './map-types.js';
 import {
   createEconomyState,
   getSeparatorPositions,
-  getStorageCount,
+  getRawStorageCount,
+  getMatterStorageCount,
   type EconomyState,
 } from '../systems/economy.js';
 import {
@@ -87,8 +88,9 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
   const map = generateMap(size, size, resolvedFaction);
 
   const separatorPositions = getSeparatorPositions(map.buildings);
-  const storageCount = getStorageCount(map.buildings);
-  const economy = createEconomyState(separatorPositions, storageCount, resolvedFaction);
+  const rawStorageCount = getRawStorageCount(map.buildings);
+  const matterStorageCount = getMatterStorageCount(map.buildings);
+  const economy = createEconomyState(separatorPositions, rawStorageCount, matterStorageCount, resolvedFaction);
 
   const power = createPowerState(map.hq, map.buildings);
 

@@ -127,7 +127,7 @@ function placeBuildings(
 ): BuildingPlacement[] {
   const buildings: BuildingPlacement[] = [
     { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty, type: 'separator' },
-    { tx: hq.tx, ty: hq.ty + HQ_FOOTPRINT, type: 'storage' },
+    { tx: hq.tx, ty: hq.ty + HQ_FOOTPRINT, type: 'raw-storage' },
     { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty + HQ_FOOTPRINT, type: 'power-plant' },
     { tx: hq.tx, ty: hq.ty - getBuildingFootprint('command-relay'), type: 'command-relay' },
   ];
