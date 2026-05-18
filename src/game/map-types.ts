@@ -56,6 +56,8 @@ export interface ConstructionSitePlacement {
   elapsed: number;
   duration: number;
   progress: number;
+  /** Index into MapData.builders for the builder assigned to this site. */
+  builderIndex: number;
 }
 
 export interface MapData {

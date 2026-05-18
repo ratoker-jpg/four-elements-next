@@ -6,7 +6,7 @@ import type { BuildingType } from '../game/map-types.js';
 
 /** Power produced (>0) or consumed (<0) by each building type. HQ is always online. */
 export const BUILDING_POWER: Record<BuildingType | 'hq', number> = {
-  hq: 0,
+  hq: 2,
   separator: -1,
   'raw-storage': 0,
   'matter-storage': 0,
@@ -124,7 +124,6 @@ function recalculate(state: PowerState): void {
     if (b.type === 'hq' || power > 0) {
       b.online = true;
       if (power > 0) supply += power;
-      // HQ has 0 power value — neither supply nor demand
     }
   }
 

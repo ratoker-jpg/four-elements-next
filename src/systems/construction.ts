@@ -30,12 +30,21 @@ export function startConstruction(
   economy: EconomyState,
   buildingType: BuildingType,
 ): ConstructionCommandResult {
-  const builder = map.builders[0];
-  if (!builder) {
+  // No builders at all → no-placement
+  if (map.builders.length === 0) {
     return { ok: false, reason: 'no-placement', buildingType };
   }
 
-  if (builder.busy) {
+  // Collect idle (non-busy) builder indices
+  const idleIndices: number[] = [];
+  for (let i = 0; i < map.builders.length; i++) {
+    if (!map.builders[i]!.busy) {
+      idleIndices.push(i);
+    }
+  }
+
+  // All builders busy → busy
+  if (idleIndices.length === 0) {
     return { ok: false, reason: 'busy', buildingType };
   }
 
@@ -44,25 +53,31 @@ export function startConstruction(
     return { ok: false, reason: 'insufficient-matter', buildingType };
   }
 
-  const placement = findAutoPlacement(map, builder, buildingType);
-  if (!placement) {
-    return { ok: false, reason: 'no-placement', buildingType };
+  // Try each idle builder for auto-placement; use the first that succeeds
+  for (const builderIndex of idleIndices) {
+    const builder = map.builders[builderIndex]!;
+    const placement = findAutoPlacement(map, builder, buildingType);
+    if (placement) {
+      economy.resources.matter -= definition.costMatter;
+      builder.busy = true;
+
+      const site: ConstructionSitePlacement = {
+        tx: placement.tx,
+        ty: placement.ty,
+        type: buildingType,
+        elapsed: 0,
+        duration: definition.buildTimeSeconds,
+        progress: 0,
+        builderIndex,
+      };
+      map.constructionSites.push(site);
+
+      return { ok: true, buildingType, site };
+    }
   }
 
-  economy.resources.matter -= definition.costMatter;
-  builder.busy = true;
-
-  const site: ConstructionSitePlacement = {
-    tx: placement.tx,
-    ty: placement.ty,
-    type: buildingType,
-    elapsed: 0,
-    duration: definition.buildTimeSeconds,
-    progress: 0,
-  };
-  map.constructionSites.push(site);
-
-  return { ok: true, buildingType, site };
+  // Idle builders exist but none can place the building
+  return { ok: false, reason: 'no-placement', buildingType };
 }
 
 export function tickConstruction(map: MapData, dt: number): ConstructionTickResult {
@@ -82,13 +97,14 @@ export function tickConstruction(map: MapData, dt: number): ConstructionTickResu
     };
     map.buildings.push(building);
     completedBuildings.push(building);
-    map.constructionSites.splice(index, 1);
-  }
 
-  if (map.constructionSites.length === 0) {
-    for (const builder of map.builders) {
-      builder.busy = false;
+    // Free only the builder assigned to this completed site
+    const assignedBuilder = map.builders[site.builderIndex];
+    if (assignedBuilder) {
+      assignedBuilder.busy = false;
     }
+
+    map.constructionSites.splice(index, 1);
   }
 
   return { completedBuildings };

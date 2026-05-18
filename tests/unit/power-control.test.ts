@@ -20,7 +20,7 @@ import {
 
 describe('power constants', () => {
   it('building power values are correct', () => {
-    expect(BUILDING_POWER.hq).toBe(0);
+    expect(BUILDING_POWER.hq).toBe(2);
     expect(BUILDING_POWER.separator).toBe(-1);
     expect(BUILDING_POWER['raw-storage']).toBe(0);
     expect(BUILDING_POWER['matter-storage']).toBe(0);
@@ -52,9 +52,9 @@ describe('createPowerState', () => {
       ],
     );
     expect(state.buildings).toHaveLength(5); // HQ + 4 buildings
-    expect(state.totalSupply).toBe(4); // 1 power-plant × 4
+    expect(state.totalSupply).toBe(6); // HQ(2) + 1 power-plant(4)
     expect(state.totalDemand).toBe(2); // separator 1 + command-relay 1
-    expect(state.netPower).toBe(2); // 4 - 2
+    expect(state.netPower).toBe(4); // 6 - 2
   });
 
   it('HQ is always online', () => {
@@ -79,7 +79,9 @@ describe('createPowerState', () => {
 
 describe('tickPower — shedding', () => {
   it('sheds lowest priority first when power deficit', () => {
-    // 1 Power Plant (supply=4), 4 Separators (demand=4) + 1 Command Relay (demand=1) = total demand 5 > supply 4
+    // HQ (supply=2) + 1 Power Plant (supply=4) = total supply 6
+    // 4 Separators (demand=4) + 1 Command Relay (demand=1) = total demand 5
+    // With supply 6, all fit. Need more demand to trigger shedding.
     const state = createPowerState(
       { tx: 4, ty: 4 },
       [
@@ -87,18 +89,21 @@ describe('tickPower — shedding', () => {
         { tx: 8, ty: 4, type: 'separator' },
         { tx: 9, ty: 4, type: 'separator' },
         { tx: 10, ty: 4, type: 'separator' },
+        { tx: 11, ty: 4, type: 'separator' },
+        { tx: 12, ty: 4, type: 'separator' },
         { tx: 5, ty: 7, type: 'power-plant' },
         { tx: 6, ty: 7, type: 'command-relay' },
       ],
     );
     tickPower(state);
 
-    // Supply: 4. Priority order online: power-plant (immune), command-relay (70), separators (50)
-    // demand: relay=1, sep=1 each. Can afford relay+3 seps = 4 demand = 4 supply. 4th sep goes offline.
-    expect(state.totalSupply).toBe(4);
+    // Supply: HQ(2) + power-plant(4) = 6
+    // Priority order online: power-plant (immune), command-relay (70), separators (50)
+    // demand: relay=1, sep=1 each. Can afford relay+5 seps = 6 demand = 6 supply. 6th sep goes offline.
+    expect(state.totalSupply).toBe(6);
     const onlineSeparators = state.buildings.filter((b) => b.type === 'separator' && b.online);
     const offlineSeparators = state.buildings.filter((b) => b.type === 'separator' && !b.online);
-    expect(onlineSeparators.length + offlineSeparators.length).toBe(4);
+    expect(onlineSeparators.length + offlineSeparators.length).toBe(6);
     expect(offlineSeparators.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -223,8 +228,9 @@ describe('availableControl', () => {
 
 describe('power + control integration', () => {
   it('control decreases when Command Relay loses power', () => {
-    // Start with: 1 PP (supply=4), 1 CMD (demand=1), 3 SEP (demand=3)
-    // net = 0, all online. Control = 10 + 5 = 15
+    // Start with: HQ (supply=2) + 1 PP (supply=4) = total supply 6
+    // 1 CMD (demand=1), 3 SEP (demand=3) = total demand 4
+    // net = 2, all online. Control = 10 + 5 = 15
     const power = createPowerState(
       { tx: 4, ty: 4 },
       [
@@ -240,25 +246,29 @@ describe('power + control integration', () => {
     const control = createControlState(relayCount, relayOnline);
     expect(control.current).toBe(15); // HQ + 1 relay
 
-    // Add another separator to overload: demand exceeds supply
+    // Add more separators to overload: HQ(2) + PP(4) = 6 supply
+    // demand: relay(1) + 3 seps(3) + new seps = need to exceed 6
     power.buildings.push({ tx: 10, ty: 4, type: 'separator', online: true });
+    power.buildings.push({ tx: 11, ty: 4, type: 'separator', online: true });
+    power.buildings.push({ tx: 12, ty: 4, type: 'separator', online: true });
     tickPower(power);
-    // Now supply=4, demand: relay(1) + 4 seps(4) = 5 > 4
+    // Now supply=6, demand: relay(1) + 6 seps(6) = 7 > 6
     // Separator (priority 50) should shed before Command Relay (priority 70)
     const relayAfter = power.buildings.find((b) => b.type === 'command-relay')!;
     expect(relayAfter.online).toBe(true); // relay has higher priority than separators
 
-    // But if we add MORE demand that can't be covered even after shedding all separators:
-    // Let's remove the power plant and add lots of demand
+    // But if we remove the power plant: HQ(2) supply only
+    // Can't cover relay(1) + many separators
     power.buildings = power.buildings.filter((b) => b.type !== 'power-plant');
     // Add another command relay
-    power.buildings.push({ tx: 11, ty: 7, type: 'command-relay', online: true });
+    power.buildings.push({ tx: 13, ty: 7, type: 'command-relay', online: true });
     tickPower(power);
-    // No power plant = 0 supply. Everything except HQ goes offline.
+    // HQ(2) supply. relay(1) fits, but many separators also demand.
+    // Relays (priority 70) stay online before separators (priority 50)
     const relayOnlineAfter = power.buildings.filter((b) => b.type === 'command-relay' && b.online).length;
-    expect(relayOnlineAfter).toBe(0);
+    expect(relayOnlineAfter).toBe(2); // Both relays online with HQ(2) supply
 
     tickControl(control, relayOnlineAfter);
-    expect(control.current).toBe(10); // only HQ contribution
+    expect(control.current).toBe(20); // HQ(10) + 2 relays(10)
   });
 });
