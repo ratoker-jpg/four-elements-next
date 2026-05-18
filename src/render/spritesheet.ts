@@ -13,6 +13,8 @@
  *   0=idle, 1-4=move, 5-7=unload
  */
 
+import { containFit } from './contain-fit.js';
+
 /** Frame dimensions for 8×8 256 spritesheets. */
 const FRAME_SIZE = 256;
 
@@ -40,9 +42,16 @@ export function drawSpritesheetFrame(
 ): void {
   const sx = col * FRAME_SIZE;
   const sy = row * FRAME_SIZE;
-  const w = profile.size[0] * zoom;
-  const h = profile.size[1] * zoom;
+  const maxW = profile.size[0] * zoom;
+  const maxH = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
+  // Use source frame aspect ratio (FRAME_SIZE × FRAME_SIZE = square), not the
+  // full spritesheet's naturalWidth/naturalHeight (2048×2048).
+  // containFit preserves the square frame inside the profile.size bounding box,
+  // preventing stretch if profiles ever become non-square.
+  const { drawWidth: w, drawHeight: h } = containFit(
+    FRAME_SIZE, FRAME_SIZE, maxW, maxH,
+  );
 
   ctx.drawImage(
     sheet,
