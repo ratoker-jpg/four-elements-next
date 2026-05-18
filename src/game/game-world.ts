@@ -9,6 +9,7 @@ import type { GameState } from './game-state.js';
 import { createGameState } from './game-state.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
+import { toggleDebugOverlay } from '../render/debug-overlay.js';
 import {
   getFactionElement,
   type ReadonlyEconomyState,
@@ -358,7 +359,14 @@ export class GameWorld {
     return 'Не удалось найти место для строительства.';
   }
 
-  private onKeyDown(e: KeyboardEvent): void { this.keys.add(e.code); }
+  private onKeyDown(e: KeyboardEvent): void {
+    if (e.code === 'F3') {
+      e.preventDefault();
+      toggleDebugOverlay();
+      return;
+    }
+    this.keys.add(e.code);
+  }
   private onKeyUp(e: KeyboardEvent): void { this.keys.delete(e.code); }
 
   private onMouseDown(e: MouseEvent): void {
