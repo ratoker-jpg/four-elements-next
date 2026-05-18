@@ -73,7 +73,11 @@ const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> 
   'units-factory': 'building_units_factory',
 };
 
-/** Draw a building sprite centered on (cx, cy), dimmed when offline. Returns true if sprite was drawn. */
+/** Draw a building sprite anchored to the footprint's south vertex, dimmed when offline.
+ *  baseY = cy + (TILE_H/2) * footprint * zoom  (south vertex of isometric diamond)
+ *  groundOffset: positive = sprite moves up from baseY (floats), negative = moves down (sinks)
+ *  Sprite top = baseY - h - groundOffset * zoom
+ */
 function drawBuildingSprite(
   ctx: CanvasRenderingContext2D,
   sprite: HTMLImageElement,
@@ -82,15 +86,17 @@ function drawBuildingSprite(
   cy: number,
   zoom: number,
   online: boolean,
+  footprint: number,
 ): void {
   const profile = SPRITE_PROFILES[profileKey];
   const w = profile.size[0] * zoom;
   const h = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
+  const baseY = cy + (TILE_H / 2) * footprint * zoom;
   if (!online) {
     ctx.globalAlpha = 0.45;
   }
-  ctx.drawImage(sprite, cx - w / 2, cy - h / 2 - offY, w, h);
+  ctx.drawImage(sprite, cx - w / 2, baseY - h - offY, w, h);
   if (!online) {
     ctx.globalAlpha = 1;
   }
@@ -192,7 +198,8 @@ export function renderHq(
     const w = profile.size[0] * z;
     const h = profile.size[1] * z;
     const offY = profile.groundOffset * z;
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
+    const baseY = cv.y + (TILE_H / 2) * HQ_FOOTPRINT * z;
+    ctx.drawImage(sprite, cv.x - w / 2, baseY - h - offY, w, h);
   } else {
     renderHqFallback(ctx, cv.x, cv.y, z);
   }
@@ -276,14 +283,17 @@ export function renderSeparator(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['separator'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
+      // Compute sprite top for overlay positioning (footprint-based anchor)
+      const profile = SPRITE_PROFILES[profileKey];
+      const baseY = cv.y + (TILE_H / 2) * footprint * z;
+      const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
       // Overlay: progress bar
       if (online && progress > 0) {
-        const profile = SPRITE_PROFILES[profileKey];
         const barW = 28 * z;
         const barH = 4 * z;
         const barX = cv.x - barW / 2;
-        const barY = cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 2 * z;
+        const barY = spriteTopY - 2 * z;
 
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(barX, barY, barW, barH);
@@ -297,12 +307,11 @@ export function renderSeparator(
       }
       // Overlay: OFF label
       if (!online) {
-        const profile = SPRITE_PROFILES[profileKey];
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+        ctx.fillText('OFF', cv.x, spriteTopY - 4 * z);
       }
       return;
     }
@@ -371,15 +380,17 @@ export function renderStorage(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['storage'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
+        const baseY = cv.y + (TILE_H / 2) * footprint * z;
+        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+        ctx.fillText('OFF', cv.x, spriteTopY - 4 * z);
       }
       return;
     }
@@ -419,15 +430,17 @@ export function renderPowerPlant(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['power-plant'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
       // Overlay: lightning bolt when online
       if (online) {
         const profile = SPRITE_PROFILES[profileKey];
+        const baseY = cv.y + (TILE_H / 2) * footprint * z;
+        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
         ctx.fillStyle = '#ffff44';
         ctx.font = `bold ${9 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('\u26A1', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+        ctx.fillText('\u26A1', cv.x, spriteTopY - 4 * z);
       }
       return;
     }
@@ -479,15 +492,17 @@ export function renderCommandRelay(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['command-relay'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
+        const baseY = cv.y + (TILE_H / 2) * footprint * z;
+        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+        ctx.fillText('OFF', cv.x, spriteTopY - 4 * z);
       }
       return;
     }
@@ -539,15 +554,17 @@ export function renderUnitsFactory(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profileKey = BUILDING_PROFILE_KEYS['units-factory'];
-      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online);
+      drawBuildingSprite(ctx, sprite, profileKey, cv.x, cv.y, z, online, footprint);
       // Overlay: OFF label
       if (!online) {
         const profile = SPRITE_PROFILES[profileKey];
+        const baseY = cv.y + (TILE_H / 2) * footprint * z;
+        const spriteTopY = baseY - profile.size[1] * z - profile.groundOffset * z;
         ctx.fillStyle = '#ff4444';
         ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('OFF', cv.x, cv.y - profile.groundOffset * z - profile.size[1] * z * 0.5 - 4 * z);
+        ctx.fillText('OFF', cv.x, spriteTopY - 4 * z);
       }
       return;
     }
