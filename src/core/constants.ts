@@ -22,7 +22,7 @@ export const HQ_FOOTPRINT = 3; // 3×3 tiles (confirmed: matches sprite_profiles
 
 // Sprite rendering profiles (from Sandbox sprite_profiles.js, adapted)
 export const SPRITE_PROFILES = {
-  hq_base: { size: [172, 172], groundOffset: 36 },
+  hq_base: { size: [172, 172], groundOffset: 0 },
   mineral_small: { size: [42, 42], groundOffset: -12 },
   mineral_medium: { size: [58, 58], groundOffset: 0 },
   mineral_large: { size: [74, 74], groundOffset: 0 },
@@ -35,13 +35,13 @@ export const SPRITE_PROFILES = {
   rock_cluster_small_01: { size: [58, 46], groundOffset: 0 },
   dry_bush_01: { size: [34, 28], groundOffset: -12 },
   sand_bump_01: { size: [50, 28], groundOffset: -8 },
-  builder_base: { size: [256, 256], groundOffset: 20 },
-  harvester_base: { size: [256, 256], groundOffset: 16 },
-  building_separator: { size: [140, 140], groundOffset: 24 },
-  building_storage: { size: [140, 140], groundOffset: 24 },
-  building_power_plant: { size: [140, 140], groundOffset: 24 },
-  building_command_relay: { size: [140, 140], groundOffset: 24 },
-  building_units_factory: { size: [140, 140], groundOffset: 24 },
+  builder_base: { size: [76, 76], groundOffset: 20 },
+  harvester_base: { size: [82, 82], groundOffset: 16 },
+  building_separator: { size: [140, 140], groundOffset: 0 },
+  building_storage: { size: [140, 140], groundOffset: 0 },
+  building_power_plant: { size: [140, 140], groundOffset: 0 },
+  building_command_relay: { size: [140, 140], groundOffset: 0 },
+  building_units_factory: { size: [140, 140], groundOffset: 0 },
 } as const;
 
 // Terrain rendering
