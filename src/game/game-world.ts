@@ -10,6 +10,7 @@ import { createGameState } from './game-state.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
 import { toggleDebugOverlay } from '../render/debug-overlay.js';
+import { installAssetPreviewKey } from '../dev/asset-preview.js';
 import {
   getFactionElement,
   type ReadonlyEconomyState,
@@ -116,6 +117,7 @@ export class GameWorld {
     this.lastTime = performance.now();
     this.publishUiState();
     this.publishTestHooks();
+    installAssetPreviewKey();
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
