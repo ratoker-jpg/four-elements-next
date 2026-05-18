@@ -6,6 +6,7 @@ import type { ResourcePlacement, DecorPlacement, ResourceType } from '../game/ma
 import { RESOURCE_ASSET_KEYS, DECOR_ASSET_KEYS } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
+import { containFit } from './contain-fit.js';
 
 /** Render a resource node with sprite or geometric fallback. */
 export function renderResourceNode(
@@ -22,9 +23,12 @@ export function renderResourceNode(
   const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
 
   if (sprite && profile) {
-    const w = profile.size[0] * z;
-    const h = profile.size[1] * z;
+    const maxW = profile.size[0] * z;
+    const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
+    const { drawWidth: w, drawHeight: h } = containFit(
+      sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
+    );
     ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
   } else {
     renderResourceFallback(ctx, node.type, cv.x, cv.y, z);
@@ -46,9 +50,12 @@ export function renderDecor(
   const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
 
   if (sprite && profile) {
-    const w = profile.size[0] * z;
-    const h = profile.size[1] * z;
+    const maxW = profile.size[0] * z;
+    const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
+    const { drawWidth: w, drawHeight: h } = containFit(
+      sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
+    );
     ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
   } else {
     renderDecorFallback(ctx, cv.x, cv.y, z);
