@@ -3,11 +3,14 @@ import { generateMap } from '../../src/game/mapgen.js';
 import {
   HQ_FOOTPRINT,
   MAP_SIZE_STANDARD,
+  MAP_SIZE_LARGE,
   SPRITE_PROFILES,
   START_CORE_RADIUS,
   START_ECONOMY_RADIUS,
+  EDGE_BIOME_DEPTH,
 } from '../../src/core/constants.js';
 import { OBSTACLE_FOOTPRINTS, RESOURCE_FOOTPRINTS } from '../../src/game/map-types.js';
+import { isStraightLineClearOfObstacles } from '../../src/game/map-validation.js';
 
 describe('mapgen', () => {
   it('returns correct dimensions', () => {
@@ -89,6 +92,18 @@ describe('mapgen', () => {
       expect(a.resources[i]!.ty).toBe(b.resources[i]!.ty);
       expect(a.resources[i]!.type).toBe(b.resources[i]!.type);
       expect(a.resources[i]!.footprint).toBe(b.resources[i]!.footprint);
+    }
+  });
+
+  it('is deterministic with same seed for large map', () => {
+    const a = generateMap(64, 64, 'cyan', 42);
+    const b = generateMap(64, 64, 'cyan', 42);
+    expect(a.obstacles.length).toBe(b.obstacles.length);
+    expect(a.decor.length).toBe(b.decor.length);
+    for (let i = 0; i < a.obstacles.length; i++) {
+      expect(a.obstacles[i]!.tx).toBe(b.obstacles[i]!.tx);
+      expect(a.obstacles[i]!.ty).toBe(b.obstacles[i]!.ty);
+      expect(a.obstacles[i]!.type).toBe(b.obstacles[i]!.type);
     }
   });
 
@@ -436,6 +451,191 @@ describe('mapgen', () => {
     expect(map.obstacles.length).toBeGreaterThanOrEqual(1);
   });
 
+  // ── Stage C: Edge obstacle biome tests ─────────────────────────────────
+
+  it('standard map has edge obstacles near map borders', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const isInEdgeBand = (tx: number, ty: number, footprint: number) => {
+      // Check if any footprint tile is in the edge band
+      for (let dy = 0; dy < footprint; dy++) {
+        for (let dx = 0; dx < footprint; dx++) {
+          const x = tx + dx;
+          const y = ty + dy;
+          if (x < EDGE_BIOME_DEPTH || x >= map.width - EDGE_BIOME_DEPTH ||
+              y < EDGE_BIOME_DEPTH || y >= map.height - EDGE_BIOME_DEPTH) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    const edgeObstacles = map.obstacles.filter((o) => isInEdgeBand(o.tx, o.ty, o.footprint));
+    // With 8 edge clusters, there should be at least a few edge obstacles
+    expect(edgeObstacles.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('large map has more edge obstacles than standard', () => {
+    const std = generateMap(48, 48, 'cyan', 42);
+    const large = generateMap(64, 64, 'cyan', 42);
+    const isInEdgeBand = (tx: number, ty: number, footprint: number, w: number, h: number) => {
+      for (let dy = 0; dy < footprint; dy++) {
+        for (let dx = 0; dx < footprint; dx++) {
+          const x = tx + dx;
+          const y = ty + dy;
+          if (x < EDGE_BIOME_DEPTH || x >= w - EDGE_BIOME_DEPTH ||
+              y < EDGE_BIOME_DEPTH || y >= h - EDGE_BIOME_DEPTH) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    const stdEdge = std.obstacles.filter((o) => isInEdgeBand(o.tx, o.ty, o.footprint, std.width, std.height));
+    const largeEdge = large.obstacles.filter((o) => isInEdgeBand(o.tx, o.ty, o.footprint, large.width, large.height));
+    expect(largeEdge.length).toBeGreaterThanOrEqual(stdEdge.length);
+  });
+
+  it('standard map has zero mountain-large obstacles', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+    expect(mountainLarge.length).toBe(0);
+  });
+
+  it('standard map has zero volcano-medium obstacles', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
+    expect(volcanoMedium.length).toBe(0);
+  });
+
+  it('large map has at most 2 mountain-large obstacles', () => {
+    const map = generateMap(64, 64, 'cyan');
+    const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+    expect(mountainLarge.length).toBeLessThanOrEqual(2);
+  });
+
+  it('large map has at most 2 volcano-medium obstacles', () => {
+    const map = generateMap(64, 64, 'cyan');
+    const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
+    expect(volcanoMedium.length).toBeLessThanOrEqual(2);
+  });
+
+  it('no volcano-large obstacles exist on any map', () => {
+    const std = generateMap(48, 48, 'cyan');
+    const large = generateMap(64, 64, 'cyan');
+    // volcano-large is not even an ObstacleType, but verify it doesn't appear
+    const allObstacles = [...std.obstacles, ...large.obstacles];
+    const volcanoLarge = allObstacles.filter((o) => o.type === 'volcano-large');
+    expect(volcanoLarge.length).toBe(0);
+  });
+
+  it('edge obstacles do not overlap resources or HQ', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const hqTiles = new Set<string>();
+    for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+      for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+        hqTiles.add(`${map.hq.tx + dx},${map.hq.ty + dy}`);
+      }
+    }
+    const resourceTiles = new Set<string>();
+    for (const r of map.resources) {
+      for (let dy = 0; dy < r.footprint; dy++) {
+        for (let dx = 0; dx < r.footprint; dx++) {
+          resourceTiles.add(`${r.tx + dx},${r.ty + dy}`);
+        }
+      }
+    }
+    const isInEdgeBand = (tx: number, ty: number, footprint: number) => {
+      for (let dy = 0; dy < footprint; dy++) {
+        for (let dx = 0; dx < footprint; dx++) {
+          const x = tx + dx;
+          const y = ty + dy;
+          if (x < EDGE_BIOME_DEPTH || x >= map.width - EDGE_BIOME_DEPTH ||
+              y < EDGE_BIOME_DEPTH || y >= map.height - EDGE_BIOME_DEPTH) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    for (const o of map.obstacles) {
+      if (!isInEdgeBand(o.tx, o.ty, o.footprint)) continue;
+      for (let dy = 0; dy < o.footprint; dy++) {
+        for (let dx = 0; dx < o.footprint; dx++) {
+          expect(hqTiles.has(`${o.tx + dx},${o.ty + dy}`)).toBe(false);
+          expect(resourceTiles.has(`${o.tx + dx},${o.ty + dy}`)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('starter resources remain reachable via straight line from HQ', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const hqCx = Math.floor(map.hq.tx + HQ_FOOTPRINT / 2);
+    const hqCy = Math.floor(map.hq.ty + HQ_FOOTPRINT / 2);
+    const starterResources = map.resources.filter(
+      (r) => r.type === 'small' || r.type === 'medium',
+    );
+    // At least one starter resource must be reachable
+    let reachable = 0;
+    for (const r of starterResources) {
+      if (isStraightLineClearOfObstacles(map.obstacles, hqCx, hqCy, r.tx, r.ty, map.width, map.height)) {
+        reachable++;
+      }
+    }
+    expect(reachable).toBeGreaterThan(0);
+  });
+
+  it('HQ to center remains clear of obstacles', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const hqCx = Math.floor(map.hq.tx + HQ_FOOTPRINT / 2);
+    const hqCy = Math.floor(map.hq.ty + HQ_FOOTPRINT / 2);
+    const centerX = Math.floor(map.width / 2);
+    const centerY = Math.floor(map.height / 2);
+    expect(isStraightLineClearOfObstacles(map.obstacles, hqCx, hqCy, centerX, centerY, map.width, map.height)).toBe(true);
+  });
+
+  it('standard map obstacle type limits are robust across multiple seeds', () => {
+    const seeds = [1, 7, 42, 100, 200, 300, 500, 777, 999, 1234];
+    for (const seed of seeds) {
+      const map = generateMap(48, 48, 'cyan', seed);
+      const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+      const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
+      expect(mountainLarge.length).toBe(0);
+      expect(volcanoMedium.length).toBe(0);
+    }
+  });
+
+  it('large map obstacle type limits are robust across multiple seeds', () => {
+    const seeds = [1, 7, 42, 100, 200, 300, 500, 777, 999, 1234];
+    for (const seed of seeds) {
+      const map = generateMap(64, 64, 'cyan', seed);
+      const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+      const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
+      expect(mountainLarge.length).toBeLessThanOrEqual(2);
+      expect(volcanoMedium.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  // ── Minimal Stage D: Decor variation tests ─────────────────────────────
+
+  it('decor has more items than the original minimum baseline', () => {
+    const map = generateMap(48, 48, 'cyan');
+    // Original: bush=12, sand-bump=14 = 26 total minimum
+    // Stage D: bush=24 (18+6), sand-bump=30 (22+8) = 54 target
+    // At least 30 total decor items should be placed
+    expect(map.decor.length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('decor includes edge-biased items near map borders', () => {
+    const map = generateMap(48, 48, 'cyan');
+    const edgeDecor = map.decor.filter((d) =>
+      d.tx < EDGE_BIOME_DEPTH || d.tx >= map.width - EDGE_BIOME_DEPTH ||
+      d.ty < EDGE_BIOME_DEPTH || d.ty >= map.height - EDGE_BIOME_DEPTH,
+    );
+    // With 14 edge-biased decor targets, at least a few should be in the edge band
+    expect(edgeDecor.length).toBeGreaterThanOrEqual(3);
+  });
+
   // ── Large map ─────────────────────────────────────────────────────────
 
   it('generates correct dimensions for large map', () => {
@@ -480,5 +680,22 @@ describe('mapgen', () => {
       (r) => (r.type === 'medium' || r.type === 'large') && Math.hypot(r.tx - hqCx, r.ty - hqCy) > 8,
     );
     expect(midResources.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ── Profile metadata stability ────────────────────────────────────────
+
+  it('mineral_infinite profile remains [170, 170] / groundOffset 3', () => {
+    const profile = SPRITE_PROFILES.mineral_infinite;
+    expect(profile.size).toEqual([170, 170]);
+    expect(profile.groundOffset).toBe(3);
+  });
+
+  it('all sprite profiles have valid size and groundOffset', () => {
+    for (const [key, profile] of Object.entries(SPRITE_PROFILES)) {
+      expect(profile.size.length).toBe(2);
+      expect(profile.size[0]).toBeGreaterThan(0);
+      expect(profile.size[1]).toBeGreaterThan(0);
+      expect(typeof profile.groundOffset).toBe('number');
+    }
   });
 });

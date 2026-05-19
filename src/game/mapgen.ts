@@ -3,6 +3,7 @@
 import {
   HQ_FOOTPRINT,
   MAP_SIZE_STANDARD,
+  MAP_SIZE_LARGE,
   START_CORE_RADIUS,
   START_ECONOMY_RADIUS,
   START_TRANSITION_RADIUS,
@@ -16,6 +17,12 @@ import {
   CENTER_FIELD_LARGE_COUNT,
   CENTER_FIELD_MEDIUM_COUNT,
   CENTER_INFINITE_OFFSET_MAX,
+  EDGE_BIOME_DEPTH,
+  EDGE_CLUSTER_COUNT_STANDARD,
+  EDGE_CLUSTER_COUNT_LARGE,
+  EDGE_CLUSTER_SUPPORT_MIN,
+  EDGE_CLUSTER_SUPPORT_MAX,
+  EDGE_CENTER_EXCLUSION_RADIUS,
 } from '../core/constants.js';
 import type {
   MapData,
@@ -64,10 +71,20 @@ export function generateMap(
     // Place resources by distance zones
     const resources = placeResources(width, height, hq, rand, occupied);
 
-    // Place obstacle clusters away from start zone
-    const obstaclesResult = placeObstacles(width, height, hq, rand, occupied);
+    // Stage C: Place edge obstacle biome before interior obstacles
+    const edgeResult = placeEdgeObstacleBiome(width, height, hq, rand, occupied, resources);
 
-    // Place non-blocking decor
+    // Place interior obstacle clusters away from start zone
+    const obstaclesResult = placeObstacles(
+      width, height, hq, rand, occupied,
+      edgeResult.mountainLargeCount, edgeResult.volcanoMediumCount,
+    );
+
+    // Combine edge + interior obstacles
+    const allObstacles = [...edgeResult.obstacles, ...obstaclesResult.obstacles];
+    const totalRejected = edgeResult.rejectedClusters + obstaclesResult.rejectedClusters;
+
+    // Place non-blocking decor (minimal Stage D: increased counts + edge bias)
     const decor = placeDecor(width, height, hq, rand, occupied);
 
     const map: MapData = {
@@ -76,7 +93,7 @@ export function generateMap(
       terrain,
       hq,
       resources,
-      obstacles: obstaclesResult.obstacles,
+      obstacles: allObstacles,
       decor,
       buildings: [],
       builders,
@@ -84,7 +101,7 @@ export function generateMap(
     };
 
     // Validate the generated map
-    const report = validateMap(map, currentSeed, obstaclesResult.rejectedClusters);
+    const report = validateMap(map, currentSeed, totalRejected);
     if (report.ok) {
       return map;
     }
@@ -451,7 +468,179 @@ function placeInZone(
   }
 }
 
-// ── Obstacle placement (Stage C: clustered obstacles) ────────────────
+// ── Stage C: Edge obstacle biome ─────────────────────────────────────
+
+interface EdgeBiomeResult {
+  obstacles: ObstaclePlacement[];
+  rejectedClusters: number;
+  mountainLargeCount: number;
+  volcanoMediumCount: number;
+}
+
+/** Place obstacle clusters in the edge/border band of the map.
+ *  Creates natural terrain boundaries so map edges don't feel empty.
+ *  Respects per-map-size obstacle type limits. */
+function placeEdgeObstacleBiome(
+  w: number,
+  h: number,
+  hq: MapData['hq'],
+  rand: () => number,
+  occupied: Set<string>,
+  resources: MapData['resources'],
+): EdgeBiomeResult {
+  const obstacles: ObstaclePlacement[] = [];
+  let rejectedClusters = 0;
+  const hqCx = hq.tx + HQ_FOOTPRINT / 2;
+  const hqCy = hq.ty + HQ_FOOTPRINT / 2;
+  const centerX = Math.floor(w / 2);
+  const centerY = Math.floor(h / 2);
+
+  const isLargeMap = w >= MAP_SIZE_LARGE;
+  const clusterCount = isLargeMap ? EDGE_CLUSTER_COUNT_LARGE : EDGE_CLUSTER_COUNT_STANDARD;
+
+  // Track rare obstacle types for limit enforcement
+  let mountainLargeCount = 0;
+  let volcanoMediumCount = 0;
+  const mountainLargeLimit = isLargeMap ? 2 : 0;
+  const volcanoMediumLimit = isLargeMap ? 2 : 0;
+
+  // Collect starter resources for reachability checks
+  const starterResources = resources.filter(
+    (r) => r.type === 'small' || r.type === 'medium',
+  );
+
+  /** Check if a point is inside the edge band. */
+  const isInEdgeBand = (x: number, y: number): boolean =>
+    x < EDGE_BIOME_DEPTH || x >= w - EDGE_BIOME_DEPTH ||
+    y < EDGE_BIOME_DEPTH || y >= h - EDGE_BIOME_DEPTH;
+
+  for (let c = 0; c < clusterCount; c++) {
+    // Pick cluster center inside the edge band, away from start zone and center
+    let cx: number, cy: number;
+    let clusterAttempts = 0;
+    do {
+      cx = Math.floor(rand() * w);
+      cy = Math.floor(rand() * h);
+      clusterAttempts++;
+    } while (
+      clusterAttempts < 80 &&
+      (!isInEdgeBand(cx, cy) ||
+       Math.hypot(cx - hqCx, cy - hqCy) < START_TRANSITION_RADIUS ||
+       Math.hypot(cx - centerX, cy - centerY) < EDGE_CENTER_EXCLUSION_RADIUS)
+    );
+
+    if (clusterAttempts >= 80) {
+      rejectedClusters++;
+      continue;
+    }
+
+    // Choose main obstacle type for edge biome
+    const mainType = getEdgeMainObstacleType(
+      isLargeMap, rand, mountainLargeCount, mountainLargeLimit, volcanoMediumCount, volcanoMediumLimit,
+    );
+    const mainFootprint = OBSTACLE_FOOTPRINTS[mainType];
+    const mainResult = tryPlaceObstacle(cx, cy, mainType, mainFootprint, w, h, occupied);
+    if (!mainResult) {
+      rejectedClusters++;
+      continue;
+    }
+
+    const beforeCount = obstacles.length;
+    obstacles.push(mainResult);
+    if (mainType === 'mountain-large') mountainLargeCount++;
+    if (mainType === 'volcano-medium') volcanoMediumCount++;
+
+    // Place support obstacles around the main one
+    const supportCount = EDGE_CLUSTER_SUPPORT_MIN
+      + Math.floor(rand() * (EDGE_CLUSTER_SUPPORT_MAX - EDGE_CLUSTER_SUPPORT_MIN + 1));
+    let supportsPlaced = 0;
+    for (let s = 0; s < supportCount * 3 && supportsPlaced < supportCount; s++) {
+      const offsetRange = mainFootprint + 2;
+      const sx = cx + Math.floor(rand() * offsetRange * 2 - offsetRange);
+      const sy = cy + Math.floor(rand() * offsetRange * 2 - offsetRange);
+      const supportType = getEdgeSupportObstacleType(rand);
+      const supportFootprint = OBSTACLE_FOOTPRINTS[supportType];
+      const supportResult = tryPlaceObstacle(sx, sy, supportType, supportFootprint, w, h, occupied);
+      if (supportResult) {
+        obstacles.push(supportResult);
+        supportsPlaced++;
+      }
+    }
+
+    // Validate: cluster must not block HQ→center straight line
+    const hqToCenter = isStraightLineClearOfObstacles(
+      obstacles, Math.floor(hqCx), Math.floor(hqCy), centerX, centerY, w, h,
+    );
+
+    // Validate: cluster must not block HQ→starter resources straight-line access
+    let starterBlocked = false;
+    if (hqToCenter) {
+      for (const r of starterResources) {
+        if (!isStraightLineClearOfObstacles(
+          obstacles, Math.floor(hqCx), Math.floor(hqCy), r.tx, r.ty, w, h,
+        )) {
+          starterBlocked = true;
+          break;
+        }
+      }
+    }
+
+    if (!hqToCenter || starterBlocked) {
+      // Reject entire cluster — undo all placements since beforeCount
+      while (obstacles.length > beforeCount) {
+        const obs = obstacles.pop()!;
+        for (let dy = 0; dy < obs.footprint; dy++) {
+          for (let dx = 0; dx < obs.footprint; dx++) {
+            occupied.delete(`${obs.tx + dx},${obs.ty + dy}`);
+          }
+        }
+        if (obs.type === 'mountain-large') mountainLargeCount--;
+        if (obs.type === 'volcano-medium') volcanoMediumCount--;
+      }
+      rejectedClusters++;
+    }
+  }
+
+  return { obstacles, rejectedClusters, mountainLargeCount, volcanoMediumCount };
+}
+
+/** Select main obstacle type for edge biome clusters.
+ *  Respects per-map-size limits on mountain-large and volcano-medium. */
+function getEdgeMainObstacleType(
+  isLargeMap: boolean,
+  rand: () => number,
+  mountainLargeCount: number,
+  mountainLargeLimit: number,
+  volcanoMediumCount: number,
+  volcanoMediumLimit: number,
+): ObstacleType {
+  const r = rand();
+  if (isLargeMap) {
+    // Large map: allow mountain-large and volcano-medium sparingly
+    if (mountainLargeCount < mountainLargeLimit && r < 0.05) return 'mountain-large';
+    if (volcanoMediumCount < volcanoMediumLimit && r < 0.10) return 'volcano-medium';
+    if (r < 0.25) return 'volcano-small';
+    if (r < 0.55) return 'mountain-medium';
+    if (r < 0.75) return 'rock-cluster';
+    return 'mountain-small';
+  } else {
+    // Standard map: no mountain-large, no volcano-medium
+    if (r < 0.05) return 'volcano-small';
+    if (r < 0.40) return 'mountain-medium';
+    if (r < 0.60) return 'rock-cluster';
+    return 'mountain-small';
+  }
+}
+
+/** Select support obstacle type for edge biome clusters.
+ *  Support obstacles are always small types. */
+function getEdgeSupportObstacleType(rand: () => number): ObstacleType {
+  const r = rand();
+  if (r < 0.55) return 'mountain-small';
+  return 'rock-cluster';
+}
+
+// ── Obstacle placement (interior clusters) ───────────────────────────
 
 type ObstacleTheme = 'mountain' | 'volcano' | 'rock';
 
@@ -466,6 +655,8 @@ function placeObstacles(
   hq: MapData['hq'],
   rand: () => number,
   occupied: Set<string>,
+  initialMountainLargeCount: number = 0,
+  initialVolcanoMediumCount: number = 0,
 ): ClusterResult {
   const obstacles: ObstaclePlacement[] = [];
   let rejectedClusters = 0;
@@ -474,8 +665,16 @@ function placeObstacles(
   const centerX = Math.floor(w / 2);
   const centerY = Math.floor(h / 2);
 
+  const isLargeMap = w >= MAP_SIZE_LARGE;
+
   // Number of clusters scales with map size
   const clusterCount = Math.floor(w * h / 400); // ~5 for 48x48, ~10 for 64x64
+
+  // Track rare obstacle types (combined with any already placed by edge biome)
+  let mountainLargeCount = initialMountainLargeCount;
+  let volcanoMediumCount = initialVolcanoMediumCount;
+  const mountainLargeLimit = isLargeMap ? 2 : 0;
+  const volcanoMediumLimit = isLargeMap ? 2 : 0;
 
   for (let c = 0; c < clusterCount; c++) {
     // Pick cluster center away from start core zone and center
@@ -500,15 +699,21 @@ function placeObstacles(
     const themes: ObstacleTheme[] = ['mountain', 'volcano', 'rock'];
     const theme = themes[Math.floor(rand() * themes.length)]!;
 
-    // Place main obstacle
-    const mainType = getMainObstacleType(theme, rand);
+    // Place main obstacle (respects map-size type limits)
+    const mainType = getMainObstacleType(
+      theme, rand, isLargeMap, mountainLargeCount, mountainLargeLimit, volcanoMediumCount, volcanoMediumLimit,
+    );
     const mainFootprint = OBSTACLE_FOOTPRINTS[mainType];
     const mainResult = tryPlaceObstacle(cx, cy, mainType, mainFootprint, w, h, occupied);
     if (!mainResult) {
       rejectedClusters++;
       continue;
     }
+
+    const beforeCount = obstacles.length;
     obstacles.push(mainResult);
+    if (mainType === 'mountain-large') mountainLargeCount++;
+    if (mainType === 'volcano-medium') volcanoMediumCount++;
 
     // Place 1–5 supporting smaller obstacles around the main one
     const supportCount = 1 + Math.floor(rand() * 5);
@@ -527,37 +732,20 @@ function placeObstacles(
     }
 
     // Validate: cluster must not block straight line from HQ to center
-    const clusterObstacles = [...obstacles]; // all obstacles so far
-    const hqToInt = isStraightLineClearOfObstacles(
-      clusterObstacles,
-      Math.floor(hqCx), Math.floor(hqCy),
-      centerX, centerY,
-      w, h,
+    const hqToCenter = isStraightLineClearOfObstacles(
+      obstacles, Math.floor(hqCx), Math.floor(hqCy), centerX, centerY, w, h,
     );
-    if (!hqToInt) {
-      // Reject entire cluster — remove its obstacles and free occupied tiles
-      // Remove obstacles added in this cluster
-      const clusterStartIdx = obstacles.length - 1 - supportsPlaced;
-      for (let i = obstacles.length - 1; i >= clusterStartIdx; i--) {
-        const obs = obstacles[i]!;
+    if (!hqToCenter) {
+      // Reject entire cluster — remove all obstacles added since beforeCount
+      while (obstacles.length > beforeCount) {
+        const obs = obstacles.pop()!;
         for (let dy = 0; dy < obs.footprint; dy++) {
           for (let dx = 0; dx < obs.footprint; dx++) {
             occupied.delete(`${obs.tx + dx},${obs.ty + dy}`);
           }
         }
-        obstacles.splice(i, 1);
-      }
-      // Also remove the main obstacle
-      const mainObs = mainResult;
-      for (let dy = 0; dy < mainObs.footprint; dy++) {
-        for (let dx = 0; dx < mainObs.footprint; dx++) {
-          occupied.delete(`${mainObs.tx + dx},${mainObs.ty + dy}`);
-        }
-      }
-      // Find and remove mainResult from obstacles
-      const mainIdx = obstacles.indexOf(mainResult);
-      if (mainIdx >= 0) {
-        obstacles.splice(mainIdx, 1);
+        if (obs.type === 'mountain-large') mountainLargeCount--;
+        if (obs.type === 'volcano-medium') volcanoMediumCount--;
       }
       rejectedClusters++;
     }
@@ -591,13 +779,32 @@ function tryPlaceObstacle(
   return { tx, ty, type, footprint };
 }
 
-function getMainObstacleType(theme: ObstacleTheme, rand: () => number): ObstacleType {
+/** Select main obstacle type for interior clusters.
+ *  Respects per-map-size limits on mountain-large and volcano-medium. */
+function getMainObstacleType(
+  theme: ObstacleTheme,
+  rand: () => number,
+  isLargeMap: boolean,
+  mountainLargeCount: number,
+  mountainLargeLimit: number,
+  volcanoMediumCount: number,
+  volcanoMediumLimit: number,
+): ObstacleType {
   const r = rand();
   switch (theme) {
-    case 'mountain':
-      return r < 0.4 ? 'mountain-medium' : r < 0.7 ? 'mountain-large' : 'mountain-small';
-    case 'volcano':
-      return r < 0.5 ? 'volcano-medium' : 'volcano-small';
+    case 'mountain': {
+      // Large map: allow mountain-large up to limit
+      if (isLargeMap && mountainLargeCount < mountainLargeLimit && r < 0.20) return 'mountain-large';
+      // Standard: mountain-large never selected (limit = 0)
+      if (r < 0.50) return 'mountain-medium';
+      return 'mountain-small';
+    }
+    case 'volcano': {
+      // Large map: allow volcano-medium up to limit
+      if (isLargeMap && volcanoMediumCount < volcanoMediumLimit && r < 0.35) return 'volcano-medium';
+      // Standard: volcano-medium never selected (limit = 0)
+      return 'volcano-small';
+    }
     case 'rock':
       return 'rock-cluster';
   }
@@ -615,7 +822,7 @@ function getSupportObstacleType(theme: ObstacleTheme, rand: () => number): Obsta
   }
 }
 
-// ── Decor placement (Stage C: non-blocking decor only) ───────────────
+// ── Decor placement (minimal Stage D: increased counts + edge bias) ──
 
 function placeDecor(
   w: number,
@@ -628,9 +835,10 @@ function placeDecor(
   const hqCx = hq.tx + HQ_FOOTPRINT / 2;
   const hqCy = hq.ty + HQ_FOOTPRINT / 2;
 
+  // Regular scatter — increased counts for visual variation
   const decorSpecs: Array<{ type: DecorType; count: number }> = [
-    { type: 'bush', count: 12 },
-    { type: 'sand-bump', count: 14 },
+    { type: 'bush', count: 18 },
+    { type: 'sand-bump', count: 22 },
   ];
 
   for (const spec of decorSpecs) {
@@ -640,6 +848,34 @@ function placeDecor(
       attempts++;
       const tx = Math.floor(rand() * w);
       const ty = Math.floor(rand() * h);
+      // Sparse near start core zone
+      if (Math.hypot(tx - hqCx, ty - hqCy) < START_CORE_RADIUS) continue;
+      if (occupied.has(`${tx},${ty}`)) continue;
+      occupied.add(`${tx},${ty}`);
+      decor.push({ tx, ty, type: spec.type });
+      placed++;
+    }
+  }
+
+  // Edge-biased decor — extra decor near map borders
+  const edgeDecorSpecs: Array<{ type: DecorType; count: number }> = [
+    { type: 'bush', count: 6 },
+    { type: 'sand-bump', count: 8 },
+  ];
+
+  const isInEdgeBand = (x: number, y: number): boolean =>
+    x < EDGE_BIOME_DEPTH || x >= w - EDGE_BIOME_DEPTH ||
+    y < EDGE_BIOME_DEPTH || y >= h - EDGE_BIOME_DEPTH;
+
+  for (const spec of edgeDecorSpecs) {
+    let placed = 0;
+    let attempts = 0;
+    while (placed < spec.count && attempts < 300) {
+      attempts++;
+      const tx = Math.floor(rand() * w);
+      const ty = Math.floor(rand() * h);
+      // Must be in edge band
+      if (!isInEdgeBand(tx, ty)) continue;
       // Sparse near start core zone
       if (Math.hypot(tx - hqCx, ty - hqCy) < START_CORE_RADIUS) continue;
       if (occupied.has(`${tx},${ty}`)) continue;
