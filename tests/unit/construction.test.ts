@@ -459,7 +459,7 @@ describe('building spacing — one-tile gap', () => {
     const map = createSpacingMap();
     // Place a resource on the perimeter ring of a candidate position (8,4)
     // Perimeter of (8,4) footprint 2 → (7,3)-(10,6)
-    map.resources.push({ tx: 7, ty: 4, type: 'small' });
+    map.resources.push({ tx: 7, ty: 4, type: 'small', footprint: 1 });
     const occupied = buildOccupiedTileSet(map);
 
     // Resource at (7,4) is on the perimeter but NOT on the footprint (8,4)-(9,5)
@@ -467,7 +467,7 @@ describe('building spacing — one-tile gap', () => {
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
 
     // Now place a resource ON the footprint → should block
-    map.resources.push({ tx: 8, ty: 4, type: 'small' });
+    map.resources.push({ tx: 8, ty: 4, type: 'small', footprint: 1 });
     const occupied2 = buildOccupiedTileSet(map);
     expect(isFootprintWithSpacingBuildable(map, occupied2, 8, 4, 2)).toBe(false);
   });
@@ -515,7 +515,7 @@ describe('building spacing — one-tile gap', () => {
       tx: 12, ty: 10, type: 'raw-storage',
       elapsed: 0, duration: 20, progress: 0, builderIndex: 0,
     });
-    map.resources.push({ tx: 0, ty: 0, type: 'small' });
+    map.resources.push({ tx: 0, ty: 0, type: 'small', footprint: 1 });
     map.decor.push({ tx: 1, ty: 1, type: 'bush' });
     map.obstacles.push({ tx: 2, ty: 2, type: 'rock-cluster', footprint: 1 });
 
@@ -625,5 +625,22 @@ describe('obstacle interaction with construction', () => {
     // Only HQ tiles should be present, not obstacle tiles
     expect(buildingTiles.has('10,10')).toBe(false);
     expect(buildingTiles.has('11,11')).toBe(false);
+  });
+
+  it('multi-tile resource footprint blocks building placement', () => {
+    const map = createObstacleMap();
+    // Place a 3×3 infinite resource at (8,4)
+    map.resources.push({ tx: 8, ty: 4, type: 'infinite', footprint: 3 });
+    const occupied = buildOccupiedTileSet(map);
+
+    // All 9 tiles of the 3×3 resource should be occupied
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        expect(occupied.has(`${8 + dx},${4 + dy}`)).toBe(true);
+      }
+    }
+
+    // Trying to place a 2×2 building at (8,4) should fail — overlaps resource
+    expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(false);
   });
 });

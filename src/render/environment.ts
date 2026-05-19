@@ -17,7 +17,8 @@ export function renderResourceNode(
   camera: Camera,
   assets: AssetStore,
 ): void {
-  const scr = tileToScreen(node.tx + 0.5, node.ty + 0.5);
+  const halfFp = node.footprint / 2;
+  const scr = tileToScreen(node.tx + halfFp, node.ty + halfFp);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
   const assetKey = RESOURCE_ASSET_KEYS[node.type];

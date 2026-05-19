@@ -6,6 +6,15 @@ import {
   START_CORE_RADIUS,
   START_ECONOMY_RADIUS,
   START_TRANSITION_RADIUS,
+  STARTER_POCKET_SMALL_COUNT,
+  STARTER_POCKET_MEDIUM_COUNT,
+  STARTER_POCKET_SUBCLUSTER_MIN,
+  STARTER_POCKET_SUBCLUSTER_MAX,
+  STARTER_POCKET_SUBCLUSTER_RADIUS,
+  STARTER_POCKET_CORNER_BIAS,
+  CENTER_FIELD_LARGE_COUNT,
+  CENTER_FIELD_MEDIUM_COUNT,
+  CENTER_INFINITE_OFFSET_MAX,
 } from '../core/constants.js';
 import type {
   MapData,
@@ -17,7 +26,7 @@ import type {
   ObstaclePlacement,
   BuilderPlacement,
 } from './map-types.js';
-import { OBSTACLE_FOOTPRINTS } from './map-types.js';
+import { OBSTACLE_FOOTPRINTS, RESOURCE_FOOTPRINTS } from './map-types.js';
 import { validateMap, isStraightLineClearOfObstacles } from './map-validation.js';
 
 // ── PRNG ─────────────────────────────────────────────────────────────
@@ -178,7 +187,7 @@ function placeBuildersNearHq(
   throw new Error('Failed to place Builder near HQ');
 }
 
-// ── Resource placement (Stage B: zone-based distribution) ────────────
+// ── Resource placement (Stage A: starter pocket + Stage B: center field) ─
 
 function placeResources(
   w: number,
@@ -194,57 +203,232 @@ function placeResources(
   const centerY = Math.floor(h / 2);
   const maxDist = Math.hypot(w, h) / 2;
 
-  // Zone-based placement as described in MAP_GENERATION_SPEC §8
-  // Near start: many small, some medium
-  // Mid-map: more medium, some large
-  // Center: one infinite mineral
+  // ── Stage A: Starter resource pocket (corner-biased, clustered) ─────
+  placeStarterResourcePocket(w, h, hq, rand, occupied, resources);
 
-  const placeInZone = (
-    type: ResourceType,
-    minDist: number,
-    maxDist: number,
-    count: number,
-    maxAttempts: number = 200,
-  ) => {
-    let placed = 0;
-    let attempts = 0;
-    while (placed < count && attempts < maxAttempts) {
-      attempts++;
-      const tx = Math.floor(rand() * w);
-      const ty = Math.floor(rand() * h);
-      const dist = Math.hypot(tx - hqCx, ty - hqCy);
-      if (dist < minDist || dist > maxDist) continue;
-      if (occupied.has(`${tx},${ty}`)) continue;
-      occupied.add(`${tx},${ty}`);
-      resources.push({ tx, ty, type });
-      placed++;
-    }
-  };
+  // ── Transition zone (dist START_ECONOMY_RADIUS to START_TRANSITION_RADIUS) ──
+  placeInZone('medium', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 3, w, h, hqCx, hqCy, rand, occupied, resources);
+  placeInZone('large', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 2, w, h, hqCx, hqCy, rand, occupied, resources);
 
-  // Starter economy zone (dist 4–10): many small, some medium
-  placeInZone('small', START_CORE_RADIUS, START_ECONOMY_RADIUS, 6);
-  placeInZone('medium', START_CORE_RADIUS, START_ECONOMY_RADIUS, 3);
+  // ── Far zone (dist START_TRANSITION_RADIUS to maxDist) ──
+  placeInZone('large', START_TRANSITION_RADIUS, maxDist, 2, w, h, hqCx, hqCy, rand, occupied, resources, 300);
 
-  // Transition zone (dist 10–18): more medium, some large
-  placeInZone('medium', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 4);
-  placeInZone('large', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 3);
-
-  // Far zone (dist 18+): occasional large
-  placeInZone('large', START_TRANSITION_RADIUS, maxDist, 2, 300);
-
-  // Central infinite mineral
-  let infPlaced = false;
-  for (let attempts = 0; attempts < 100 && !infPlaced; attempts++) {
-    const tx = Math.floor(centerX + (rand() - 0.5) * 6);
-    const ty = Math.floor(centerY + (rand() - 0.5) * 6);
-    if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
-    if (occupied.has(`${tx},${ty}`)) continue;
-    occupied.add(`${tx},${ty}`);
-    resources.push({ tx, ty, type: 'infinite' });
-    infPlaced = true;
-  }
+  // ── Stage B: Center resource field (3×3 infinite + surrounding field) ──
+  placeCenterResourceField(w, h, hq, centerX, centerY, rand, occupied, resources);
 
   return resources;
+}
+
+/** Place a dense starter resource pocket biased toward the nearest map corner. */
+function placeStarterResourcePocket(
+  w: number,
+  h: number,
+  hq: MapData['hq'],
+  rand: () => number,
+  occupied: Set<string>,
+  resources: MapData['resources'],
+): void {
+  const hqCx = hq.tx + HQ_FOOTPRINT / 2;
+  const hqCy = hq.ty + HQ_FOOTPRINT / 2;
+
+  // Find nearest corner
+  const cornerX = hqCx < w / 2 ? 0 : w - 1;
+  const cornerY = hqCy < h / 2 ? 0 : h - 1;
+
+  // Compute pocket center: bias from HQ toward nearest corner
+  const pocketCx = hqCx + (cornerX - hqCx) * STARTER_POCKET_CORNER_BIAS;
+  const pocketCy = hqCy + (cornerY - hqCy) * STARTER_POCKET_CORNER_BIAS;
+
+  // Build a list of (type, count) pairs
+  const toPlace: Array<{ type: ResourceType; remaining: number }> = [];
+  for (let i = 0; i < STARTER_POCKET_SMALL_COUNT; i++) {
+    toPlace.push({ type: 'small', remaining: 1 });
+  }
+  for (let i = 0; i < STARTER_POCKET_MEDIUM_COUNT; i++) {
+    toPlace.push({ type: 'medium', remaining: 1 });
+  }
+
+  // Create 2-4 sub-clusters around pocket center
+  const subClusterCount = STARTER_POCKET_SUBCLUSTER_MIN
+    + Math.floor(rand() * (STARTER_POCKET_SUBCLUSTER_MAX - STARTER_POCKET_SUBCLUSTER_MIN + 1));
+
+  // Generate sub-cluster centers
+  const subClusters: Array<{ cx: number; cy: number }> = [];
+  for (let s = 0; s < subClusterCount; s++) {
+    const angle = rand() * Math.PI * 2;
+    const dist = 2 + rand() * 4;
+    subClusters.push({
+      cx: pocketCx + Math.cos(angle) * dist,
+      cy: pocketCy + Math.sin(angle) * dist,
+    });
+  }
+
+  // Place resources by assigning them round-robin to sub-clusters
+  let clusterIdx = 0;
+  let totalAttempts = 0;
+  const maxAttempts = toPlace.length * 30;
+
+  while (toPlace.length > 0 && totalAttempts < maxAttempts) {
+    totalAttempts++;
+    const item = toPlace[0]!;
+    const fp = RESOURCE_FOOTPRINTS[item.type];
+    const sc = subClusters[clusterIdx % subClusters.length]!;
+
+    // Random offset from sub-cluster center
+    const offsetRange = STARTER_POCKET_SUBCLUSTER_RADIUS;
+    const tx = Math.floor(sc.cx + (rand() - 0.5) * offsetRange * 2);
+    const ty = Math.floor(sc.cy + (rand() - 0.5) * offsetRange * 2);
+
+    // Validate placement
+    if (canPlaceResource(tx, ty, fp, w, h, occupied, hqCx, hqCy)) {
+      markResourceOccupied(occupied, tx, ty, fp);
+      resources.push({ tx, ty, type: item.type, footprint: fp });
+      toPlace.shift();
+    }
+
+    clusterIdx++;
+  }
+}
+
+/** Place the central 3×3 mineral_infinite and surrounding resource field. */
+function placeCenterResourceField(
+  w: number,
+  h: number,
+  hq: MapData['hq'],
+  centerX: number,
+  centerY: number,
+  rand: () => number,
+  occupied: Set<string>,
+  resources: MapData['resources'],
+): void {
+  const hqCx = hq.tx + HQ_FOOTPRINT / 2;
+  const hqCy = hq.ty + HQ_FOOTPRINT / 2;
+
+  // Place 3×3 mineral_infinite near exact center
+  let infPlaced = false;
+  const infFp = RESOURCE_FOOTPRINTS.infinite; // 3
+  for (let attempts = 0; attempts < 100 && !infPlaced; attempts++) {
+    const tx = Math.floor(centerX + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
+    const ty = Math.floor(centerY + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
+
+    if (canPlaceResource(tx, ty, infFp, w, h, occupied, hqCx, hqCy)) {
+      markResourceOccupied(occupied, tx, ty, infFp);
+      resources.push({ tx, ty, type: 'infinite', footprint: infFp });
+      infPlaced = true;
+    }
+  }
+
+  // Place surrounding large resources (6-12 tiles from center)
+  let largePlaced = 0;
+  let largeAttempts = 0;
+  while (largePlaced < CENTER_FIELD_LARGE_COUNT && largeAttempts < CENTER_FIELD_LARGE_COUNT * 40) {
+    largeAttempts++;
+    const angle = rand() * Math.PI * 2;
+    const dist = 7 + rand() * 5;
+    const tx = Math.floor(centerX + Math.cos(angle) * dist);
+    const ty = Math.floor(centerY + Math.sin(angle) * dist);
+    const fp = RESOURCE_FOOTPRINTS.large;
+
+    if (canPlaceResource(tx, ty, fp, w, h, occupied, hqCx, hqCy)) {
+      markResourceOccupied(occupied, tx, ty, fp);
+      resources.push({ tx, ty, type: 'large', footprint: fp });
+      largePlaced++;
+    }
+  }
+
+  // Place surrounding medium resources (8-14 tiles from center)
+  let mediumPlaced = 0;
+  let mediumAttempts = 0;
+  while (mediumPlaced < CENTER_FIELD_MEDIUM_COUNT && mediumAttempts < CENTER_FIELD_MEDIUM_COUNT * 40) {
+    mediumAttempts++;
+    const angle = rand() * Math.PI * 2;
+    const dist = 9 + rand() * 5;
+    const tx = Math.floor(centerX + Math.cos(angle) * dist);
+    const ty = Math.floor(centerY + Math.sin(angle) * dist);
+    const fp = RESOURCE_FOOTPRINTS.medium;
+
+    if (canPlaceResource(tx, ty, fp, w, h, occupied, hqCx, hqCy)) {
+      markResourceOccupied(occupied, tx, ty, fp);
+      resources.push({ tx, ty, type: 'medium', footprint: fp });
+      mediumPlaced++;
+    }
+  }
+}
+
+// ── Shared resource placement helpers ──────────────────────────────────
+
+/** Check if a resource of the given footprint can be placed at (tx, ty). */
+function canPlaceResource(
+  tx: number,
+  ty: number,
+  footprint: number,
+  mapW: number,
+  mapH: number,
+  occupied: Set<string>,
+  hqCx: number,
+  hqCy: number,
+): boolean {
+  // Bounds check
+  if (tx < 0 || ty < 0 || tx + footprint > mapW || ty + footprint > mapH) return false;
+
+  // Check all footprint tiles are free
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
+    }
+  }
+
+  // No large or infinite resources inside start economy zone
+  // Also check single-tile 'large' type by inspecting the type implied by footprint > 1
+  // For footprint=3 (infinite), always enforce the distance check
+  if (footprint > 1) {
+    const rCx = tx + footprint / 2;
+    const rCy = ty + footprint / 2;
+    const distToHq = Math.hypot(rCx - hqCx, rCy - hqCy);
+    if (distToHq < START_ECONOMY_RADIUS) return false;
+  }
+
+  return true;
+}
+
+/** Mark a resource's footprint tiles in the occupied set. */
+function markResourceOccupied(occupied: Set<string>, tx: number, ty: number, footprint: number): void {
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      occupied.add(`${tx + dx},${ty + dy}`);
+    }
+  }
+}
+
+/** Place resources in an annular zone (distance-based scatter). Used for transition/far zones. */
+function placeInZone(
+  type: ResourceType,
+  minDist: number,
+  maxDist: number,
+  count: number,
+  mapW: number,
+  mapH: number,
+  hqCx: number,
+  hqCy: number,
+  rand: () => number,
+  occupied: Set<string>,
+  resources: MapData['resources'],
+  maxAttempts: number = 200,
+): void {
+  const fp = RESOURCE_FOOTPRINTS[type];
+  let placed = 0;
+  let attempts = 0;
+  while (placed < count && attempts < maxAttempts) {
+    attempts++;
+    const tx = Math.floor(rand() * mapW);
+    const ty = Math.floor(rand() * mapH);
+    const dist = Math.hypot(tx + fp / 2 - hqCx, ty + fp / 2 - hqCy);
+    if (dist < minDist || dist > maxDist) continue;
+    if (!canPlaceResource(tx, ty, fp, mapW, mapH, occupied, hqCx, hqCy)) continue;
+    markResourceOccupied(occupied, tx, ty, fp);
+    resources.push({ tx, ty, type, footprint: fp });
+    placed++;
+  }
 }
 
 // ── Obstacle placement (Stage C: clustered obstacles) ────────────────

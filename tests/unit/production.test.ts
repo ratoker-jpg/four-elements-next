@@ -530,7 +530,7 @@ describe('findFreeAdjacentTile', () => {
           continue;
         }
         if (tx < 0 || ty < 0 || tx >= state.map.width || ty >= state.map.height) continue;
-        state.map.resources.push({ tx, ty, type: 'small' });
+        state.map.resources.push({ tx, ty, type: 'small', footprint: 1 });
       }
     }
 

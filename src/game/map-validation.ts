@@ -63,10 +63,16 @@ export function buildPassabilityMap(map: MapData): boolean[][] {
     markBuildingBlocked(grid, obstacle.tx, obstacle.ty, obstacle.footprint, map.width, map.height);
   }
 
-  // Resources block their tile
+  // Resources block their footprint tiles
   for (const resource of map.resources) {
-    if (resource.ty < map.height && resource.tx < map.width) {
-      grid[resource.ty]![resource.tx] = false;
+    for (let dy = 0; dy < resource.footprint; dy++) {
+      for (let dx = 0; dx < resource.footprint; dx++) {
+        const rx = resource.tx + dx;
+        const ry = resource.ty + dy;
+        if (rx < map.width && ry < map.height) {
+          grid[ry]![rx] = false;
+        }
+      }
     }
   }
 
@@ -251,20 +257,24 @@ export function validateMap(map: MapData, seed: number, rejectedClusters: number
     errors.push('Map center is not reachable from HQ via straight line');
   }
 
-  // 4. Infinite mineral reachable
+  // 4. Infinite mineral reachable (check any tile of infinite footprint)
   const infiniteResources = map.resources.filter((r) => r.type === 'infinite');
   let infiniteReachable = false;
   for (const r of infiniteResources) {
-    if (isStraightLineClearOfObstacles(map.obstacles, Math.floor(hqCx), Math.floor(hqCy), r.tx, r.ty, map.width, map.height)) {
-      infiniteReachable = true;
-      break;
+    // Check if any tile of the infinite footprint is reachable from HQ
+    for (let dy = 0; dy < r.footprint && !infiniteReachable; dy++) {
+      for (let dx = 0; dx < r.footprint && !infiniteReachable; dx++) {
+        if (isStraightLineClearOfObstacles(map.obstacles, Math.floor(hqCx), Math.floor(hqCy), r.tx + dx, r.ty + dy, map.width, map.height)) {
+          infiniteReachable = true;
+        }
+      }
     }
   }
   if (!infiniteReachable && infiniteResources.length > 0) {
     errors.push('Infinite mineral is not reachable from HQ via straight line');
   }
 
-  // 5. No resource overlaps obstacle
+  // 5. No resource footprint overlaps obstacle
   const obstacleBlocked = new Set<string>();
   for (const obs of map.obstacles) {
     for (let dy = 0; dy < obs.footprint; dy++) {
@@ -274,8 +284,12 @@ export function validateMap(map: MapData, seed: number, rejectedClusters: number
     }
   }
   for (const r of map.resources) {
-    if (obstacleBlocked.has(`${r.tx},${r.ty}`)) {
-      errors.push(`Resource at (${r.tx},${r.ty}) overlaps an obstacle`);
+    for (let dy = 0; dy < r.footprint; dy++) {
+      for (let dx = 0; dx < r.footprint; dx++) {
+        if (obstacleBlocked.has(`${r.tx + dx},${r.ty + dy}`)) {
+          errors.push(`Resource at (${r.tx},${r.ty}) footprint tile (${r.tx + dx},${r.ty + dy}) overlaps an obstacle`);
+        }
+      }
     }
   }
 

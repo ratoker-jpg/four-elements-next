@@ -30,6 +30,8 @@ export interface ResourcePlacement {
   tx: number;
   ty: number;
   type: ResourceType;
+  /** Footprint size (footprint x footprint tiles occupied). Default 1; infinite = 3. */
+  footprint: number;
 }
 
 export interface ObstaclePlacement {
@@ -84,6 +86,14 @@ export interface MapData {
   builders: BuilderPlacement[];
   constructionSites: ConstructionSitePlacement[];
 }
+
+/** Footprint sizes for resource types. */
+export const RESOURCE_FOOTPRINTS: Record<ResourceType, number> = {
+  small: 1,
+  medium: 1,
+  large: 1,
+  infinite: 3,
+};
 
 /** Asset key mapping for resource types. */
 export const RESOURCE_ASSET_KEYS: Record<ResourceType, string> = {

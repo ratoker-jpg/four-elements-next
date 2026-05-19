@@ -153,7 +153,7 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
     markFootprintOccupied(occupied, site.tx, site.ty, getBuildingFootprint(site.type));
   }
   for (const resource of map.resources) {
-    occupied.add(`${resource.tx},${resource.ty}`);
+    markFootprintOccupied(occupied, resource.tx, resource.ty, resource.footprint);
   }
   // Obstacle footprints block building placement
   for (const obstacle of map.obstacles) {

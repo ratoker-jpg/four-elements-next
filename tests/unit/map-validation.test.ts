@@ -51,7 +51,7 @@ describe('buildPassabilityMap', () => {
   });
 
   it('marks resource tiles as blocked', () => {
-    const map = createMinimalMap({ resources: [{ tx: 15, ty: 5, type: 'small' }] });
+    const map = createMinimalMap({ resources: [{ tx: 15, ty: 5, type: 'small', footprint: 1 }] });
     const passability = buildPassabilityMap(map);
     expect(passability[5]![15]!).toBe(false);
   });
@@ -180,7 +180,7 @@ describe('validateMap', () => {
     const obstacles: ObstaclePlacement[] = [
       { tx: 6, ty: 5, type: 'mountain-large', footprint: 3 }, // blocks (6,5)-(8,7)
     ];
-    const resources = [{ tx: 12, ty: 12, type: 'small' }];
+    const resources = [{ tx: 12, ty: 12, type: 'small', footprint: 1 }];
     const map = createMinimalMap({ obstacles, resources });
     const report = validateMap(map, 42);
     // Depending on line path, may or may not be reachable
@@ -207,7 +207,7 @@ describe('validateMap', () => {
     for (let x = 0; x < 20; x++) {
       obstacles.push({ tx: x, ty: 8, type: 'rock-cluster', footprint: 1 });
     }
-    const resources = [{ tx: 10, ty: 10, type: 'infinite' }];
+    const resources = [{ tx: 10, ty: 10, type: 'infinite', footprint: 3 }];
     const map = createMinimalMap({ obstacles, resources });
     const report = validateMap(map, 42);
     expect(report.infiniteReachable).toBe(false);
@@ -217,7 +217,7 @@ describe('validateMap', () => {
     const obstacles: ObstaclePlacement[] = [
       { tx: 10, ty: 10, type: 'rock-cluster', footprint: 1 },
     ];
-    const resources = [{ tx: 10, ty: 10, type: 'small' }];
+    const resources = [{ tx: 10, ty: 10, type: 'small', footprint: 1 }];
     const map = createMinimalMap({ obstacles, resources });
     const report = validateMap(map, 42);
     expect(report.ok).toBe(false);
@@ -249,5 +249,43 @@ describe('validateMap', () => {
     const map = createMinimalMap();
     const report = validateMap(map, 42, 5);
     expect(report.rejectedClusters).toBe(5);
+  });
+
+  it('marks multi-tile resource footprint as blocked', () => {
+    const resources = [{ tx: 15, ty: 5, type: 'infinite' as const, footprint: 3 }];
+    const map = createMinimalMap({ resources });
+    const passability = buildPassabilityMap(map);
+    // All 9 tiles of 3×3 infinite should be blocked
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        expect(passability[5 + dy]![15 + dx]!).toBe(false);
+      }
+    }
+    // Adjacent tile should be passable
+    expect(passability[5]![14]!).toBe(true);
+  });
+
+  it('reports when multi-tile resource footprint overlaps obstacle', () => {
+    const obstacles: ObstaclePlacement[] = [
+      { tx: 10, ty: 10, type: 'rock-cluster', footprint: 1 },
+    ];
+    const resources = [{ tx: 9, ty: 9, type: 'infinite' as const, footprint: 3 }];
+    const map = createMinimalMap({ obstacles, resources });
+    const report = validateMap(map, 42);
+    expect(report.ok).toBe(false);
+    expect(report.errors.some((e) => e.includes('overlaps an obstacle'))).toBe(true);
+  });
+
+  it('infinite resource reachable via any footprint tile', () => {
+    // Place a 3×3 infinite at (10,10). Tile (10,10) is blocked by obstacle,
+    // but tile (12,12) should still be reachable from HQ.
+    const obstacles: ObstaclePlacement[] = [
+      { tx: 8, ty: 8, type: 'rock-cluster', footprint: 1 }, // blocks (8,8) only
+    ];
+    const resources = [{ tx: 10, ty: 10, type: 'infinite' as const, footprint: 3 }];
+    const map = createMinimalMap({ obstacles, resources });
+    const report = validateMap(map, 42);
+    // At least one footprint tile (12,12) should be reachable from HQ
+    expect(report.infiniteReachable).toBe(true);
   });
 });

@@ -20,6 +20,21 @@ export const START_CORE_RADIUS = 4;    // No obstacles, no large decor, no block
 export const START_ECONOMY_RADIUS = 10; // Many small resources, some medium resources
 export const START_TRANSITION_RADIUS = 18; // Light obstacles and varied resources allowed
 
+// Starter resource pocket (Stage A of MAPGEN-QA-ARCH-01)
+export const STARTER_POCKET_SMALL_COUNT = 10;
+export const STARTER_POCKET_MEDIUM_COUNT = 5;
+export const STARTER_POCKET_SUBCLUSTER_MIN = 2;
+export const STARTER_POCKET_SUBCLUSTER_MAX = 4;
+export const STARTER_POCKET_SUBCLUSTER_RADIUS = 3;
+/** Bias factor toward nearest corner: 0 = centered on HQ, 1 = at corner. */
+export const STARTER_POCKET_CORNER_BIAS = 0.5;
+
+// Center resource field (Stage B of MAPGEN-QA-ARCH-01)
+export const CENTER_FIELD_LARGE_COUNT = 4;
+export const CENTER_FIELD_MEDIUM_COUNT = 5;
+/** Maximum offset from exact map center for infinite deposit placement. */
+export const CENTER_INFINITE_OFFSET_MAX = 1;
+
 // HQ
 export const HQ_FOOTPRINT = 3; // 3×3 tiles (confirmed: matches sprite_profiles)
 
