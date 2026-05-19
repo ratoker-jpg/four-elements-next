@@ -1,7 +1,7 @@
 /** Economy + Power + Control HUD: DOM overlay showing resource counts, power balance, and control usage. */
 
 import type { ReadonlyEconomyState } from '../systems/economy.js';
-import { getFactionElement } from '../systems/economy.js';
+import { getFactionElement, formatDisplayElements } from '../systems/economy.js';
 import type { ReadonlyPowerState } from '../systems/power.js';
 import type { ReadonlyControlState } from '../systems/control.js';
 
@@ -55,7 +55,8 @@ export function createEconomyHud(): {
     matterItem.update(r.matter, r.matterCap);
     elementItem.setLabel(FACTION_ELEMENT_LABELS[state.faction]);
     elementItem.setColor(FACTION_ELEMENT_COLORS[state.faction]);
-    elementItem.update(getFactionElement(state, state.faction), r.elementCap);
+    // Element values are in elementUnits; format as displayed elements with 1 decimal place
+    elementItem.updateValue(`${formatDisplayElements(getFactionElement(state, state.faction))}/${formatDisplayElements(r.elementCap)}`);
   };
 
   const updatePower = (state: ReadonlyPowerState) => {

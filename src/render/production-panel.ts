@@ -2,6 +2,7 @@
 
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
 import { QUEUE_LIMIT, PRODUCTION_COSTS as COSTS } from '../systems/production.js';
+import { ELEMENT_UNITS_PER_ELEMENT } from '../systems/economy.js';
 import { isBuildingOnline } from '../systems/power.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
 import type { ReadonlyPowerState } from '../systems/power.js';
@@ -163,7 +164,7 @@ export function createProductionPanel(
         const btn = document.createElement('button');
         btn.className = 'btn production-panel__produce-btn';
         btn.type = 'button';
-        btn.textContent = `${UNIT_LABELS[unitType]} • ${cost.matter}M/${cost.element}E • ${cost.duration}с`;
+        btn.textContent = `${UNIT_LABELS[unitType]} • ${cost.matter}M/${cost.element / ELEMENT_UNITS_PER_ELEMENT}E • ${cost.duration}с`;
         btn.disabled = disabledReason !== null;
         btn.title = disabledReason ?? '';
         btn.addEventListener('pointerdown', (event) => {
