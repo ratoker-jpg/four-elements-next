@@ -9,7 +9,13 @@ import {
   isTileClaimed,
 } from '../../src/systems/territory.js';
 import { buildOccupiedTileSet } from '../../src/systems/construction.js';
-import { HQ_FOOTPRINT, TERRITORY_TILE_FILL_SECONDS, TERRITORY_SPREAD_STEP_SECONDS, TERRITORY_MAX_RADIUS } from '../../src/core/constants.js';
+import {
+  HQ_FOOTPRINT,
+  TERRITORY_TILE_FILL_SECONDS,
+  TERRITORY_MAX_RADIUS,
+  TERRITORY_SPREAD_BASE_DELAY,
+  territorySpreadDelay,
+} from '../../src/core/constants.js';
 import type { MapData, BuildingPlacement } from '../../src/game/map-types.js';
 
 function createMinimalMap(overrides: Partial<MapData> = {}): MapData {
@@ -199,89 +205,140 @@ describe('tickTerritory — footprint fill', () => {
   });
 });
 
-describe('tickTerritory — spread', () => {
-  it('one spread step claims exactly one tile beyond the HQ footprint', () => {
-    const map = createMinimalMap();
-    const state = createTerritoryState(20, 20);
-    initTerritoryFromHq(state, 4, 4, 'cyan');
-
-    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 3×3 = 9
-    expect(countClaimedTiles(state)).toBe(hqTiles);
-
-    // One spread step
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-
-    // Exactly one new tile should be claimed
-    expect(countClaimedTiles(state)).toBe(hqTiles + 1);
-  });
-
-  it('several spread steps claim several tiles, not whole rings', () => {
+describe('tickTerritory — spread timing', () => {
+  it('no outward spread before 45 seconds', () => {
     const map = createMinimalMap();
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
 
     const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 9
 
-    // After 3 spread steps → exactly 3 new tiles
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    // Tick 44 seconds — not enough for even one radius-1 spread
+    tickTerritory(state, map, 44);
+    expect(countClaimedTiles(state)).toBe(hqTiles);
+  });
+
+  it('after 45 seconds, exactly one radius-1 tile is claimed', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 9
+
+    // Tick exactly 45 seconds — one radius-1 tile should be claimed
+    tickTerritory(state, map, 45);
     expect(countClaimedTiles(state)).toBe(hqTiles + 1);
-
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    expect(countClaimedTiles(state)).toBe(hqTiles + 2);
-
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    expect(countClaimedTiles(state)).toBe(hqTiles + 3);
   });
 
-  it('territory spreads outward after source is claimed', () => {
+  it('radius-2 tile is not claimed at 45 seconds', () => {
     const map = createMinimalMap();
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
 
-    const initialCount = countClaimedTiles(state);
+    // Tick 45 seconds — only one radius-1 tile, no radius-2 tile claimed
+    tickTerritory(state, map, 45);
 
-    // Advance enough time for several spread steps
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS * 5);
-
-    // Should have more claimed tiles than just HQ
-    expect(countClaimedTiles(state)).toBeGreaterThan(initialCount);
-  });
-
-  it('spread is wave-like (one tile per step)', () => {
-    const map = createMinimalMap();
-    const state = createTerritoryState(20, 20);
-    initTerritoryFromHq(state, 4, 4, 'cyan');
-
-    // One spread step
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    const countAfter1 = countClaimedTiles(state);
-
-    // Another spread step
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    const countAfter2 = countClaimedTiles(state);
-
-    expect(countAfter2).toBeGreaterThan(countAfter1);
-  });
-
-  it('max radius is respected', () => {
-    const map = createMinimalMap();
-    const state = createTerritoryState(20, 20);
-    initTerritoryFromHq(state, 4, 4, 'cyan');
-
-    // Advance a lot of time (enough for many spread steps)
-    for (let i = 0; i < 100; i++) {
-      tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    }
-
-    // No tile should be claimed beyond max radius from HQ center
+    // Check that no tile at expansion radius 2 or higher is claimed
+    // HQ center is at (5,5). Expansion radius 2 tiles are at Chebyshev dist 3 from center.
     const hqCx = 4 + Math.floor(HQ_FOOTPRINT / 2);
     const hqCy = 4 + Math.floor(HQ_FOOTPRINT / 2);
     for (let ty = 0; ty < 20; ty++) {
       for (let tx = 0; tx < 20; tx++) {
         const tile = getTerritoryTile(state, tx, ty);
         if (tile!.progress > 0) {
-          const dist = Math.max(Math.abs(tx - hqCx), Math.abs(ty - hqCy));
-          expect(dist).toBeLessThanOrEqual(TERRITORY_MAX_RADIUS);
+          const chebyshevDist = Math.max(Math.abs(tx - hqCx), Math.abs(ty - hqCy));
+          const expansionRadius = chebyshevDist - Math.floor(HQ_FOOTPRINT / 2);
+          if (expansionRadius >= 2) {
+            expect.fail(`Tile at (${tx},${ty}) with expansion radius ${expansionRadius} should not be claimed after 45s`);
+          }
+        }
+      }
+    }
+  });
+
+  it('spread remains one tile per spread event', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 9
+
+    // 45s → one tile
+    tickTerritory(state, map, 45);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 1);
+
+    // Another 45s → one more tile
+    tickTerritory(state, map, 45);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 2);
+
+    // Another 45s → one more tile
+    tickTerritory(state, map, 45);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 3);
+  });
+
+  it('radius-2 tiles require 90 seconds per tile after becoming next frontier', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 9
+
+    // Count radius-1 frontier tiles around the HQ
+    // HQ center at (5,5), footprint size 3. Expansion radius 1 = Chebyshev dist 2.
+    // We need to claim all radius-1 tiles before radius-2 tiles become the next frontier.
+    // There are 16 radius-1 tiles around the 3x3 footprint.
+    // Each takes 45s. So 16 * 45 = 720s to fill all radius-1 tiles.
+    // Then radius-2 tiles need 90s each.
+
+    // Tick enough to fill all radius-1 tiles (16 tiles * 45s = 720s)
+    tickTerritory(state, map, 16 * 45);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 16);
+
+    // Now the frontier should contain radius-2 tiles
+    // 89 seconds is not enough for one radius-2 tile (needs 90s)
+    tickTerritory(state, map, 89);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 16); // no new tile
+
+    // 1 more second (total 90s for radius-2) → one radius-2 tile claimed
+    tickTerritory(state, map, 1);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 17);
+  });
+
+  it('territorySpreadDelay formula matches expected values', () => {
+    expect(territorySpreadDelay(1)).toBe(45);
+    expect(territorySpreadDelay(2)).toBe(90);
+    expect(territorySpreadDelay(3)).toBe(180);
+    expect(territorySpreadDelay(4)).toBe(360);
+    expect(territorySpreadDelay(5)).toBe(720);
+  });
+
+  it('max radius is 5', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    // Advance a lot of time (enough for many spread steps)
+    // Ring 1: 16 tiles * 45s = 720s
+    // Ring 2: 20 tiles * 90s = 1800s
+    // Ring 3: 24 tiles * 180s = 4320s
+    // Ring 4: 28 tiles * 360s = 10080s
+    // Ring 5: 32 tiles * 720s = 23040s
+    // Total ≈ 40000s
+    // Use a generous amount to ensure all tiles up to radius 5 are claimed
+    for (let i = 0; i < 500; i++) {
+      tickTerritory(state, map, 100);
+    }
+
+    // No tile should be claimed beyond expansion radius 5 from HQ
+    const hqCx = 4 + Math.floor(HQ_FOOTPRINT / 2);
+    const hqCy = 4 + Math.floor(HQ_FOOTPRINT / 2);
+    for (let ty = 0; ty < 20; ty++) {
+      for (let tx = 0; tx < 20; tx++) {
+        const tile = getTerritoryTile(state, tx, ty);
+        if (tile!.progress > 0) {
+          const chebyshevDist = Math.max(Math.abs(tx - hqCx), Math.abs(ty - hqCy));
+          const expansionRadius = chebyshevDist - Math.floor(HQ_FOOTPRINT / 2);
+          expect(expansionRadius).toBeLessThanOrEqual(TERRITORY_MAX_RADIUS);
         }
       }
     }
@@ -292,8 +349,8 @@ describe('tickTerritory — spread', () => {
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
 
-    // One spread step should not claim everything
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    // One spread step (45s) should not claim everything
+    tickTerritory(state, map, 45);
 
     // Check that there are unclaimed tiles within max radius
     const hqCx = 4 + Math.floor(HQ_FOOTPRINT / 2);
@@ -301,8 +358,9 @@ describe('tickTerritory — spread', () => {
     let unclaimedWithinRadius = 0;
     for (let ty = 0; ty < 20; ty++) {
       for (let tx = 0; tx < 20; tx++) {
-        const dist = Math.max(Math.abs(tx - hqCx), Math.abs(ty - hqCy));
-        if (dist <= TERRITORY_MAX_RADIUS && dist > 0) {
+        const chebyshevDist = Math.max(Math.abs(tx - hqCx), Math.abs(ty - hqCy));
+        const expansionRadius = chebyshevDist - Math.floor(HQ_FOOTPRINT / 2);
+        if (expansionRadius >= 1 && expansionRadius <= TERRITORY_MAX_RADIUS) {
           const tile = getTerritoryTile(state, tx, ty);
           if (tile!.progress === 0) unclaimedWithinRadius++;
         }
@@ -342,10 +400,8 @@ describe('territory does not block construction', () => {
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
 
-    // Tick enough for territory to spread beyond HQ
-    for (let i = 0; i < 5; i++) {
-      tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
-    }
+    // Tick enough for territory to spread beyond HQ (one radius-1 tile at 45s)
+    tickTerritory(state, map, 45);
 
     // Collect all territory-claimed tile coordinates
     const claimedCoords: string[] = [];
@@ -436,7 +492,8 @@ describe('countClaimedTiles', () => {
     initTerritoryFromHq(state, 4, 4, 'cyan');
 
     const initial = countClaimedTiles(state);
-    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS * 3);
+    // 3 spread steps at 45s each
+    tickTerritory(state, map, 3 * TERRITORY_SPREAD_BASE_DELAY);
     expect(countClaimedTiles(state)).toBeGreaterThan(initial);
   });
 });
@@ -458,8 +515,8 @@ describe('deterministic behavior', () => {
 
     // Tick both with same dt
     for (let i = 0; i < 20; i++) {
-      tickTerritory(state1, map1, 3);
-      tickTerritory(state2, map2, 3);
+      tickTerritory(state1, map1, 50);
+      tickTerritory(state2, map2, 50);
     }
 
     expect(countClaimedTiles(state1)).toBe(countClaimedTiles(state2));
