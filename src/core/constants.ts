@@ -33,6 +33,14 @@ export const STARTER_POCKET_CORNER_BIAS = 0.6;
  *  π/2 = 180° wedge centred on the corner direction. */
 export const STARTER_POCKET_WEDGE_HALF_ANGLE = Math.PI / 2;
 
+// Edge obstacle biome (Stage C of MAPGEN-QA-ARCH-01)
+export const EDGE_BIOME_DEPTH = 6;       // Tiles from map border defining the edge band
+export const EDGE_CLUSTER_COUNT_STANDARD = 8;
+export const EDGE_CLUSTER_COUNT_LARGE = 14;
+export const EDGE_CLUSTER_SUPPORT_MIN = 2;
+export const EDGE_CLUSTER_SUPPORT_MAX = 4;
+export const EDGE_CENTER_EXCLUSION_RADIUS = 10; // Edge clusters must be this far from map center
+
 // Center resource field (Stage B of MAPGEN-QA-ARCH-01)
 export const CENTER_FIELD_LARGE_COUNT = 4;
 export const CENTER_FIELD_MEDIUM_COUNT = 5;
