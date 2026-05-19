@@ -70,24 +70,38 @@ For broad architecture work, do not create many repeated audits.
 Use this model:
 
 1. One large architecture audit.
-2. Split the implementation into stages.
-3. Implement one stage at a time.
-4. Stop after each stage for review.
-5. Re-audit only when a trigger occurs.
+2. Split the implementation into named stages.
+3. Treat stages as planning/review boundaries, not mandatory one-PR boundaries.
+4. Bundle or split implementation PRs based on risk, diff size, coupling, and testability.
+5. Stop after each implementation PR for review.
+6. Re-audit only when a trigger occurs.
 
 Preferred pattern:
 
 ```text
 Big Audit
-→ Stage A implementation PR
+→ Stage A / B / C / D plan
+→ implementation PR 1 containing one or more approved stages
 → review / CI / manual QA / merge
-→ Stage B implementation PR
-→ review / CI / manual QA / merge
-→ Stage C implementation PR
+→ implementation PR 2 only if the remaining stages are too risky or too large to bundle
 → review / CI / manual QA / merge
 ```
 
 Do not run a fresh full audit before every stage if the stage is already defined in the approved Big Audit.
+
+### Adaptive PR bundling rule
+
+The default strategy is adaptive, not mechanical.
+
+Use one Big Audit for one coherent architecture area. Then choose PR grouping situationally:
+
+- Bundle adjacent stages in one PR when the project area is small, the diff is reviewable, the stages share the same files/systems, and tests can cover the combined behavior.
+- Split stages into separate PRs when the diff becomes too large, the work touches unrelated systems, risk increases, CI/debugging would become unclear, or rollback would be painful.
+- It is allowed to implement internal helpers/systems first and connect them later in the same PR or a later PR, if that reduces risk and keeps behavior reviewable.
+- It is allowed to merge one safe PR covering multiple stages and then continue to the next approved stage without a new audit.
+- A new audit is required only when a re-audit trigger fires.
+
+For the current small TypeScript/Vite codebase, prefer faster bundled PRs when safe. Do not over-split work just because stages are named separately.
 
 ### Stage implementation prompt rule
 
@@ -98,7 +112,8 @@ Do not perform a new Phase 1 audit.
 Use the approved <ARCH_NAME> Big Audit as the source of truth.
 Before coding, verify current main still matches the stage assumptions.
 If current code no longer matches the audit assumptions, stop and report instead of implementing.
-Implement only <Stage X>.
+Implement only the approved stage(s): <Stage X / Y / Z>.
+If adjacent approved stages can be safely bundled, explain why in the PR body and keep the diff reviewable.
 ```
 
 ## Re-audit triggers
@@ -196,16 +211,27 @@ For details, see:
 
 ## PR strategy
 
-Default for this repo: one Big Audit, separate stage PRs for broad architecture work.
+Default for this repo: one Big Audit per coherent architecture area, then adaptive implementation PR grouping.
 
 Why:
 
-- `main` receives working checkpoints.
-- Each PR is reviewable.
-- Rollback is easier.
-- CI failures are easier to locate.
+- Fewer repeated audits.
+- Faster movement while the codebase is small.
+- Related phases can be reviewed together when they share files and behavior.
+- `main` still receives working checkpoints when risk increases.
+- Rollback remains manageable because high-risk or oversized stages can still be split out.
 
-Avoid one massive implementation PR unless explicitly chosen for a very small contained epic.
+Preferred implementation choices:
+
+1. One PR for multiple approved stages if the combined diff remains compact, coherent, and testable.
+2. Separate PRs when the combined work becomes risky, broad, difficult to review, or hard to roll back.
+3. No new audit between approved stages unless a re-audit trigger occurs.
+4. PR body must explain which stages are included and why they were bundled or split.
+
+Avoid both extremes:
+
+- Do not create a new audit/PR for every tiny phase when one approved Big Audit covers the area.
+- Do not force one massive implementation PR if the work becomes hard to review, debug, or roll back.
 
 ## Branch discipline
 
@@ -217,9 +243,9 @@ Before opening or updating a PR, GLM must ensure:
 - Diff does not include already-merged changes from previous stages.
 - PR is not accidentally based on old sandbox or wrong remote.
 - No `dist/`, build output, package lock, or unrelated files are committed unless explicitly requested.
-- PR body names the stage and exact scope.
+- PR body names the stage(s), exact scope, and bundling/splitting rationale.
 
-If a PR diff includes already-merged previous-stage changes, do not merge it. Rebase or recreate the branch from latest `main` and re-apply only the current stage.
+If a PR diff includes already-merged previous-stage changes, do not merge it. Rebase or recreate the branch from latest `main` and re-apply only the current approved scope.
 
 ## Required checks for code PRs
 
@@ -253,6 +279,8 @@ Before recommending merge:
 8. PR body includes changed files, behavior changes, tests, manual QA notes.
 9. Diff does not include already-merged previous-stage changes.
 10. If branch is diverged or dirty, request clean rebase/recreate before merge.
+11. If multiple stages are bundled, PR body explains why bundling is safe.
+12. If stages are split, PR body explains what remains and whether a new audit is needed.
 
 ## Prompt templates
 
@@ -279,8 +307,9 @@ Use the approved <ARCH_NAME> Big Audit as the source of truth.
 Before coding, verify current main still matches the stage assumptions.
 If current code no longer matches the audit assumptions, stop and report instead of implementing.
 
-Implement only <Stage X>.
-Do not implement later stages.
+Implement only the approved stage(s): <Stage X / Y / Z>.
+If multiple stages are bundled, explain why the combined diff is safe and reviewable.
+Do not implement unapproved later stages.
 Open PR into main.
 Run required checks.
 ```
@@ -290,7 +319,7 @@ Run required checks.
 ```text
 Stop. Do not change feature logic.
 The PR branch includes unrelated or already-merged changes.
-Rebase or recreate the branch from latest origin/main and re-apply only the current stage.
+Rebase or recreate the branch from latest origin/main and re-apply only the current approved scope.
 Run checks again and update the PR.
 ```
 
@@ -299,6 +328,8 @@ Run checks again and update the PR.
 Do not:
 
 - run a new full audit before every stage when a Big Audit already exists;
+- split every named phase into a separate PR when bundling is clearly safe;
+- force one giant PR when diff size/risk makes review weak;
 - merge dirty/diverged branches;
 - mix visual polish into architecture stages;
 - mix combat/AI into civil sandbox work without a scoped decision;
