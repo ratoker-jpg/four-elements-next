@@ -128,7 +128,7 @@ export function findAutoPlacement(
       for (let tx = builder.tx - radius; tx <= builder.tx + radius; tx++) {
         const onRing = Math.max(Math.abs(tx - builder.tx), Math.abs(ty - builder.ty)) === radius;
         if (!onRing) continue;
-        if (!isFootprintBuildable(map, occupied, tx, ty, footprint)) continue;
+        if (!isFootprintWithSpacingBuildable(map, occupied, tx, ty, footprint)) continue;
         return { tx, ty };
       }
     }
@@ -178,6 +178,84 @@ export function isFootprintBuildable(
   for (let dy = 0; dy < footprint; dy++) {
     for (let dx = 0; dx < footprint; dx++) {
       if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Build a set of tiles occupied by structures that reserve building spacing:
+ * HQ footprint, completed building footprints, and construction site footprints.
+ * Resources, decor, and builders are NOT included — they block the footprint
+ * itself (via buildOccupiedTileSet) but do not reserve spacing perimeter.
+ */
+export function buildBuildingTileSet(map: MapData): Set<string> {
+  const tiles = new Set<string>();
+
+  for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+    for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+      tiles.add(`${map.hq.tx + dx},${map.hq.ty + dy}`);
+    }
+  }
+
+  for (const building of map.buildings) {
+    markFootprintOccupied(tiles, building.tx, building.ty, getBuildingFootprint(building.type));
+  }
+  for (const site of map.constructionSites) {
+    markFootprintOccupied(tiles, site.tx, site.ty, getBuildingFootprint(site.type));
+  }
+
+  return tiles;
+}
+
+/**
+ * Check whether a building of the given footprint can be placed at (tx, ty)
+ * with a spacing buffer around it.
+ *
+ * Rules:
+ * 1. The actual footprint must be inside map bounds.
+ * 2. No footprint tile may be in the `occupied` set (all objects block the footprint).
+ * 3. The expanded perimeter rectangle (tx-spacing .. tx+footprint+spacing-1,
+ *    ty-spacing .. ty+footprint+spacing-1) must not overlap any tile from
+ *    `buildBuildingTileSet` (HQ, completed buildings, construction sites).
+ *    Out-of-bounds perimeter cells are silently ignored.
+ *    Resources, decor, and builders do NOT block the spacing perimeter.
+ */
+export function isFootprintWithSpacingBuildable(
+  map: MapData,
+  occupied: ReadonlySet<string>,
+  tx: number,
+  ty: number,
+  footprint: number,
+  spacing: number = 1,
+): boolean {
+  // 1. Footprint inside map bounds
+  if (tx < 0 || ty < 0) return false;
+  if (tx + footprint > map.width || ty + footprint > map.height) return false;
+
+  // 2. No footprint tile may be occupied (any object blocks the footprint)
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
+    }
+  }
+
+  // 3. Spacing perimeter — only HQ/buildings/construction-sites matter
+  const buildingTiles = buildBuildingTileSet(map);
+  const perimMinX = tx - spacing;
+  const perimMinY = ty - spacing;
+  const perimMaxX = tx + footprint + spacing - 1;
+  const perimMaxY = ty + footprint + spacing - 1;
+
+  for (let py = perimMinY; py <= perimMaxY; py++) {
+    for (let px = perimMinX; px <= perimMaxX; px++) {
+      // Ignore out-of-bounds perimeter cells
+      if (px < 0 || py < 0 || px >= map.width || py >= map.height) continue;
+      // Skip tiles inside the actual footprint (already validated in step 2)
+      if (px >= tx && px < tx + footprint && py >= ty && py < ty + footprint) continue;
+      // Reject if this perimeter cell overlaps a building-type tile
+      if (buildingTiles.has(`${px},${py}`)) return false;
     }
   }
 
