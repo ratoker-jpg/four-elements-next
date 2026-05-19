@@ -67,8 +67,17 @@ export const BG_COLOR = '#171008';
 
 // Territory spread
 export const TERRITORY_TILE_FILL_SECONDS = 15; // Seconds to fill one footprint tile
-export const TERRITORY_SPREAD_STEP_SECONDS = 2; // Seconds between each frontier spread step
-export const TERRITORY_MAX_RADIUS = 10; // Max Chebyshev distance from source center
+export const TERRITORY_MAX_RADIUS = 5; // Max expansion rings from footprint edge
+export const TERRITORY_SPREAD_BASE_DELAY = 45; // Base delay (seconds) for expansion ring 1
+
+/** Compute spread delay in seconds for a given expansion radius (1-indexed from footprint edge).
+ *  Formula: TERRITORY_SPREAD_BASE_DELAY * 2 ** (radius - 1)
+ *  radius 1 = 45s, radius 2 = 90s, radius 3 = 180s, radius 4 = 360s, radius 5 = 720s
+ */
+export function territorySpreadDelay(radius: number): number {
+  return TERRITORY_SPREAD_BASE_DELAY * (2 ** (radius - 1));
+}
+
 export const TERRITORY_FACTION_COLORS: Record<string, string> = {
   cyan: '#00e5ff',
   green: '#76ff03',

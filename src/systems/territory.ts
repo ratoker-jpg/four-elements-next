@@ -9,17 +9,20 @@
  * 1. HQ footprint starts as fully owned territory (progress = 1).
  * 2. When a building is completed, its footprint tiles begin filling sequentially.
  * 3. After a tile reaches progress 1, it can spread to unclaimed neighbors.
- * 4. Spread is wave-like, one tile per spread step, with a max radius of 10
- *    from the source building center.
- * 5. Territory does not affect construction, movement, or pathfinding.
+ * 4. Spread is wave-like, one tile per spread event, with max 5 expansion rings
+ *    from the footprint edge.
+ * 5. Spread delay is radius-based: each expansion ring takes exponentially longer.
+ *    Formula: 45 * 2^(radius-1) seconds per tile.
+ *    Ring 1 = 45s, Ring 2 = 90s, Ring 3 = 180s, Ring 4 = 360s, Ring 5 = 720s.
+ * 6. Territory does not affect construction, movement, or pathfinding.
  */
 
 import type { FactionId, MapData, BuildingPlacement } from '../game/map-types.js';
 import { HQ_FOOTPRINT } from '../core/constants.js';
 import {
   TERRITORY_TILE_FILL_SECONDS,
-  TERRITORY_SPREAD_STEP_SECONDS,
   TERRITORY_MAX_RADIUS,
+  territorySpreadDelay,
 } from '../core/constants.js';
 import { getBuildingFootprint } from '../config/buildings.js';
 
@@ -31,7 +34,7 @@ export interface TerritoryTile {
   progress: number;
   /** Faction that owns this tile. null if unclaimed. */
   owner: FactionId | null;
-  /** Distance (in tiles) from the nearest source center. Used to enforce max radius. */
+  /** Chebyshev distance from the nearest source center. Used for rendering/enforcement. */
   distFromSource: number;
 }
 
@@ -51,6 +54,19 @@ interface TerritorySource {
   footprintClaimed: boolean;
 }
 
+/**
+ * A frontier entry for territory spread.
+ * `radius` is the expansion ring number (1-indexed from the footprint edge).
+ * For a source with footprint F, radius = chebyshevDist - floor(F/2).
+ */
+interface FrontierEntry {
+  tx: number;
+  ty: number;
+  /** Expansion ring number (1 = first ring outside footprint edge). */
+  radius: number;
+  owner: FactionId;
+}
+
 export interface TerritoryState {
   readonly width: number;
   readonly height: number;
@@ -58,10 +74,10 @@ export interface TerritoryState {
   tiles: TerritoryTile[];
   /** Active territory sources (HQ + completed buildings). */
   sources: TerritorySource[];
-  /** Timer accumulator for spread steps. */
+  /** Timer accumulator for spread steps (seconds). */
   spreadAccumulator: number;
-  /** Queue of tiles to spread into on the next step. Each entry has position + distance from source. */
-  frontier: Array<{ tx: number; ty: number; dist: number; owner: FactionId }>;
+  /** Queue of tiles to spread into. Each entry has position + expansion radius. */
+  frontier: FrontierEntry[];
 }
 
 // ── Factory ──────────────────────────────────────────────────────────
@@ -141,10 +157,14 @@ function seedFrontierFromSource(
       const t = state.tiles[idx]!;
       if (t.progress > 0) continue; // already claimed or filling
 
-      const dist = Math.max(Math.abs(nx - source.cx), Math.abs(ny - source.cy));
-      if (dist > TERRITORY_MAX_RADIUS) continue;
+      const radius = expansionRadiusFromSource(nx, ny, source);
+      if (radius > TERRITORY_MAX_RADIUS) continue;
 
-      state.frontier.push({ tx: nx, ty: ny, dist, owner: faction });
+      // De-duplicate: skip if already in frontier
+      const alreadyInFrontier = state.frontier.some(f => f.tx === nx && f.ty === ny);
+      if (alreadyInFrontier) continue;
+
+      state.frontier.push({ tx: nx, ty: ny, radius, owner: faction });
     }
   }
 }
@@ -186,7 +206,8 @@ export function addBuildingSource(
  *
  * Two phases each tick:
  * 1. Footprint fill: sequentially fill tiles on building footprints.
- * 2. Frontier spread: expand territory outward from claimed tiles.
+ * 2. Frontier spread: expand territory outward from claimed tiles,
+ *    using radius-based delay for each spread step.
  */
 export function tickTerritory(
   state: TerritoryState,
@@ -242,25 +263,49 @@ export function tickTerritory(
     }
   }
 
-  // Phase 2: Frontier spread (wave-like outward expansion)
+  // Phase 2: Frontier spread (radius-based delay, one tile per spread event)
   state.spreadAccumulator += dt;
 
-  while (state.spreadAccumulator >= TERRITORY_SPREAD_STEP_SECONDS) {
-    state.spreadAccumulator -= TERRITORY_SPREAD_STEP_SECONDS;
+  while (state.frontier.length > 0) {
+    // Sort frontier for deterministic order: by radius, then ty, then tx
+    state.frontier.sort((a, b) => a.radius - b.radius || a.ty - b.ty || a.tx - b.tx);
+
+    // Find the first unclaimed frontier entry to determine required delay
+    let nextRadius: number | null = null;
+    for (const entry of state.frontier) {
+      const idx = entry.ty * state.width + entry.tx;
+      if (state.tiles[idx]!.progress === 0) {
+        nextRadius = entry.radius;
+        break;
+      }
+    }
+
+    // If no unclaimed entries, clear frontier and stop
+    if (nextRadius === null) {
+      state.frontier = [];
+      break;
+    }
+
+    // Check if accumulated time is enough for the next spread step
+    const requiredDelay = territorySpreadDelay(nextRadius);
+    if (state.spreadAccumulator < requiredDelay) break;
+
+    // Process one spread step
+    state.spreadAccumulator -= requiredDelay;
     processSpreadStep(state, faction);
   }
 }
 
 /**
  * Process one spread step: claim exactly one deterministic frontier tile.
- * Order: sort frontier by (distance, ty, tx), claim the first unclaimed
+ * Order: sort frontier by (radius, ty, tx), claim the first unclaimed
  * entry, then add its unclaimed neighbors to the frontier (de-duplicated).
  */
 function processSpreadStep(state: TerritoryState, faction: FactionId): void {
   if (state.frontier.length === 0) return;
 
-  // Sort frontier for deterministic order: by distance, then by ty, then by tx
-  state.frontier.sort((a, b) => a.dist - b.dist || a.ty - b.ty || a.tx - b.tx);
+  // Sort frontier for deterministic order: by radius, then by ty, then by tx
+  state.frontier.sort((a, b) => a.radius - b.radius || a.ty - b.ty || a.tx - b.tx);
 
   // Find and claim the first unclaimed frontier tile (one tile per step)
   let claimed = false;
@@ -272,7 +317,8 @@ function processSpreadStep(state: TerritoryState, faction: FactionId): void {
     if (tile.progress > 0) continue; // already claimed or filling — skip
 
     // Claim this tile
-    state.tiles[idx] = { progress: 1, owner: faction, distFromSource: entry.dist };
+    const distFromSource = getMinDistFromSources(state, entry.tx, entry.ty);
+    state.tiles[idx] = { progress: 1, owner: faction, distFromSource };
     claimed = true;
 
     // Remove the claimed entry from the frontier
@@ -284,15 +330,15 @@ function processSpreadStep(state: TerritoryState, faction: FactionId): void {
       const nTile = state.tiles[nIdx]!;
       if (nTile.progress > 0) continue; // already claimed or filling
 
-      // Check distance from nearest source
-      const minDist = getMinDistFromSources(state, nx, ny);
-      if (minDist > TERRITORY_MAX_RADIUS) continue;
+      // Compute expansion radius from nearest source
+      const nRadius = getMinExpansionRadius(state, nx, ny);
+      if (nRadius > TERRITORY_MAX_RADIUS) continue;
 
       // De-duplicate: skip if already in frontier
       const alreadyInFrontier = state.frontier.some(f => f.tx === nx && f.ty === ny);
       if (alreadyInFrontier) continue;
 
-      state.frontier.push({ tx: nx, ty: ny, dist: minDist, owner: faction });
+      state.frontier.push({ tx: nx, ty: ny, radius: nRadius, owner: faction });
     }
 
     break; // one tile per step
@@ -304,6 +350,17 @@ function processSpreadStep(state: TerritoryState, faction: FactionId): void {
   }
 }
 
+// ── Radius helpers ──────────────────────────────────────────────────
+
+/** Compute the expansion radius for a tile relative to a specific source.
+ *  Expansion radius = Chebyshev distance from source center - floor(footprint / 2).
+ *  Ring 1 is the first ring outside the footprint edge.
+ */
+function expansionRadiusFromSource(tx: number, ty: number, source: TerritorySource): number {
+  const chebyshevDist = Math.max(Math.abs(tx - source.cx), Math.abs(ty - source.cy));
+  return chebyshevDist - Math.floor(source.footprint / 2);
+}
+
 /** Get the minimum Chebyshev distance from (tx,ty) to any territory source center. */
 function getMinDistFromSources(state: TerritoryState, tx: number, ty: number): number {
   let minDist = Infinity;
@@ -312,6 +369,16 @@ function getMinDistFromSources(state: TerritoryState, tx: number, ty: number): n
     if (dist < minDist) minDist = dist;
   }
   return minDist;
+}
+
+/** Get the minimum expansion radius from (tx,ty) considering all territory sources. */
+function getMinExpansionRadius(state: TerritoryState, tx: number, ty: number): number {
+  let minRadius = Infinity;
+  for (const source of state.sources) {
+    const radius = expansionRadiusFromSource(tx, ty, source);
+    if (radius < minRadius) minRadius = radius;
+  }
+  return minRadius;
 }
 
 /** Get the 4-connected neighbors of a tile within map bounds. */
