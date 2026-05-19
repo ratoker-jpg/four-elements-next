@@ -155,6 +155,10 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
   for (const resource of map.resources) {
     occupied.add(`${resource.tx},${resource.ty}`);
   }
+  // Obstacle footprints block building placement
+  for (const obstacle of map.obstacles) {
+    markFootprintOccupied(occupied, obstacle.tx, obstacle.ty, obstacle.footprint);
+  }
   for (const decor of map.decor) {
     occupied.add(`${decor.tx},${decor.ty}`);
   }

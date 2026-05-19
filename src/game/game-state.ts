@@ -81,6 +81,13 @@ function buildOccupiedSet(map: MapData): Set<string> {
   for (const resource of map.resources) {
     occupied.add(`${resource.tx},${resource.ty}`);
   }
+  for (const obstacle of map.obstacles) {
+    for (let dy = 0; dy < obstacle.footprint; dy++) {
+      for (let dx = 0; dx < obstacle.footprint; dx++) {
+        occupied.add(`${obstacle.tx + dx},${obstacle.ty + dy}`);
+      }
+    }
+  }
   for (const site of map.constructionSites) {
     const footprint = getBuildingFootprint(site.type);
     for (let dy = 0; dy < footprint; dy++) {

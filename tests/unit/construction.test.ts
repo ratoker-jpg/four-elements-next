@@ -366,6 +366,7 @@ describe('building spacing — one-tile gap', () => {
       terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
       hq: { tx: 4, ty: 4, faction: 'cyan' },
       resources: [],
+      obstacles: [],
       decor: [],
       buildings: [],
       builders: [{ tx: 15, ty: 15, busy: false }],
@@ -530,5 +531,67 @@ describe('building spacing — one-tile gap', () => {
     // With buildings every 3 tiles (footprint 2 + spacing 1 = 3), there should be no room
     const result = findAutoPlacement(map, builder, 'separator');
     expect(result).toBeNull();
+  });
+});
+
+// ── Obstacle interaction with construction ───────────────────────────
+
+describe('obstacle interaction with construction', () => {
+  /** Create a minimal 20×20 map with HQ at (4,4) and a single builder far from HQ. */
+  function createObstacleMap(): MapData {
+    return {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [{ tx: 15, ty: 15, busy: false }],
+      constructionSites: [],
+    };
+  }
+
+  it('obstacle footprints block building placement', () => {
+    const map = createObstacleMap();
+    // Place a 2x2 mountain-medium at (8,4)
+    map.obstacles.push({ tx: 8, ty: 4, type: 'mountain-medium', footprint: 2 });
+    const occupied = buildOccupiedTileSet(map);
+
+    // Trying to place a 2x2 building at (8,4) should fail — overlaps obstacle
+    expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(false);
+  });
+
+  it('obstacles do NOT trigger one-tile spacing rule', () => {
+    const map = createObstacleMap();
+    // Place a 1x1 obstacle at (8,4)
+    map.obstacles.push({ tx: 8, ty: 4, type: 'rock-cluster', footprint: 1 });
+    const occupied = buildOccupiedTileSet(map);
+
+    // Trying to place a 2x2 building at (9,4) — adjacent to obstacle
+    // Footprint (9,4)-(10,5) does not overlap obstacle at (8,4)
+    // Obstacle is on the spacing perimeter but should NOT block spacing
+    // (obstacles are not in buildBuildingTileSet)
+    expect(isFootprintWithSpacingBuildable(map, occupied, 9, 4, 2)).toBe(true);
+  });
+
+  it('obstacle tiles appear in occupied set', () => {
+    const map = createObstacleMap();
+    map.obstacles.push({ tx: 10, ty: 10, type: 'mountain-medium', footprint: 2 });
+    const occupied = buildOccupiedTileSet(map);
+
+    expect(occupied.has('10,10')).toBe(true);
+    expect(occupied.has('11,11')).toBe(true);
+  });
+
+  it('obstacles do NOT appear in buildBuildingTileSet', () => {
+    const map = createObstacleMap();
+    map.obstacles.push({ tx: 10, ty: 10, type: 'mountain-medium', footprint: 2 });
+    const buildingTiles = buildBuildingTileSet(map);
+
+    // Only HQ tiles should be present, not obstacle tiles
+    expect(buildingTiles.has('10,10')).toBe(false);
+    expect(buildingTiles.has('11,11')).toBe(false);
   });
 });

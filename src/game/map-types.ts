@@ -6,13 +6,17 @@ export type TerrainType = 'sand' | 'sand-dark' | 'sand-light';
 
 export type ResourceType = 'small' | 'medium' | 'large' | 'infinite';
 
-export type DecorType =
+/** Blocking obstacle types that impede movement and construction. */
+export type ObstacleType =
   | 'mountain-small'
   | 'mountain-medium'
   | 'mountain-large'
   | 'volcano-small'
   | 'volcano-medium'
-  | 'rock-cluster'
+  | 'rock-cluster';
+
+/** Non-blocking decor types — visual life, no gameplay blocking. */
+export type DecorType =
   | 'bush'
   | 'sand-bump';
 
@@ -26,6 +30,14 @@ export interface ResourcePlacement {
   tx: number;
   ty: number;
   type: ResourceType;
+}
+
+export interface ObstaclePlacement {
+  tx: number;
+  ty: number;
+  type: ObstacleType;
+  /** Footprint size (footprint x footprint tiles occupied). */
+  footprint: number;
 }
 
 export interface DecorPlacement {
@@ -66,6 +78,7 @@ export interface MapData {
   terrain: TerrainType[][];
   hq: HqPlacement;
   resources: ResourcePlacement[];
+  obstacles: ObstaclePlacement[];
   decor: DecorPlacement[];
   buildings: BuildingPlacement[];
   builders: BuilderPlacement[];
@@ -80,16 +93,30 @@ export const RESOURCE_ASSET_KEYS: Record<ResourceType, string> = {
   infinite: 'mineral_infinite',
 };
 
-/** Asset key mapping for decor types. */
-export const DECOR_ASSET_KEYS: Record<DecorType, string> = {
+/** Asset key mapping for obstacle types. */
+export const OBSTACLE_ASSET_KEYS: Record<ObstacleType, string> = {
   'mountain-small': 'mountain_small_01',
   'mountain-medium': 'mountain_medium_01',
   'mountain-large': 'mountain_large_01',
   'volcano-small': 'volcano_small_01',
   'volcano-medium': 'volcano_medium_01',
   'rock-cluster': 'rock_cluster_small_01',
+};
+
+/** Asset key mapping for decor types. */
+export const DECOR_ASSET_KEYS: Record<DecorType, string> = {
   'bush': 'dry_bush_01',
   'sand-bump': 'sand_bump_01',
+};
+
+/** Footprint sizes for obstacle types. */
+export const OBSTACLE_FOOTPRINTS: Record<ObstacleType, number> = {
+  'mountain-small': 1,
+  'mountain-medium': 2,
+  'mountain-large': 3,
+  'volcano-small': 1,
+  'volcano-medium': 2,
+  'rock-cluster': 1,
 };
 
 /** Asset key for terrain types. */
