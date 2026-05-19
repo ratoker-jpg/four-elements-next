@@ -27,6 +27,7 @@ import {
   type ProductionCommandResult,
 } from '../systems/production.js';
 import { runSystems } from '../systems/system-runner.js';
+import { isDevPanelAllowed, buildDevPanelState, type DevPanelState, type DevPanelActions } from '../dev/dev-panel.js';
 
 /** Empty readonly map passed to render() when the spritesheet flag is OFF. */
 const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
@@ -64,6 +65,7 @@ export class GameWorld {
     control: ReadonlyControlState;
     power: ReadonlyPowerState;
   }) => void;
+  onDevPanelUpdate?: (state: DevPanelState) => void;
 
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
@@ -157,6 +159,8 @@ export class GameWorld {
       delete (window as any).__constructionTest;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).__productionTest;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__devActions;
     }
   }
 
@@ -187,6 +191,65 @@ export class GameWorld {
 
   private debugAdvanceConstruction(seconds: number): void {
     this.update(seconds);
+  }
+
+  /** Dev panel: add raw resources. Clamped to rawCap. */
+  debugAddRaw(amount: number): void {
+    const r = this.state.economy.resources;
+    r.raw = Math.min(r.raw + amount, r.rawCap);
+    this.publishUiState();
+  }
+
+  /** Dev panel: add matter. Clamped to matterCap. */
+  debugAddMatter(amount: number): void {
+    const r = this.state.economy.resources;
+    r.matter = Math.min(r.matter + amount, r.matterCap);
+    this.publishUiState();
+  }
+
+  /** Dev panel: add elementUnits to active faction element. Clamped to elementCap. */
+  debugAddElementUnits(elementUnits: number): void {
+    const r = this.state.economy.resources;
+    const faction = this.state.economy.faction;
+    r.elements[faction] = Math.min(r.elements[faction] + elementUnits, r.elementCap);
+    this.publishUiState();
+  }
+
+  /** Dev panel: fast-forward time by running systems in bounded 1-second chunks. */
+  debugFastForward(seconds: number): void {
+    const chunkSize = 1;
+    let remaining = seconds;
+    while (remaining > 0) {
+      const dt = Math.min(remaining, chunkSize);
+      this.update(dt);
+      remaining -= dt;
+    }
+  }
+
+  /** Dev panel: jump camera to HQ center. */
+  debugCameraToHq(): void {
+    const hqScreen = tileToScreen(this.state.map.hq.tx + 1.5, this.state.map.hq.ty + 1.5);
+    this.camera.x = hqScreen.x;
+    this.camera.y = hqScreen.y;
+  }
+
+  /** Dev panel: jump camera to map center. */
+  debugCameraToCenter(): void {
+    const centerScreen = tileToScreen(this.state.map.width / 2, this.state.map.height / 2);
+    this.camera.x = centerScreen.x;
+    this.camera.y = centerScreen.y;
+  }
+
+  /** Get dev panel actions object (for wiring to the panel UI). */
+  getDevPanelActions(): DevPanelActions {
+    return {
+      addRaw: (amount: number) => this.debugAddRaw(amount),
+      addMatter: (amount: number) => this.debugAddMatter(amount),
+      addElementUnits: (elementUnits: number) => this.debugAddElementUnits(elementUnits),
+      fastForward: (seconds: number) => this.debugFastForward(seconds),
+      cameraToHq: () => this.debugCameraToHq(),
+      cameraToCenter: () => this.debugCameraToCenter(),
+    };
   }
 
   private loop(now: number): void {
@@ -226,6 +289,12 @@ export class GameWorld {
     this.publishUiState();
 
     this.publishTestHooks();
+
+    // Update dev panel if allowed and callback is wired
+    if (isDevPanelAllowed() && this.onDevPanelUpdate) {
+      const devState = buildDevPanelState(this.state, this.camera.x, this.camera.y, this.camera.zoom);
+      this.onDevPanelUpdate(devState);
+    }
   }
 
   private publishUiState(): void {
@@ -358,6 +427,15 @@ export class GameWorld {
       (window as any).__productionTest = {
         startProduction: (factoryTx: number, factoryTy: number, unitType: ProducibleUnitType) =>
           this.startProduction(factoryTx, factoryTy, unitType),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__devActions = {
+        addRaw: (amount: number) => this.debugAddRaw(amount),
+        addMatter: (amount: number) => this.debugAddMatter(amount),
+        addElementUnits: (elementUnits: number) => this.debugAddElementUnits(elementUnits),
+        fastForward: (seconds: number) => this.debugFastForward(seconds),
+        cameraToHq: () => this.debugCameraToHq(),
+        cameraToCenter: () => this.debugCameraToCenter(),
       };
     }
   }

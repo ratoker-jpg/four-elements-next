@@ -4,10 +4,12 @@ import { GameWorld } from '../game/game-world.js';
 import { createEconomyHud } from '../render/economy-hud.js';
 import { createBuildMenu } from '../render/build-menu.js';
 import { createProductionPanel } from '../render/production-panel.js';
+import { isDevPanelAllowed, createDevPanel } from '../dev/dev-panel.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
   let buildMenuHotkey: ((event: KeyboardEvent) => void) | null = null;
+  let devPanelDestroy: (() => void) | null = null;
 
   return {
     id: 'game-screen',
@@ -73,6 +75,16 @@ export function createGameScreen(navigate: NavigateFn): Screen {
         productionPanel.update(state);
       };
 
+      // Dev panel (only in DEV or test mode)
+      if (isDevPanelAllowed()) {
+        const devActions = world.getDevPanelActions();
+        const devPanel = createDevPanel(devActions);
+        devPanel.element.id = 'fe-dev-panel';
+        wrapper.appendChild(devPanel.element);
+        world.onDevPanelUpdate = (state) => devPanel.update(state);
+        devPanelDestroy = devPanel.destroy;
+      }
+
       void world.init().then(() => {
         if (gameWorld !== world) return;
         world.start();
@@ -84,6 +96,11 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       if (buildMenuHotkey) {
         window.removeEventListener('keydown', buildMenuHotkey);
         buildMenuHotkey = null;
+      }
+
+      if (devPanelDestroy) {
+        devPanelDestroy();
+        devPanelDestroy = null;
       }
 
       if (gameWorld) {
