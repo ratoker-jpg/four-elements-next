@@ -20,9 +20,16 @@ export const MAP_SIZE_DEV = 32;
 // HQ
 export const HQ_FOOTPRINT = 3; // 3×3 tiles (confirmed: matches sprite_profiles)
 
+export interface SpriteProfile {
+  readonly size: readonly [number, number];
+  readonly groundOffset: number;
+  readonly screenOffsetX?: number;
+  readonly screenOffsetY?: number;
+}
+
 // Sprite rendering profiles (from Sandbox sprite_profiles.js, adapted)
 export const SPRITE_PROFILES = {
-  hq_base: { size: [172, 172], groundOffset: 0 },
+  hq_base: { size: [200, 200], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
   mineral_small: { size: [42, 42], groundOffset: -12 },
   mineral_medium: { size: [58, 58], groundOffset: 0 },
   mineral_large: { size: [74, 74], groundOffset: 0 },
@@ -37,13 +44,13 @@ export const SPRITE_PROFILES = {
   sand_bump_01: { size: [50, 28], groundOffset: -8 },
   builder_base: { size: [76, 76], groundOffset: 20 },
   harvester_base: { size: [82, 82], groundOffset: 16 },
-  building_separator: { size: [132, 132], groundOffset: 0 },
-  building_raw_storage: { size: [138, 138], groundOffset: 0 },
-  building_matter_storage: { size: [136, 136], groundOffset: 0 },
-  building_power_plant: { size: [124, 124], groundOffset: 0 },
-  building_command_relay: { size: [96, 96], groundOffset: 0 },
-  building_units_factory: { size: [142, 142], groundOffset: 0 },
-} as const;
+  building_separator: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+  building_raw_storage: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+  building_matter_storage: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+  building_power_plant: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+  building_command_relay: { size: [65, 65], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+  building_units_factory: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
+} as const satisfies Record<string, SpriteProfile>;
 
 // Terrain rendering
 export const TERRAIN_COLORS: Record<string, string> = {

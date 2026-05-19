@@ -2,6 +2,7 @@
 
 import { getBuildingFootprint } from '../config/buildings.js';
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
+import type { SpriteProfile } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
 import type { AssetMeta } from '../core/assets.js';
@@ -101,14 +102,16 @@ function getFullCanvasDestinationRect(
   baseY: number,
   zoom: number,
 ): SpriteDestinationRect {
-  const profile = SPRITE_PROFILES[profileKey];
+  const profile: SpriteProfile = SPRITE_PROFILES[profileKey];
   const maxW = profile.size[0] * zoom;
   const maxH = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
+  const screenOffsetX = profile.screenOffsetX ?? 0;
+  const screenOffsetY = profile.screenOffsetY ?? 0;
   const { drawWidth, drawHeight } = containFit(sprite.naturalWidth, sprite.naturalHeight, maxW, maxH);
   return {
-    x: cx - drawWidth / 2,
-    y: baseY - drawHeight - offY,
+    x: cx - drawWidth / 2 + screenOffsetX,
+    y: baseY - drawHeight - offY + screenOffsetY,
     w: drawWidth,
     h: drawHeight,
   };
