@@ -6,6 +6,7 @@
  */
 
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT } from '../core/constants.js';
+import type { SpriteProfile } from '../core/constants.js';
 import type { AssetMeta } from '../core/assets.js';
 
 // ── Toggle state ──────────────────────────────────────────────────────
@@ -48,12 +49,14 @@ export function drawBuildingDebugOverlay(
   const { assetKey, profileKey, sprite, meta, cx, cy, zoom, footprint, isHq } = info;
   const effectiveFootprint = isHq ? HQ_FOOTPRINT : footprint;
   const baseY = cy + (TILE_H / 2) * effectiveFootprint * zoom;
-  const profile = SPRITE_PROFILES[profileKey];
+  const profile: SpriteProfile = SPRITE_PROFILES[profileKey];
 
   // Full-canvas destination rect (what would be drawn without alpha crop)
   const maxW = profile.size[0] * zoom;
   const maxH = profile.size[1] * zoom;
   const offY = profile.groundOffset * zoom;
+  const screenOffsetX = profile.screenOffsetX ?? 0;
+  const screenOffsetY = profile.screenOffsetY ?? 0;
   const canvasAspect = sprite.naturalWidth / sprite.naturalHeight;
   const boxAspect = maxW / maxH;
   let fullW: number, fullH: number;
@@ -64,8 +67,8 @@ export function drawBuildingDebugOverlay(
     fullH = maxH;
     fullW = maxH * canvasAspect;
   }
-  const fullX = cx - fullW / 2;
-  const fullY = baseY - fullH - offY;
+  const fullX = cx - fullW / 2 + screenOffsetX;
+  const fullY = baseY - fullH - offY + screenOffsetY;
 
   // Visible destination rect (alpha-bounds crop mapped into full rect)
   let visX = fullX, visY = fullY, visW = fullW, visH = fullH;
@@ -130,7 +133,7 @@ export function drawBuildingDebugOverlay(
     meta
       ? `alpha: (${meta.visibleX},${meta.visibleY}) ${meta.visibleW}x${meta.visibleH}`
       : 'alpha: N/A',
-    `profile: [${profile.size[0]},${profile.size[1]}] off=${profile.groundOffset}`,
+    `profile: [${profile.size[0]},${profile.size[1]}] off=${profile.groundOffset} screen=[${screenOffsetX},${screenOffsetY}]`,
     `full rect: [${fullX.toFixed(1)},${fullY.toFixed(1)} ${fullW.toFixed(1)}x${fullH.toFixed(1)}]`,
     meta
       ? `vis rect: [${visX.toFixed(1)},${visY.toFixed(1)} ${visW.toFixed(1)}x${visH.toFixed(1)}]`
