@@ -54,9 +54,9 @@ function createTestState(
 // ── createInitialHarvesters ──────────────────────────────────────────
 
 describe('createInitialHarvesters', () => {
-  it('creates at least one harvester', () => {
+  it('creates exactly two harvesters', () => {
     const state = createState();
-    expect(state.harvesters.length).toBeGreaterThanOrEqual(1);
+    expect(state.harvesters).toHaveLength(2);
   });
 
   it('places harvester near HQ', () => {
@@ -530,34 +530,9 @@ describe('tickHarvesting waiting-full-storage phase', () => {
 // ── findNearestDropoff ────────────────────────────────────────────────
 
 describe('findNearestDropoff', () => {
-  it('prefers nearest raw-storage over HQ', () => {
+  it('prefers HQ fallback when no raw-storage exists', () => {
     const state = createState();
-    // Default map has one raw-storage adjacent to HQ
-    const rawStorage = state.map.buildings.find((b) => b.type === 'raw-storage')!;
-    expect(rawStorage).toBeDefined();
-
-    // Place harvester closer to raw-storage than to HQ
-    const harvester: HarvesterState = {
-      tx: rawStorage.tx + 1, // at raw-storage center
-      ty: rawStorage.ty + 1,
-      phase: 'idle',
-      targetNodeIndex: -1,
-      gatherProgress: 0,
-      carry: 0,
-      ...DEFAULT_DROPOFF,
-    };
-    const dropoff = findNearestDropoff(harvester, state.map);
-    // Should be raw-storage center, not HQ center
-    const rawStorageCenterTx = rawStorage.tx + 1;
-    const rawStorageCenterTy = rawStorage.ty + 1;
-    expect(dropoff.tx).toBe(rawStorageCenterTx);
-    expect(dropoff.ty).toBe(rawStorageCenterTy);
-  });
-
-  it('falls back to HQ when no raw-storage exists', () => {
-    const state = createState();
-    // Remove all raw-storage buildings
-    state.map.buildings = state.map.buildings.filter((b) => b.type !== 'raw-storage');
+    // New start state has no raw-storage — verify fallback to HQ
     const harvester: HarvesterState = {
       tx: 10,
       ty: 10,
@@ -571,6 +546,31 @@ describe('findNearestDropoff', () => {
     // Should be HQ center
     expect(dropoff.tx).toBe(state.map.hq.tx + 1.5);
     expect(dropoff.ty).toBe(state.map.hq.ty + 1.5);
+  });
+
+  it('prefers nearest raw-storage over HQ when raw-storage exists', () => {
+    const state = createState();
+    // Manually add a raw-storage building to the map
+    const rawStorageTx = state.map.hq.tx + 10;
+    const rawStorageTy = state.map.hq.ty + 10;
+    state.map.buildings.push({ tx: rawStorageTx, ty: rawStorageTy, type: 'raw-storage' });
+
+    // Place harvester closer to raw-storage than to HQ
+    const harvester: HarvesterState = {
+      tx: rawStorageTx + 1, // at raw-storage center
+      ty: rawStorageTy + 1,
+      phase: 'idle',
+      targetNodeIndex: -1,
+      gatherProgress: 0,
+      carry: 0,
+      ...DEFAULT_DROPOFF,
+    };
+    const dropoff = findNearestDropoff(harvester, state.map);
+    // Should be raw-storage center, not HQ center
+    const rawStorageCenterTx = rawStorageTx + 1;
+    const rawStorageCenterTy = rawStorageTy + 1;
+    expect(dropoff.tx).toBe(rawStorageCenterTx);
+    expect(dropoff.ty).toBe(rawStorageCenterTy);
   });
 });
 

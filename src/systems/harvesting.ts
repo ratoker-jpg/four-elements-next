@@ -88,7 +88,7 @@ export function createResourceNodeStates(
   }));
 }
 
-/** Create initial harvesters near HQ. Places one Harvester adjacent to HQ. */
+/** Create initial harvesters near HQ. Places two Harvesters adjacent to HQ. */
 export function createInitialHarvesters(
   hq: { readonly tx: number; readonly ty: number },
   occupied: ReadonlySet<string>,
@@ -106,12 +106,14 @@ export function createInitialHarvesters(
     }
   }
 
+  const harvesters: HarvesterState[] = [];
   for (const candidate of candidates) {
+    if (harvesters.length >= 2) break;
     if (candidate.tx < 0 || candidate.ty < 0) continue;
     const key = `${candidate.tx},${candidate.ty}`;
     if (occupied.has(key)) continue;
     // Place harvester at center of tile
-    return [{
+    harvesters.push({
       tx: candidate.tx + 0.5,
       ty: candidate.ty + 0.5,
       phase: 'idle',
@@ -120,20 +122,24 @@ export function createInitialHarvesters(
       carry: 0,
       targetDropoffTx: 0,
       targetDropoffTy: 0,
-    }];
+    });
   }
 
-  // Fallback: place right outside HQ even if overlapping
-  return [{
-    tx: hq.tx + HQ_FOOTPRINT + 0.5,
-    ty: hq.ty + 0.5,
-    phase: 'idle',
-    targetNodeIndex: -1,
-    gatherProgress: 0,
-    carry: 0,
-    targetDropoffTx: 0,
-    targetDropoffTy: 0,
-  }];
+  // Fallback: if not enough candidates found, place right outside HQ
+  while (harvesters.length < 2) {
+    harvesters.push({
+      tx: hq.tx + HQ_FOOTPRINT + 0.5 + harvesters.length,
+      ty: hq.ty + 0.5,
+      phase: 'idle',
+      targetNodeIndex: -1,
+      gatherProgress: 0,
+      carry: 0,
+      targetDropoffTx: 0,
+      targetDropoffTy: 0,
+    });
+  }
+
+  return harvesters;
 }
 
 // ── Tick ─────────────────────────────────────────────────────────────

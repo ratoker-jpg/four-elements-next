@@ -203,43 +203,22 @@ describe('tickEconomy', () => {
 });
 
 describe('mapgen integration — buildings in MapData', () => {
-  it('generated map has one of each building type', async () => {
+  it('generated map has zero starting buildings', async () => {
     const { generateMap } = await import('../../src/game/mapgen.js');
     const map = generateMap(48, 48, 'cyan');
-    expect(map.buildings.filter((b) => b.type === 'separator')).toHaveLength(1);
-    expect(map.buildings.filter((b) => b.type === 'raw-storage')).toHaveLength(1);
-    expect(map.buildings.filter((b) => b.type === 'power-plant')).toHaveLength(1);
-    expect(map.buildings.filter((b) => b.type === 'command-relay')).toHaveLength(1);
-    expect(map.buildings).toHaveLength(4);
+    expect(map.buildings).toHaveLength(0);
+    expect(map.buildings.filter((b) => b.type === 'separator')).toHaveLength(0);
+    expect(map.buildings.filter((b) => b.type === 'raw-storage')).toHaveLength(0);
+    expect(map.buildings.filter((b) => b.type === 'power-plant')).toHaveLength(0);
+    expect(map.buildings.filter((b) => b.type === 'command-relay')).toHaveLength(0);
   });
 
-  it('buildings are placed adjacent to HQ and do not overlap resources', async () => {
+  it('no initial separator/raw-storage/power-plant/command-relay', async () => {
     const { generateMap } = await import('../../src/game/mapgen.js');
-    const { HQ_FOOTPRINT } = await import('../../src/core/constants.js');
-    const { getBuildingFootprint } = await import('../../src/config/buildings.js');
     const map = generateMap(48, 48, 'cyan');
-    const sep = map.buildings.find((b) => b.type === 'separator')!;
-    const sto = map.buildings.find((b) => b.type === 'raw-storage')!;
-    const pp = map.buildings.find((b) => b.type === 'power-plant')!;
-    const cr = map.buildings.find((b) => b.type === 'command-relay')!;
-
-    expect(sep.tx).toBe(map.hq.tx + HQ_FOOTPRINT);
-    expect(sep.ty).toBe(map.hq.ty);
-    expect(sto.tx).toBe(map.hq.tx);
-    expect(sto.ty).toBe(map.hq.ty + HQ_FOOTPRINT);
-    expect(pp.tx).toBe(map.hq.tx + HQ_FOOTPRINT);
-    expect(pp.ty).toBe(map.hq.ty + HQ_FOOTPRINT);
-    expect(cr.tx).toBe(map.hq.tx);
-    expect(cr.ty).toBe(map.hq.ty - getBuildingFootprint('command-relay'));
-
+    const disallowed = new Set(['separator', 'raw-storage', 'power-plant', 'command-relay']);
     for (const b of map.buildings) {
-      const footprint = getBuildingFootprint(b.type);
-      for (let dy = 0; dy < footprint; dy++) {
-        for (let dx = 0; dx < footprint; dx++) {
-          const overlap = map.resources.some((r) => r.tx === b.tx + dx && r.ty === b.ty + dy);
-          expect(overlap).toBe(false);
-        }
-      }
+      expect(disallowed.has(b.type)).toBe(false);
     }
   });
 });
