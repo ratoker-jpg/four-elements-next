@@ -100,55 +100,63 @@ Accepted visual targets:
 
 Asset-preview sandbox remains the preferred QA tool for future candidate assets.
 
-## 6. Next gameplay changes after building asset checkpoint
+## 6. Post-checkpoint gameplay PRs — completed
 
-These are NOT part of the building asset checkpoint and should be implemented as separate PRs.
+These gameplay/system PRs were planned after the building asset checkpoint and are now complete.
 
-### BUILDING-PLACEMENT-01 — enforce one-tile gap between buildings
+### PR #54 — BUILDING-PLACEMENT-01: enforce one-tile gap between buildings
 
-Goal:
-- Buildings must not be placed directly adjacent to each other.
-- New buildings should require a one-tile empty buffer around their footprint.
+Status: implemented and merged.
 
-Rule:
-- A building footprint is blocked.
-- The one-tile perimeter around the footprint is also reserved for spacing.
-- Another building may not occupy or overlap that reserved spacing.
+Result:
+- Auto-placement requires a one-tile empty buffer around building/construction-site footprints.
+- New buildings and construction sites do not place directly adjacent to HQ, buildings, or construction sites.
+- This is not implemented as a global occupied-set rule for resources/decor/builders.
+- Resources/decor/builders still block actual footprint cells, not the spacing perimeter.
 
 Important:
-- This should apply to auto-placement logic.
-- This should not change visual sprite profiles.
-- This should not change building PNG assets.
-- This should not change construction-site visuals unless needed for debug only.
+- Building PNG assets were not changed.
+- Building render profiles were not changed.
+- This was a gameplay/system PR, not an asset PR.
 
-### START-STATE-01 — simplify player starting state
+### PR #55 — START-STATE-01: simplify player starting state
 
-Goal:
-- Remove all extra starting buildings.
-- Player starts only with HQ/base.
+Status: implemented and merged.
 
-Desired initial player units:
-- 2 harvesters.
-- 1 builder.
-- 1 combat unit later, when combat unit exists.
-
-Current note:
-- The combat unit does not exist yet / is not ready yet, so do not add it now.
-- For the immediate implementation, start with:
-  - HQ/base only as building;
+Result:
+- Removed all extra starting buildings.
+- Player starts with HQ/base only as building.
+- Player starts with:
   - 2 harvesters;
   - 1 builder.
+- No starting separator.
+- No starting raw-storage.
+- No starting power-plant.
+- No starting command-relay.
+- Harvester delivery falls back to HQ when no raw-storage exists.
+- If raw-storage is built later, harvester delivery should prefer it where appropriate.
+- `buildOccupiedSet()` now treats buildings and construction sites as full footprint areas, not only origin tiles.
 
-Important:
-- Do not remove resource nodes.
-- Do not change building assets.
-- Do not change render profiles.
-- Do not change economy balance unless required by tests.
+Current starting values after PR #55:
+- Buildings: 0 extra buildings beyond HQ/base.
+- Builders: 1.
+- Harvesters: 2.
+- Raw: `0/200`.
+- Matter: `100/200`.
+- Active faction element: `3/10`.
+- Power: net `+2`.
+- Control: `3/10`.
 
-## 7. Recommended next PR order
+## 7. Current next-step note
 
-1. `BUILDING-PLACEMENT-01` — one-tile building spacing.
-2. `START-STATE-01` — HQ-only start with 2 harvesters + 1 builder.
-3. Later: add first combat unit to starting state after combat unit is implemented and visually ready.
+Do not treat `BUILDING-PLACEMENT-01` or `START-STATE-01` as pending work. They are complete.
 
-Keep these as gameplay/system PRs, not asset PRs.
+Possible future gameplay work must be scoped separately. Examples:
+
+- first combat unit after combat visuals/gameplay are ready;
+- civil loop balance tuning;
+- map generation improvements;
+- asset pipeline tooling;
+- combat visual architecture.
+
+Keep future work as separate scoped PRs. Do not reopen the accepted building asset block unless there is clear new evidence and an explicit decision.
