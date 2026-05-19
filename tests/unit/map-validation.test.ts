@@ -238,4 +238,16 @@ describe('validateMap', () => {
     expect(report.ok).toBe(true);
     expect(report.startCoreBlockedTiles).toBe(0);
   });
+
+  it('rejectedClusters defaults to 0 when not provided', () => {
+    const map = createMinimalMap();
+    const report = validateMap(map, 42);
+    expect(report.rejectedClusters).toBe(0);
+  });
+
+  it('rejectedClusters is passed through to the report', () => {
+    const map = createMinimalMap();
+    const report = validateMap(map, 42, 5);
+    expect(report.rejectedClusters).toBe(5);
+  });
 });

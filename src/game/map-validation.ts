@@ -206,7 +206,7 @@ export function countStartZoneBlockedTiles(map: MapData): number {
  * 6. No resource overlaps an obstacle.
  * 7. No obstacle cluster fully encloses start or center (approximated by straight-line checks).
  */
-export function validateMap(map: MapData, seed: number): MapValidationReport {
+export function validateMap(map: MapData, seed: number, rejectedClusters: number = 0): MapValidationReport {
   const warnings: string[] = [];
   const errors: string[] = [];
 
@@ -290,7 +290,7 @@ export function validateMap(map: MapData, seed: number): MapValidationReport {
     centerReachable,
     infiniteReachable,
     startCoreBlockedTiles,
-    rejectedClusters: 0, // filled by mapgen
+    rejectedClusters,
     warnings,
     errors,
   };

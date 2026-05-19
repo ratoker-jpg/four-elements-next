@@ -68,7 +68,7 @@ describe('construction system', () => {
     expect(map.constructionSites).toHaveLength(1);
   });
 
-  it('derives occupied tiles from HQ, buildings, resources, decor, sites, and builder', () => {
+  it('derives occupied tiles from HQ, buildings, resources, obstacles, sites, and builder', () => {
     const { map, economy } = createBaseline();
     // Manually add a building to test occupied tile derivation
     map.buildings.push({ tx: map.hq.tx + HQ_FOOTPRINT + 1, ty: map.hq.ty, type: 'separator' });
@@ -86,17 +86,21 @@ describe('construction system', () => {
     expect(occupied.has(`${site.tx},${site.ty}`)).toBe(true);
     expect(occupied.has(`${site.tx + siteFootprint - 1},${site.ty + siteFootprint - 1}`)).toBe(true);
     expect(occupied.has(`${map.resources[0]!.tx},${map.resources[0]!.ty}`)).toBe(true);
-    expect(occupied.has(`${map.decor[0]!.tx},${map.decor[0]!.ty}`)).toBe(true);
+    // Decor is non-blocking — should NOT appear in the occupied set
+    if (map.decor.length > 0) {
+      expect(occupied.has(`${map.decor[0]!.tx},${map.decor[0]!.ty}`)).toBe(false);
+    }
   });
 
   it('returns no placement when every tile within radius 15 is blocked', () => {
     const { map } = createBaseline();
     const builder = map.builders[0]!;
+    // Block all tiles with obstacles (blocking) — decor is non-blocking and would not prevent placement
     for (let ty = builder.ty - AUTO_BUILD_MAX_RADIUS; ty <= builder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
       for (let tx = builder.tx - AUTO_BUILD_MAX_RADIUS; tx <= builder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
         if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
         if (tx === builder.tx && ty === builder.ty) continue;
-        map.decor.push({ tx, ty, type: 'bush' });
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
       }
     }
 
@@ -302,12 +306,13 @@ describe('multi-builder construction', () => {
     const secondBuilderTy = firstBuilder.ty;
     map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
 
-    // Block all tiles within AUTO_BUILD_MAX_RADIUS of the first builder with decor
+    // Block all tiles within AUTO_BUILD_MAX_RADIUS of the first builder with obstacles
+    // (decor is non-blocking and would not prevent placement)
     for (let ty = firstBuilder.ty - AUTO_BUILD_MAX_RADIUS; ty <= firstBuilder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
       for (let tx = firstBuilder.tx - AUTO_BUILD_MAX_RADIUS; tx <= firstBuilder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
         if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
         if (tx === firstBuilder.tx && ty === firstBuilder.ty) continue;
-        map.decor.push({ tx, ty, type: 'bush' });
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
       }
     }
     // Second builder is far away and should have open tiles
@@ -335,13 +340,14 @@ describe('multi-builder construction', () => {
     const secondBuilderTy = firstBuilder.ty;
     map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
 
-    // Block all tiles around BOTH builders
+    // Block all tiles around BOTH builders with obstacles
+    // (decor is non-blocking and would not prevent placement)
     for (const builder of map.builders) {
       for (let ty = builder.ty - AUTO_BUILD_MAX_RADIUS; ty <= builder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
         for (let tx = builder.tx - AUTO_BUILD_MAX_RADIUS; tx <= builder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
           if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
           if (tx === builder.tx && ty === builder.ty) continue;
-          map.decor.push({ tx, ty, type: 'bush' });
+          map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
         }
       }
     }
@@ -449,7 +455,7 @@ describe('building spacing — one-tile gap', () => {
     expect(isFootprintWithSpacingBuildable(map, occupied, 0, 18, 2)).toBe(true);
   });
 
-  it('resources and decor block footprint but not spacing perimeter', () => {
+  it('resources block footprint but not spacing perimeter', () => {
     const map = createSpacingMap();
     // Place a resource on the perimeter ring of a candidate position (8,4)
     // Perimeter of (8,4) footprint 2 → (7,3)-(10,6)
@@ -464,6 +470,30 @@ describe('building spacing — one-tile gap', () => {
     map.resources.push({ tx: 8, ty: 4, type: 'small' });
     const occupied2 = buildOccupiedTileSet(map);
     expect(isFootprintWithSpacingBuildable(map, occupied2, 8, 4, 2)).toBe(false);
+  });
+
+  it('decor does NOT block building placement (non-blocking)', () => {
+    const map = createSpacingMap();
+    // Place decor on a candidate footprint position
+    map.decor.push({ tx: 8, ty: 4, type: 'bush' });
+    map.decor.push({ tx: 9, ty: 4, type: 'sand-bump' });
+    map.decor.push({ tx: 8, ty: 5, type: 'bush' });
+    map.decor.push({ tx: 9, ty: 5, type: 'sand-bump' });
+    const occupied = buildOccupiedTileSet(map);
+
+    // Decor is non-blocking — building should be placeable even with decor on footprint
+    expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(true);
+    expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
+  });
+
+  it('decor does NOT block spacing perimeter', () => {
+    const map = createSpacingMap();
+    // Place decor on the perimeter ring of a candidate position (8,4)
+    map.decor.push({ tx: 7, ty: 4, type: 'bush' });
+    const occupied = buildOccupiedTileSet(map);
+
+    // Decor on perimeter should not block spacing → accepted
+    expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
   });
 
   it('builders do not block spacing perimeter', () => {
@@ -487,6 +517,7 @@ describe('building spacing — one-tile gap', () => {
     });
     map.resources.push({ tx: 0, ty: 0, type: 'small' });
     map.decor.push({ tx: 1, ty: 1, type: 'bush' });
+    map.obstacles.push({ tx: 2, ty: 2, type: 'rock-cluster', footprint: 1 });
 
     const buildingTiles = buildBuildingTileSet(map);
 
@@ -499,9 +530,10 @@ describe('building spacing — one-tile gap', () => {
     // Construction site tiles should be present (raw-storage at (12,10) footprint 2)
     expect(buildingTiles.has('12,10')).toBe(true);
     expect(buildingTiles.has('13,11')).toBe(true);
-    // Resources, decor, and builders should NOT be in building tiles
+    // Resources, decor, obstacles, and builders should NOT be in building tiles
     expect(buildingTiles.has('0,0')).toBe(false); // resource
     expect(buildingTiles.has('1,1')).toBe(false); // decor
+    expect(buildingTiles.has('2,2')).toBe(false); // obstacle
     expect(buildingTiles.has('15,15')).toBe(false); // builder (no overlap with any building/site)
   });
 

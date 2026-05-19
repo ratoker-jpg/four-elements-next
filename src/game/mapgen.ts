@@ -34,49 +34,64 @@ function mulberry32(seed: number): () => number {
 
 // ── Main generator ───────────────────────────────────────────────────
 
+/** Maximum number of generation attempts before giving up. */
+const MAX_GENERATION_ATTEMPTS = 50;
+
 export function generateMap(
   width: number = MAP_SIZE_STANDARD,
   height: number = MAP_SIZE_STANDARD,
   faction: FactionId = 'cyan',
   seed: number = 42,
 ): MapData {
-  const rand = mulberry32(seed);
-  const terrain = generateTerrain(width, height, rand);
-  const occupied = new Set<string>();
-  const hq = placeHq(width, height, faction, occupied);
-  const builders = placeBuildersNearHq(width, height, hq, occupied);
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+    const currentSeed = seed + attempt;
+    const rand = mulberry32(currentSeed);
+    const terrain = generateTerrain(width, height, rand);
+    const occupied = new Set<string>();
+    const hq = placeHq(width, height, faction, occupied);
+    const builders = placeBuildersNearHq(width, height, hq, occupied);
 
-  // Place resources by distance zones
-  const resources = placeResources(width, height, hq, rand, occupied);
+    // Place resources by distance zones
+    const resources = placeResources(width, height, hq, rand, occupied);
 
-  // Place obstacle clusters away from start zone
-  const obstaclesResult = placeObstacles(width, height, hq, rand, occupied);
+    // Place obstacle clusters away from start zone
+    const obstaclesResult = placeObstacles(width, height, hq, rand, occupied);
 
-  // Place non-blocking decor
-  const decor = placeDecor(width, height, hq, rand, occupied);
+    // Place non-blocking decor
+    const decor = placeDecor(width, height, hq, rand, occupied);
 
-  const map: MapData = {
-    width,
-    height,
-    terrain,
-    hq,
-    resources,
-    obstacles: obstaclesResult.obstacles,
-    decor,
-    buildings: [],
-    builders,
-    constructionSites: [],
-  };
+    const map: MapData = {
+      width,
+      height,
+      terrain,
+      hq,
+      resources,
+      obstacles: obstaclesResult.obstacles,
+      decor,
+      buildings: [],
+      builders,
+      constructionSites: [],
+    };
 
-  // Validate the generated map
-  const report = validateMap(map, seed);
-  if (!report.ok) {
-    // Retry with incremented seed if validation fails
-    // (In practice, seed 42 on 48x48 passes, but this guards edge cases)
-    return generateMap(width, height, faction, seed + 1);
+    // Validate the generated map
+    const report = validateMap(map, currentSeed, obstaclesResult.rejectedClusters);
+    if (report.ok) {
+      return map;
+    }
+
+    // If this was the last attempt, throw with diagnostic info
+    if (attempt === MAX_GENERATION_ATTEMPTS - 1) {
+      throw new Error(
+        `Map generation failed after ${MAX_GENERATION_ATTEMPTS} attempts. ` +
+        `seed=${seed}, size=${width}x${height}, ` +
+        `errors: [${report.errors.join('; ')}]`,
+      );
+    }
+    // Otherwise, retry with next seed
   }
 
-  return map;
+  // Unreachable, but satisfies TypeScript return analysis
+  throw new Error('Map generation failed: unexpected loop exit');
 }
 
 // ── Terrain generation ───────────────────────────────────────────────
