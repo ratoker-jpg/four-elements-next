@@ -8,8 +8,9 @@ Read this file before starting a new AI-assisted task. Treat it as the single so
 
 - Repo: `ratoker-jpg/four-elements-next`
 - Main branch: `main`
-- Current project mode: early TypeScript/Vite RTS project, not the old sandbox monolith
+- Current project mode: early TypeScript/Vite browser RTS project, not the old sandbox monolith
 - Old `glm-game-sandbox` / legacy sandbox knowledge may be useful as historical context only, but must not be assumed as current code structure
+- `src/main.ts` is wiring only; do not use old `src/main.js` assumptions
 
 ## Core rule
 
@@ -21,6 +22,7 @@ First classify the task:
 2. Stage implementation from an approved architecture audit — use implementation prompt, not a new full audit.
 3. New or risky architecture area — run Phase 1 audit first.
 4. Unclear or changed assumptions — stop and re-audit.
+5. Asset/tooling experiment — keep output as candidate-stage until it passes the asset gates in `docs/ASSET_POLICY.md`.
 
 ## Roles
 
@@ -34,7 +36,7 @@ First classify the task:
 
 ### GLM
 
-- Used for larger code changes, architecture stages, and implementation PRs.
+- Primary executor for larger code changes, architecture stages, and implementation PRs.
 - Must follow the requested phase exactly.
 - Must not improvise outside scope.
 - Must open PRs against `main` unless told otherwise.
@@ -44,6 +46,7 @@ First classify the task:
 - Use sparingly.
 - Prefer for read-only QA, local reproduction, asset-only operations, or small approved fixes when permissions/tooling make it faster.
 - Do not use Codex as the default path for every task.
+- Do not use Codex just to run external asset experiments when a local/doc process is enough.
 
 ## Standard two-phase workflow
 
@@ -111,9 +114,89 @@ Run a second audit only if one of these happens:
 - GLM starts using old sandbox architecture or wrong repository structure.
 - Branch/PR history becomes dirty enough that the diff is no longer trustworthy.
 
+## Current project status — 2026-05-19
+
+### Closed / accepted
+
+- PR #51 — `ASSET-BUILDINGS-01`: replaced production building PNGs for all 4 factions.
+- PR #52 — `ASSET-BUILDINGS-01`: tuned building render profiles and placement offsets.
+- PR #54 — `BUILDING-PLACEMENT-01`: added one-tile gap for auto-placed buildings.
+- PR #55 — `START-STATE-01`: simplified initial base state.
+
+### Current gameplay baseline
+
+- Start state: HQ/base only as the starting building.
+- Starting units: 2 harvesters + 1 builder.
+- No extra starting buildings: no separator, no raw-storage, no power-plant, no command-relay.
+- Harvester raw delivery falls back to HQ when no raw-storage exists.
+- If a raw-storage is later built, harvester delivery should prefer it where appropriate.
+- Buildings and construction sites occupy their full footprint in occupied-tile checks.
+- New construction auto-placement enforces one-tile gap between buildings/sites.
+
+### Current starting values
+
+- Buildings: 0 extra buildings beyond HQ/base.
+- Builders: 1.
+- Harvesters: 2.
+- Raw: `0/200`.
+- Matter: `100/200`.
+- Active faction element: `3/10`.
+- Power: HQ supply only, net `+2`.
+- Control: `3/10`.
+
+### Closed building asset block
+
+The building asset block is accepted and should not be reopened without a separate scoped decision.
+
+Do not change these without explicit approval:
+
+- production building PNGs;
+- building sprite profiles;
+- `containFit` math;
+- alpha-bounds logic;
+- building render math;
+- accepted offsets from `docs/project/BUILDING_ASSETS_CHECKPOINT_20260519.md`.
+
+Future candidate assets should go through asset preview and the asset gates in `docs/ASSET_POLICY.md`.
+
+## Current architecture rules
+
+Read before advising or implementing project work:
+
+1. `docs/AI_WORKFLOW_CONTRACT.md`
+2. `docs/ARCHITECTURE_RULES.md`
+3. `docs/architecture/NEXT_ARCHITECTURE_OVERVIEW.md`
+4. `docs/ASSET_POLICY.md`
+5. `docs/project/BUILDING_ASSETS_CHECKPOINT_20260519.md`
+
+Core rules:
+
+- Systems do not import render/screens.
+- Render does not mutate gameplay state.
+- `GameWorld` is thin glue.
+- `GameState` is the mutable aggregate.
+- `main.ts` is wiring only.
+- Do not propose ECS/event bus/DI rewrite unless explicitly approved.
+
+## AI output gates
+
+AI can assist with docs, tests, audits, scoped patches, asset candidates, VFX candidates, and QA summaries.
+
+AI output must not bypass project gates:
+
+- Code changes require diff review and relevant tests.
+- Asset output stays candidate-stage until cleanup, normalization, manifest/index metadata when applicable, preview, and manual approval.
+- External AI/tool outputs must not be copied directly into production runtime paths.
+- License and source status must be recorded for external assets, audio, workflows, and generated candidates.
+
+For details, see:
+
+- `docs/ASSET_POLICY.md`
+- `docs/ai/AI_TOOLING_AND_SKILLS_POLICY.md`
+
 ## PR strategy
 
-Default for this repo: one Big Audit, separate stage PRs.
+Default for this repo: one Big Audit, separate stage PRs for broad architecture work.
 
 Why:
 
@@ -171,83 +254,6 @@ Before recommending merge:
 9. Diff does not include already-merged previous-stage changes.
 10. If branch is diverged or dirty, request clean rebase/recreate before merge.
 
-## Current architecture epic: CIVIL-SANDBOX-ARCH-01
-
-Goal: reach the Civil Sandbox Checkpoint.
-
-Player should be able to:
-
-- start game;
-- see map;
-- gather Raw;
-- process Raw into Matter and Element;
-- build civil base;
-- expand Power and Control;
-- produce Builder and Harvester;
-- play a stable non-combat base loop.
-
-Out of scope:
-
-- combat;
-- enemy AI;
-- HQ tier upgrades;
-- tech tree;
-- save/load;
-- major visual polish;
-- renderer rewrite.
-
-### Stage A — STORAGE-SPLIT-01
-
-Status: implemented and merged as PR #36.
-
-Purpose:
-
-- Replace generic `storage` with:
-  - `raw-storage`
-  - `matter-storage`
-- `raw-storage` increases Raw cap only.
-- `matter-storage` increases Matter cap and Element cap.
-
-### Stage B — HARVESTER-DROPOFF-01
-
-Status: implemented and merged as PR #37.
-
-Purpose:
-
-- Rename `moving-to-hq` to `moving-to-dropoff`.
-- Harvester delivers Raw to nearest completed `raw-storage`, fallback HQ.
-- Add `waiting-full-storage`.
-- Preserve carry and prevent Raw loss when Raw cap is full.
-
-Important PR hygiene issue encountered and resolved:
-
-- PR #37 was initially based on a dirty/diverged branch and included already-merged Stage A changes.
-- It was recreated from latest `main` and merged only after the diff was clean.
-
-### Stage C — MULTI-BUILDER + HQ POWER
-
-Planned next.
-
-Purpose:
-
-- Let any available builder construct, not only the first builder.
-- Make produced builders useful.
-- Add small HQ base power if still desired by the approved CIVIL-SANDBOX-ARCH-01 audit.
-
-No new full audit needed if assumptions still hold. Use approved Big Audit stage implementation prompt.
-
-### Stage D — RELAY FOOTPRINT / BALANCE / HUD POLISH
-
-Planned, only after Stage C.
-
-Possible scope:
-
-- Command Relay footprint 2x2 → 1x1 if still desired.
-- Balance tuning.
-- Raw full / cap warning in HUD.
-
-Run audit only if footprint/occupancy changes look risky.
-
 ## Prompt templates
 
 ### New risky architecture area
@@ -294,12 +300,14 @@ Do not:
 
 - run a new full audit before every stage when a Big Audit already exists;
 - merge dirty/diverged branches;
-- mix visual polish into civil architecture stages;
-- mix combat/AI into civil sandbox work;
+- mix visual polish into architecture stages;
+- mix combat/AI into civil sandbox work without a scoped decision;
 - change package files unless explicitly required;
 - commit `dist/` or generated build output;
 - silently change balance values during structural stages;
-- use old sandbox file paths like `src/main.js` as if they existed in `four-elements-next`.
+- use old sandbox file paths like `src/main.js` as if they existed in `four-elements-next`;
+- copy AI-generated assets directly into production asset paths;
+- treat external skills/plugins/services as authoritative project workflow.
 
 ## Living document rule
 
