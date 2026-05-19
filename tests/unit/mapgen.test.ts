@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { generateMap } from '../../src/game/mapgen.js';
-import { HQ_FOOTPRINT, MAP_SIZE_STANDARD, START_CORE_RADIUS } from '../../src/core/constants.js';
-import { OBSTACLE_FOOTPRINTS } from '../../src/game/map-types.js';
+import {
+  HQ_FOOTPRINT,
+  MAP_SIZE_STANDARD,
+  START_CORE_RADIUS,
+  START_ECONOMY_RADIUS,
+} from '../../src/core/constants.js';
+import { OBSTACLE_FOOTPRINTS, RESOURCE_FOOTPRINTS } from '../../src/game/map-types.js';
 
 describe('mapgen', () => {
   it('returns correct dimensions', () => {
@@ -18,33 +23,44 @@ describe('mapgen', () => {
     expect(map.hq.ty + HQ_FOOTPRINT).toBeLessThanOrEqual(map.height);
   });
 
-  it('places resources within map bounds', () => {
+  it('places resources within map bounds (including footprint)', () => {
     const map = generateMap();
     for (const r of map.resources) {
       expect(r.tx).toBeGreaterThanOrEqual(0);
       expect(r.ty).toBeGreaterThanOrEqual(0);
-      expect(r.tx).toBeLessThan(map.width);
-      expect(r.ty).toBeLessThan(map.height);
+      expect(r.tx + r.footprint).toBeLessThanOrEqual(map.width);
+      expect(r.ty + r.footprint).toBeLessThanOrEqual(map.height);
     }
   });
 
-  it('no resource overlaps HQ footprint', () => {
+  it('no resource footprint overlaps HQ footprint', () => {
     const map = generateMap();
+    const hqTiles = new Set<string>();
+    for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+      for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+        hqTiles.add(`${map.hq.tx + dx},${map.hq.ty + dy}`);
+      }
+    }
     for (const r of map.resources) {
-      const inHqX = r.tx >= map.hq.tx && r.tx < map.hq.tx + HQ_FOOTPRINT;
-      const inHqY = r.ty >= map.hq.ty && r.ty < map.hq.ty + HQ_FOOTPRINT;
-      expect(inHqX && inHqY).toBe(false);
+      for (let dy = 0; dy < r.footprint; dy++) {
+        for (let dx = 0; dx < r.footprint; dx++) {
+          expect(hqTiles.has(`${r.tx + dx},${r.ty + dy}`)).toBe(false);
+        }
+      }
     }
   });
 
-  it('has an infinite deposit near map center', () => {
+  it('has an infinite deposit near map center with 3×3 footprint', () => {
     const map = generateMap();
     const infinite = map.resources.filter((r) => r.type === 'infinite');
     expect(infinite.length).toBeGreaterThanOrEqual(1);
     const center = map.width / 2;
     for (const dep of infinite) {
-      expect(Math.abs(dep.tx - center)).toBeLessThan(5);
-      expect(Math.abs(dep.ty - center)).toBeLessThan(5);
+      // Center of the 3×3 deposit should be near map center
+      const depCenterX = dep.tx + dep.footprint / 2;
+      const depCenterY = dep.ty + dep.footprint / 2;
+      expect(Math.abs(depCenterX - center)).toBeLessThan(3);
+      expect(Math.abs(depCenterY - center)).toBeLessThan(3);
     }
   });
 
@@ -66,6 +82,13 @@ describe('mapgen', () => {
     expect(a.resources.length).toBe(b.resources.length);
     expect(a.obstacles.length).toBe(b.obstacles.length);
     expect(a.decor.length).toBe(b.decor.length);
+    // Also verify resource positions match
+    for (let i = 0; i < a.resources.length; i++) {
+      expect(a.resources[i]!.tx).toBe(b.resources[i]!.tx);
+      expect(a.resources[i]!.ty).toBe(b.resources[i]!.ty);
+      expect(a.resources[i]!.type).toBe(b.resources[i]!.type);
+      expect(a.resources[i]!.footprint).toBe(b.resources[i]!.footprint);
+    }
   });
 
   it('terrain grid matches dimensions', () => {
@@ -121,7 +144,11 @@ describe('mapgen', () => {
       claim('builder', builder.tx, builder.ty);
     }
     for (const resource of map.resources) {
-      claim(`resource:${resource.type}`, resource.tx, resource.ty);
+      for (let dy = 0; dy < resource.footprint; dy++) {
+        for (let dx = 0; dx < resource.footprint; dx++) {
+          claim(`resource:${resource.type}`, resource.tx + dx, resource.ty + dy);
+        }
+      }
     }
     for (const obstacle of map.obstacles) {
       for (let dy = 0; dy < obstacle.footprint; dy++) {
@@ -135,26 +162,74 @@ describe('mapgen', () => {
     }
   });
 
-  // ── Stage B: Resource distribution tests ──────────────────────────────
+  // ── Resource footprints ───────────────────────────────────────────────
 
-  it('has many small resources near HQ', () => {
+  it('resource footprints match type definitions', () => {
+    const map = generateMap();
+    for (const r of map.resources) {
+      expect(r.footprint).toBe(RESOURCE_FOOTPRINTS[r.type]);
+    }
+  });
+
+  it('mineral_infinite has footprint 3', () => {
+    const map = generateMap();
+    const infinite = map.resources.filter((r) => r.type === 'infinite');
+    expect(infinite.length).toBeGreaterThanOrEqual(1);
+    for (const r of infinite) {
+      expect(r.footprint).toBe(3);
+    }
+  });
+
+  it('small and medium resources have footprint 1', () => {
+    const map = generateMap();
+    for (const r of map.resources) {
+      if (r.type === 'small' || r.type === 'medium') {
+        expect(r.footprint).toBe(1);
+      }
+    }
+  });
+
+  // ── Stage A: Starter resource pocket tests ────────────────────────────
+
+  it('starter pocket has enough small resources near HQ', () => {
     const map = generateMap();
     const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
     const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
     const nearSmall = map.resources.filter(
-      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_CORE_RADIUS + 6,
+      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
     );
-    expect(nearSmall.length).toBeGreaterThanOrEqual(3);
+    expect(nearSmall.length).toBeGreaterThanOrEqual(8);
   });
 
-  it('has medium and large resources further from HQ', () => {
+  it('starter pocket has enough medium resources near HQ', () => {
     const map = generateMap();
     const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
     const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
-    const midResources = map.resources.filter(
-      (r) => (r.type === 'medium' || r.type === 'large') && Math.hypot(r.tx - hqCx, r.ty - hqCy) > 8,
+    const nearMedium = map.resources.filter(
+      (r) => r.type === 'medium' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
     );
-    expect(midResources.length).toBeGreaterThanOrEqual(2);
+    expect(nearMedium.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('starter resources are clustered, not pure scatter', () => {
+    const map = generateMap();
+    const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
+    const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
+    const nearSmall = map.resources.filter(
+      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
+    );
+    // At least 3 small resources should be within 4 tiles of each other
+    let foundCluster = false;
+    for (let i = 0; i < nearSmall.length && !foundCluster; i++) {
+      let nearby = 0;
+      for (let j = 0; j < nearSmall.length; j++) {
+        if (i !== j && Math.hypot(nearSmall[i]!.tx - nearSmall[j]!.tx, nearSmall[i]!.ty - nearSmall[j]!.ty) < 4) {
+          nearby++;
+        }
+      }
+      if (nearby >= 2) foundCluster = true;
+    }
+    expect(foundCluster).toBe(true);
   });
 
   it('no large or infinite resource inside start economy zone', () => {
@@ -163,8 +238,87 @@ describe('mapgen', () => {
     const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
     for (const r of map.resources) {
       if (r.type === 'large' || r.type === 'infinite') {
-        const dist = Math.hypot(r.tx - hqCx, r.ty - hqCy);
-        expect(dist).toBeGreaterThan(START_CORE_RADIUS);
+        // Check center of resource footprint
+        const rCx = r.tx + r.footprint / 2;
+        const rCy = r.ty + r.footprint / 2;
+        const dist = Math.hypot(rCx - hqCx, rCy - hqCy);
+        expect(dist).toBeGreaterThan(START_ECONOMY_RADIUS);
+      }
+    }
+  });
+
+  it('starter pocket is biased toward corner', () => {
+    const map = generateMap();
+    const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
+    const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
+    const nearSmall = map.resources.filter(
+      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
+    );
+    // Compute average position of small resources near HQ
+    if (nearSmall.length >= 3) {
+      const avgX = nearSmall.reduce((sum, r) => sum + r.tx, 0) / nearSmall.length;
+      const avgY = nearSmall.reduce((sum, r) => sum + r.ty, 0) / nearSmall.length;
+      // Average should be closer to corner (0,0) than to the opposite corner
+      const distToCorner = Math.hypot(avgX, avgY);
+      const distToOpposite = Math.hypot(avgX - map.width, avgY - map.height);
+      expect(distToCorner).toBeLessThan(distToOpposite);
+    }
+  });
+
+  // ── Stage B: Center resource field tests ──────────────────────────────
+
+  it('center has mineral_infinite near exact center', () => {
+    const map = generateMap();
+    const infinite = map.resources.filter((r) => r.type === 'infinite');
+    expect(infinite.length).toBeGreaterThanOrEqual(1);
+    const mapCx = map.width / 2;
+    const mapCy = map.height / 2;
+    for (const r of infinite) {
+      // Infinite center should be within 2 tiles of exact center
+      const rCx = r.tx + r.footprint / 2;
+      const rCy = r.ty + r.footprint / 2;
+      expect(Math.abs(rCx - mapCx)).toBeLessThan(3);
+      expect(Math.abs(rCy - mapCy)).toBeLessThan(3);
+    }
+  });
+
+  it('center has surrounding large resource field', () => {
+    const map = generateMap();
+    const mapCx = map.width / 2;
+    const mapCy = map.height / 2;
+    const centerLarge = map.resources.filter(
+      (r) => r.type === 'large' && Math.hypot(r.tx - mapCx, r.ty - mapCy) < 15,
+    );
+    expect(centerLarge.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('center has surrounding medium resource field', () => {
+    const map = generateMap();
+    const mapCx = map.width / 2;
+    const mapCy = map.height / 2;
+    const centerMedium = map.resources.filter(
+      (r) => r.type === 'medium' && Math.hypot(r.tx - mapCx, r.ty - mapCy) < 15,
+    );
+    expect(centerMedium.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('center resources do not overlap infinite footprint', () => {
+    const map = generateMap();
+    const infinite = map.resources.filter((r) => r.type === 'infinite');
+    if (infinite.length === 0) return;
+    const inf = infinite[0]!;
+    const infTiles = new Set<string>();
+    for (let dy = 0; dy < inf.footprint; dy++) {
+      for (let dx = 0; dx < inf.footprint; dx++) {
+        infTiles.add(`${inf.tx + dx},${inf.ty + dy}`);
+      }
+    }
+    for (const r of map.resources) {
+      if (r === inf) continue;
+      for (let dy = 0; dy < r.footprint; dy++) {
+        for (let dx = 0; dx < r.footprint; dx++) {
+          expect(infTiles.has(`${r.tx + dx},${r.ty + dy}`)).toBe(false);
+        }
       }
     }
   });
@@ -208,9 +362,16 @@ describe('mapgen', () => {
     }
   });
 
-  it('no obstacle overlaps a resource', () => {
+  it('no obstacle overlaps a resource footprint', () => {
     const map = generateMap();
-    const resourceTiles = new Set(map.resources.map((r) => `${r.tx},${r.ty}`));
+    const resourceTiles = new Set<string>();
+    for (const r of map.resources) {
+      for (let dy = 0; dy < r.footprint; dy++) {
+        for (let dx = 0; dx < r.footprint; dx++) {
+          resourceTiles.add(`${r.tx + dx},${r.ty + dy}`);
+        }
+      }
+    }
     for (const o of map.obstacles) {
       for (let dy = 0; dy < o.footprint; dy++) {
         for (let dx = 0; dx < o.footprint; dx++) {
@@ -237,5 +398,37 @@ describe('mapgen', () => {
     const std = generateMap(48, 48, 'cyan', 42);
     const large = generateMap(64, 64, 'cyan', 42);
     expect(large.obstacles.length).toBeGreaterThanOrEqual(std.obstacles.length);
+  });
+
+  // ── Generated maps pass validation ────────────────────────────────────
+
+  it('generated standard map passes validation', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    // Validate basic invariants
+    expect(map.resources.length).toBeGreaterThan(0);
+    expect(map.obstacles.length).toBeGreaterThan(0);
+    // All resources have valid footprints
+    for (const r of map.resources) {
+      expect(r.footprint).toBe(RESOURCE_FOOTPRINTS[r.type]);
+    }
+  });
+
+  it('generated large map passes validation', () => {
+    const map = generateMap(64, 64, 'cyan', 42);
+    expect(map.resources.length).toBeGreaterThan(0);
+    expect(map.obstacles.length).toBeGreaterThan(0);
+    for (const r of map.resources) {
+      expect(r.footprint).toBe(RESOURCE_FOOTPRINTS[r.type]);
+    }
+  });
+
+  it('has medium and large resources further from HQ', () => {
+    const map = generateMap();
+    const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
+    const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
+    const midResources = map.resources.filter(
+      (r) => (r.type === 'medium' || r.type === 'large') && Math.hypot(r.tx - hqCx, r.ty - hqCy) > 8,
+    );
+    expect(midResources.length).toBeGreaterThanOrEqual(2);
   });
 });

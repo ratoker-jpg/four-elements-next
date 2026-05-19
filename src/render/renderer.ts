@@ -131,7 +131,7 @@ export function render(
   }
 
   for (const r of map.resources) {
-    entities.push({ sortKey: r.tx + r.ty, render: () => renderResourceNode(ctx, r, camera, assets) });
+    entities.push({ sortKey: r.tx + r.ty + (r.footprint - 1) * 2, render: () => renderResourceNode(ctx, r, camera, assets) });
   }
   for (const o of map.obstacles) {
     entities.push({ sortKey: o.tx + o.ty + (o.footprint - 1) * 2, render: () => renderObstacle(ctx, o, camera, assets) });
