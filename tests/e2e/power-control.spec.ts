@@ -37,13 +37,13 @@ test.describe('NEXT-04 power and control', () => {
       } | null;
     });
     expect(powerState).not.toBeNull();
-    // HQ (supply=2) + 1 Power Plant (supply=4), 1 Separator (demand=1), 1 Command Relay (demand=1)
-    expect(powerState!.totalSupply).toBe(6);
-    expect(powerState!.totalDemand).toBe(2);
-    expect(powerState!.netPower).toBe(4);
+    // HQ (supply=2) only, no starting buildings
+    expect(powerState!.totalSupply).toBe(2);
+    expect(powerState!.totalDemand).toBe(0);
+    expect(powerState!.netPower).toBe(2);
   });
 
-  test('control state shows 15 with one online Command Relay', async ({ page }) => {
+  test('control state shows 10 with HQ only (no relays)', async ({ page }) => {
     await navigateToGameScreen(page);
     const controlState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__controlState as {
@@ -53,21 +53,21 @@ test.describe('NEXT-04 power and control', () => {
       } | null;
     });
     expect(controlState).not.toBeNull();
-    expect(controlState!.current).toBe(15); // HQ(10) + 1 relay(5)
+    expect(controlState!.current).toBe(10); // HQ(10), no relays
     expect(controlState!.cap).toBe(50);
-    expect(controlState!.used).toBe(2); // 1 builder + 1 harvester
+    expect(controlState!.used).toBe(3); // 1 builder + 2 harvesters
   });
 
-  test('power HUD shows net power as +4', async ({ page }) => {
+  test('power HUD shows net power as +2', async ({ page }) => {
     await navigateToGameScreen(page);
     const powerValue = page.locator('.economy-hud__item--power .economy-hud__value');
-    await expect(powerValue).toHaveText('+4');
+    await expect(powerValue).toHaveText('+2');
   });
 
   test('control HUD shows used/current control', async ({ page }) => {
     await navigateToGameScreen(page);
     const controlValue = page.locator('.economy-hud__item--control .economy-hud__value');
-    await expect(controlValue).toHaveText('2/15');
+    await expect(controlValue).toHaveText('3/10');
   });
 
   test('all buildings are online at game start', async ({ page }) => {

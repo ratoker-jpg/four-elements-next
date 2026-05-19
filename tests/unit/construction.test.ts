@@ -12,6 +12,7 @@ import {
   tickConstruction,
 } from '../../src/systems/construction.js';
 import { getBuildingFootprint } from '../../src/config/buildings.js';
+import { HQ_FOOTPRINT } from '../../src/core/constants.js';
 import type { MapData } from '../../src/game/map-types.js';
 
 describe('construction system', () => {
@@ -69,7 +70,9 @@ describe('construction system', () => {
 
   it('derives occupied tiles from HQ, buildings, resources, decor, sites, and builder', () => {
     const { map, economy } = createBaseline();
-    startConstruction(map, economy, 'separator');
+    // Manually add a building to test occupied tile derivation
+    map.buildings.push({ tx: map.hq.tx + HQ_FOOTPRINT + 1, ty: map.hq.ty, type: 'separator' });
+    startConstruction(map, economy, 'command-relay');
     const occupied = buildOccupiedTileSet(map);
     const building = map.buildings[0]!;
     const site = map.constructionSites[0]!;
@@ -102,6 +105,8 @@ describe('construction system', () => {
 
   it('rejects partial overlaps across the full footprint area', () => {
     const { map } = createBaseline();
+    // Manually add a building to test footprint overlap
+    map.buildings.push({ tx: map.hq.tx + HQ_FOOTPRINT + 1, ty: map.hq.ty, type: 'separator' });
     const occupied = buildOccupiedTileSet(map);
     const separator = map.buildings.find((building) => building.type === 'separator')!;
 

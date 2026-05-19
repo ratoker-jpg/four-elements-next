@@ -147,8 +147,8 @@ test.describe('NEXT-06C2 production system', () => {
     expect(afterState.matter).toBeLessThan(350);
     // Active element should be reduced by 1 from initial 3
     expect(afterState.activeElement).toBe(2);
-    // Control used should have increased by 1
-    expect(afterState.used).toBeGreaterThanOrEqual(3); // initial builder(1) + harvester(1) + produced builder(1)
+    // Control used should have increased by 1 (initial 3 + 1 = 4)
+    expect(afterState.used).toBeGreaterThanOrEqual(4); // initial builder(1) + 2 harvesters(2) + produced builder(1)
 
     // Verify queue shows 1/2
     await expect(panel).toContainText('1/2');
@@ -287,29 +287,33 @@ test.describe('NEXT-06C2 production system', () => {
 
   // NEXT-TEST-01: Control HUD updates after production order
 
-  test('control HUD shows 3/15 after producing a builder from UI', async ({ page }) => {
+  test('control HUD shows 4/10 after producing a builder from UI', async ({ page }) => {
     await navigateToGameScreen(page);
     await buildUnitsFactory(page);
     await openProductionPanel(page);
 
-    // Verify initial HUD shows 2/15
+    // Initial HUD: 3/10 (1 builder + 2 harvesters, HQ only)
+    // After building factory: HQ(2 supply) + units-factory(-2 demand) = 0 net
+    // Command relay was also built? No — just factory. Control stays at 10.
     const controlValue = page.locator('.economy-hud__item--control .economy-hud__value');
-    await expect(controlValue).toHaveText('2/15');
+    // After building factory, control.current may increase if a command-relay was built, but it wasn't
+    // So control is still 10, used was 3 (1 builder + 2 harvesters)
+    await expect(controlValue).toHaveText('3/10');
 
     // Produce a builder via UI click
     const panel = page.locator('#production-panel');
     await panel.getByRole('button', { name: /Строитель/ }).click();
 
-    // Wait for control.used to become 3 via poll (more reliable than waitForTimeout)
+    // Wait for control.used to become 4 via poll
     await expect.poll(async () => {
       const ctrl = await page.evaluate(() => {
         const c = (window as Record<string, unknown>).__controlState as { used: number };
         return c.used;
       });
       return ctrl;
-    }).toBe(3);
+    }).toBe(4);
 
-    // Now assert HUD text shows 3/15
-    await expect(controlValue).toHaveText('3/15');
+    // Now assert HUD text shows 4/10
+    await expect(controlValue).toHaveText('4/10');
   });
 });

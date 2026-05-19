@@ -1,6 +1,5 @@
 /** Procedural map generator. Pure function, deterministic with seed. */
 
-import { getBuildingFootprint } from '../config/buildings.js';
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../core/constants.js';
 import type {
   MapData,
@@ -8,7 +7,6 @@ import type {
   TerrainType,
   ResourceType,
   DecorType,
-  BuildingPlacement,
   BuilderPlacement,
 } from './map-types.js';
 
@@ -32,7 +30,6 @@ export function generateMap(
   const terrain = generateTerrain(width, height, rand);
   const occupied = createOccupiedSet(width, height);
   const hq = placeHq(width, height, faction, occupied);
-  const buildings = placeBuildings(width, height, hq, occupied);
   const builders = placeBuildersNearHq(width, height, hq, occupied);
   const resources = placeResources(width, height, hq, rand, occupied);
   const decor = placeDecor(width, height, hq, rand, occupied);
@@ -44,7 +41,7 @@ export function generateMap(
     hq,
     resources,
     decor,
-    buildings,
+    buildings: [],
     builders,
     constructionSites: [],
   };
@@ -92,55 +89,11 @@ function markOccupied(occupied: Set<string>, tx: number, ty: number, size: numbe
   }
 }
 
-function isAreaAvailable(
-  width: number,
-  height: number,
-  occupied: ReadonlySet<string>,
-  tx: number,
-  ty: number,
-  size: number,
-): boolean {
-  if (tx < 0 || ty < 0) return false;
-  if (tx + size > width || ty + size > height) return false;
-
-  for (let dy = 0; dy < size; dy++) {
-    for (let dx = 0; dx < size; dx++) {
-      if (occupied.has(`${tx + dx},${ty + dy}`)) return false;
-    }
-  }
-
-  return true;
-}
-
 function placeHq(w: number, h: number, faction: FactionId, occupied: Set<string>): MapData['hq'] {
   const tx = Math.max(0, Math.min(w - HQ_FOOTPRINT, 4));
   const ty = Math.max(0, Math.min(h - HQ_FOOTPRINT, 4));
   markOccupied(occupied, tx, ty, HQ_FOOTPRINT);
   return { tx, ty, faction };
-}
-
-function placeBuildings(
-  width: number,
-  height: number,
-  hq: MapData['hq'],
-  occupied: Set<string>,
-): BuildingPlacement[] {
-  const buildings: BuildingPlacement[] = [
-    { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty, type: 'separator' },
-    { tx: hq.tx, ty: hq.ty + HQ_FOOTPRINT, type: 'raw-storage' },
-    { tx: hq.tx + HQ_FOOTPRINT, ty: hq.ty + HQ_FOOTPRINT, type: 'power-plant' },
-    { tx: hq.tx, ty: hq.ty - getBuildingFootprint('command-relay'), type: 'command-relay' },
-  ];
-
-  for (const building of buildings) {
-    const footprint = getBuildingFootprint(building.type);
-    if (!isAreaAvailable(width, height, occupied, building.tx, building.ty, footprint)) {
-      throw new Error(`Failed to place initial building: ${building.type}`);
-    }
-    markOccupied(occupied, building.tx, building.ty, footprint);
-  }
-
-  return buildings;
 }
 
 function placeBuildersNearHq(

@@ -3,7 +3,6 @@ import { createGameState } from '../../src/game/game-state.js';
 import { BUILDER_CONTROL_COST } from '../../src/systems/construction.js';
 import { HARVESTER_CONTROL_COST } from '../../src/systems/harvesting.js';
 import { HQ_FOOTPRINT } from '../../src/core/constants.js';
-import { getBuildingFootprint } from '../../src/config/buildings.js';
 
 describe('createGameState', () => {
   it('creates state with map, economy, power, control, harvesters, and resourceNodes', () => {
@@ -41,19 +40,15 @@ describe('createGameState', () => {
     expect(state.economy.faction).toBe('green');
   });
 
-  it('creates economy separators matching map separator buildings', () => {
+  it('creates economy with zero separators at start', () => {
     const state = createGameState('standard', 'cyan');
-    const mapSeparators = state.map.buildings.filter((b) => b.type === 'separator');
-    expect(state.economy.separators).toHaveLength(mapSeparators.length);
-    for (const sep of state.economy.separators) {
-      expect(mapSeparators.some((b) => b.tx === sep.tx && b.ty === sep.ty)).toBe(true);
-    }
+    expect(state.economy.separators).toHaveLength(0);
   });
 
-  it('creates power state with HQ plus all map buildings', () => {
+  it('creates power state with HQ only (no starting buildings)', () => {
     const state = createGameState('standard', 'cyan');
-    // HQ + 4 pre-placed buildings
-    expect(state.power.buildings).toHaveLength(1 + state.map.buildings.length);
+    // HQ only — no starting buildings
+    expect(state.power.buildings).toHaveLength(1);
     const hqEntry = state.power.buildings.find((b) => b.type === 'hq');
     expect(hqEntry).toBeDefined();
     expect(hqEntry!.online).toBe(true);
@@ -76,14 +71,15 @@ describe('createGameState', () => {
     expect(state.map.constructionSites).toHaveLength(0);
   });
 
-  it('creates harvesters near HQ at start', () => {
+  it('creates exactly 2 harvesters near HQ at start', () => {
     const state = createGameState('standard', 'cyan');
-    expect(state.harvesters.length).toBeGreaterThanOrEqual(1);
-    const h = state.harvesters[0]!;
-    expect(h.phase).toBe('idle');
-    expect(h.carry).toBe(0);
-    expect(h.gatherProgress).toBe(0);
-    expect(h.targetNodeIndex).toBe(-1);
+    expect(state.harvesters).toHaveLength(2);
+    for (const h of state.harvesters) {
+      expect(h.phase).toBe('idle');
+      expect(h.carry).toBe(0);
+      expect(h.gatherProgress).toBe(0);
+      expect(h.targetNodeIndex).toBe(-1);
+    }
   });
 
   it('creates resource node runtime states matching map resources', () => {
@@ -94,29 +90,14 @@ describe('createGameState', () => {
     }
   });
 
-  it('map buildings have 2x2 footprints and do not overlap', () => {
+  it('map has zero starting buildings and HQ does not overlap resources', () => {
     const state = createGameState('standard', 'cyan');
-    const occupied = new Map<string, string>();
-
-    const claim = (owner: string, tx: number, ty: number) => {
-      const key = `${tx},${ty}`;
-      expect(occupied.has(key)).toBe(false);
-      occupied.set(key, owner);
-    };
-
-    for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
-      for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
-        claim('hq', state.map.hq.tx + dx, state.map.hq.ty + dy);
-      }
-    }
-
-    for (const building of state.map.buildings) {
-      const footprint = getBuildingFootprint(building.type);
-      for (let dy = 0; dy < footprint; dy++) {
-        for (let dx = 0; dx < footprint; dx++) {
-          claim(building.type, building.tx + dx, building.ty + dy);
-        }
-      }
+    expect(state.map.buildings).toHaveLength(0);
+    // Verify HQ tiles don't overlap resources
+    for (const r of state.map.resources) {
+      const inHqX = r.tx >= state.map.hq.tx && r.tx < state.map.hq.tx + HQ_FOOTPRINT;
+      const inHqY = r.ty >= state.map.hq.ty && r.ty < state.map.hq.ty + HQ_FOOTPRINT;
+      expect(inHqX && inHqY).toBe(false);
     }
   });
 });

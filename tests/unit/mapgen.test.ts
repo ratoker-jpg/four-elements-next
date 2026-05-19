@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { getBuildingFootprint } from '../../src/config/buildings.js';
 import { generateMap } from '../../src/game/mapgen.js';
 import { HQ_FOOTPRINT, MAP_SIZE_STANDARD } from '../../src/core/constants.js';
 
@@ -85,7 +84,12 @@ describe('mapgen', () => {
     }
   });
 
-  it('pre-placed buildings occupy full footprints without overlaps', () => {
+  it('generated map starts with zero extra buildings', () => {
+    const map = generateMap();
+    expect(map.buildings).toHaveLength(0);
+  });
+
+  it('HQ and builder tiles do not overlap resources or decor', () => {
     const map = generateMap();
     const occupied = new Map<string, string>();
 
@@ -98,16 +102,6 @@ describe('mapgen', () => {
     for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
       for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
         claim('hq', map.hq.tx + dx, map.hq.ty + dy);
-      }
-    }
-
-    for (const building of map.buildings) {
-      const footprint = getBuildingFootprint(building.type);
-      expect(footprint).toBe(2);
-      for (let dy = 0; dy < footprint; dy++) {
-        for (let dx = 0; dx < footprint; dx++) {
-          claim(building.type, building.tx + dx, building.ty + dy);
-        }
       }
     }
 

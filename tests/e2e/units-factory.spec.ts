@@ -124,8 +124,8 @@ test.describe('NEXT-06C1 units factory building', () => {
       debug.advanceConstruction(31);
     });
 
-    // Check power state: initial demand was 2 (1 separator + 1 command relay)
-    // After adding units-factory, demand should be 2 + 2 = 4
+    // Check power state: initial demand was 0 (no starting buildings)
+    // After adding units-factory, demand should be 2 (units-factory only)
     await expect.poll(async () => {
       return page.evaluate(() => {
         const power = (window as Record<string, unknown>).__powerState as {
@@ -141,7 +141,7 @@ test.describe('NEXT-06C1 units factory building', () => {
         };
       });
     }).toEqual({
-      totalDemand: 4, // separator(1) + command-relay(1) + units-factory(2) = 4
+      totalDemand: 2, // units-factory(2) — no other buildings at start
       hasFactory: true,
       factoryOnline: true,
     });

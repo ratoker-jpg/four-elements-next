@@ -30,6 +30,7 @@ import {
   createProductionState,
   type ProductionState,
 } from '../systems/production.js';
+import { getBuildingFootprint } from '../config/buildings.js';
 
 /** Map the UI map-size string to a grid dimension. */
 function resolveMapSize(mapSize: string): number {
@@ -67,7 +68,12 @@ function buildOccupiedSet(map: MapData): Set<string> {
     }
   }
   for (const building of map.buildings) {
-    occupied.add(`${building.tx},${building.ty}`);
+    const footprint = getBuildingFootprint(building.type);
+    for (let dy = 0; dy < footprint; dy++) {
+      for (let dx = 0; dx < footprint; dx++) {
+        occupied.add(`${building.tx + dx},${building.ty + dy}`);
+      }
+    }
   }
   for (const builder of map.builders) {
     occupied.add(`${builder.tx},${builder.ty}`);
@@ -76,7 +82,12 @@ function buildOccupiedSet(map: MapData): Set<string> {
     occupied.add(`${resource.tx},${resource.ty}`);
   }
   for (const site of map.constructionSites) {
-    occupied.add(`${site.tx},${site.ty}`);
+    const footprint = getBuildingFootprint(site.type);
+    for (let dy = 0; dy < footprint; dy++) {
+      for (let dx = 0; dx < footprint; dx++) {
+        occupied.add(`${site.tx + dx},${site.ty + dy}`);
+      }
+    }
   }
   return occupied;
 }

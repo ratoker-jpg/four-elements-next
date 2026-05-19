@@ -32,7 +32,7 @@ test.describe('NEXT-06B harvester raw delivery', () => {
       } | null;
     });
     expect(harvesterState).not.toBeNull();
-    expect(harvesterState!.harvesters.length).toBeGreaterThanOrEqual(1);
+    expect(harvesterState!.harvesters.length).toBeGreaterThanOrEqual(2);
     // Phase may already be 'moving-to-resource' since the RAF loop starts before data-ready
     const validPhases = ['idle', 'moving-to-resource', 'gathering', 'moving-to-dropoff', 'delivering', 'waiting-full-storage'];
     expect(validPhases).toContain(harvesterState!.harvesters[0]!.phase);

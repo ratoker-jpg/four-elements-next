@@ -23,8 +23,8 @@ describe('runSystems', () => {
 
     runSystems(state, 10);
 
-    // Construction should have progressed
-    expect(state.map.constructionSites.length + state.map.buildings.filter((b) => b.type === 'separator').length).toBeGreaterThanOrEqual(2);
+    // Construction should have progressed — at least the separator we started
+    expect(state.map.constructionSites.length + state.map.buildings.filter((b) => b.type === 'separator').length).toBeGreaterThanOrEqual(1);
   });
 
   it('handles completion cascade: completed building added to economy and power', () => {

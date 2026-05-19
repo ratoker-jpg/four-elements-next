@@ -25,7 +25,7 @@ test.describe('NEXT-03 economy baseline', () => {
   test('economy HUD shows correct starting resources', async ({ page }) => {
     await navigateToGameScreen(page);
     const values = page.locator('.economy-hud__value');
-    await expect(values.nth(0)).toHaveText('0/400');
+    await expect(values.nth(0)).toHaveText('0/200');
     await expect(values.nth(1)).toHaveText('100/200');
     await expect(values.nth(2)).toHaveText('3/10');
   });
@@ -58,7 +58,7 @@ test.describe('NEXT-03 economy baseline', () => {
     expect(economyState!.matter).toBe(100);
     expect(economyState!.elements).toEqual({ cyan: 3, green: 0, yellow: 0, purple: 0 });
     expect(economyState!.activeElement).toBe(3);
-    expect(economyState!.rawCap).toBe(400);
+    expect(economyState!.rawCap).toBe(200);
     expect(economyState!.matterCap).toBe(200);
     expect(economyState!.elementCap).toBe(10);
   });
@@ -84,7 +84,7 @@ test.describe('NEXT-03 economy baseline', () => {
     expect(economyState!.activeElement).toBe(3);
   });
 
-  test('separator state is idle at game start (no raw)', async ({ page }) => {
+  test('separator state is empty at game start (no separators)', async ({ page }) => {
     await navigateToGameScreen(page);
     const economyState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__economyState as {
@@ -92,12 +92,10 @@ test.describe('NEXT-03 economy baseline', () => {
       } | null;
     });
     expect(economyState).not.toBeNull();
-    expect(economyState!.separators).toHaveLength(1);
-    expect(economyState!.separators[0]!.active).toBe(false);
-    expect(economyState!.separators[0]!.progress).toBe(0);
+    expect(economyState!.separators).toHaveLength(0);
   });
 
-  test('separator remains idle after time passes with no raw', async ({ page }) => {
+  test('separator list stays empty with no raw and no separators', async ({ page }) => {
     await navigateToGameScreen(page);
     await page.waitForTimeout(3000);
     const economyState = await page.evaluate(() => {
@@ -105,8 +103,7 @@ test.describe('NEXT-03 economy baseline', () => {
         separators: Array<{ active: boolean; progress: number }>;
       } | null;
     });
-    expect(economyState!.separators[0]!.active).toBe(false);
-    expect(economyState!.separators[0]!.progress).toBe(0);
+    expect(economyState!.separators).toHaveLength(0);
   });
 
   test('economy HUD does not interfere with camera pan', async ({ page }) => {
