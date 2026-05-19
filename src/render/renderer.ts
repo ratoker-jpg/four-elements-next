@@ -20,7 +20,7 @@ import {
   renderHarvester,
 } from './buildings.js';
 import type { Camera } from './camera.js';
-import { renderResourceNode, renderDecor } from './environment.js';
+import { renderResourceNode, renderObstacle, renderDecor } from './environment.js';
 import { renderTerrain } from './terrain.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import { isAssetPreviewEnabled, drawAssetPreview } from '../dev/asset-preview.js';
@@ -126,6 +126,9 @@ export function render(
 
   for (const r of map.resources) {
     entities.push({ sortKey: r.tx + r.ty, render: () => renderResourceNode(ctx, r, camera, assets) });
+  }
+  for (const o of map.obstacles) {
+    entities.push({ sortKey: o.tx + o.ty + (o.footprint - 1) * 2, render: () => renderObstacle(ctx, o, camera, assets) });
   }
   for (const d of map.decor) {
     entities.push({ sortKey: d.tx + d.ty, render: () => renderDecor(ctx, d, camera, assets) });

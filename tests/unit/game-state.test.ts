@@ -25,8 +25,8 @@ describe('createGameState', () => {
 
   it('initializes map with correct dimensions for large size', () => {
     const state = createGameState('large', 'cyan');
-    expect(state.map.width).toBe(48); // large = standard for now
-    expect(state.map.height).toBe(48);
+    expect(state.map.width).toBe(64);
+    expect(state.map.height).toBe(64);
   });
 
   it('resolves random faction to a valid FactionId', () => {

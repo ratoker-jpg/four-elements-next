@@ -11,11 +11,14 @@ export const CAMERA_PAN_SPEED = 400; // world pixels per second
 export const CAMERA_ZOOM_STEP = 0.12;
 
 // Map sizes
-// TODO(NEXT-03+): Large map should use a larger grid (e.g. 64×64).
-// For now both Standard and Large produce 48×48.
 export const MAP_SIZE_STANDARD = 48;
-export const MAP_SIZE_LARGE = 48; // intentional — differentiate in a future step
+export const MAP_SIZE_LARGE = 64;
 export const MAP_SIZE_DEV = 32;
+
+// Map generation — start zone radii (tuning defaults from MAP_GENERATION_SPEC.md)
+export const START_CORE_RADIUS = 4;    // No obstacles, no large decor, no blocked resources
+export const START_ECONOMY_RADIUS = 10; // Many small resources, some medium resources
+export const START_TRANSITION_RADIUS = 18; // Light obstacles and varied resources allowed
 
 // HQ
 export const HQ_FOOTPRINT = 3; // 3×3 tiles (confirmed: matches sprite_profiles)

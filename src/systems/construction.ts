@@ -155,9 +155,11 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
   for (const resource of map.resources) {
     occupied.add(`${resource.tx},${resource.ty}`);
   }
-  for (const decor of map.decor) {
-    occupied.add(`${decor.tx},${decor.ty}`);
+  // Obstacle footprints block building placement
+  for (const obstacle of map.obstacles) {
+    markFootprintOccupied(occupied, obstacle.tx, obstacle.ty, obstacle.footprint);
   }
+  // Decor is non-blocking (bush, sand-bump) — does NOT block building placement
   for (const builder of map.builders) {
     occupied.add(`${builder.tx},${builder.ty}`);
   }
@@ -187,8 +189,9 @@ export function isFootprintBuildable(
 /**
  * Build a set of tiles occupied by structures that reserve building spacing:
  * HQ footprint, completed building footprints, and construction site footprints.
- * Resources, decor, and builders are NOT included — they block the footprint
+ * Resources and builders are NOT included — they block the footprint
  * itself (via buildOccupiedTileSet) but do not reserve spacing perimeter.
+ * Decor is entirely non-blocking and is not included in either set.
  */
 export function buildBuildingTileSet(map: MapData): Set<string> {
   const tiles = new Set<string>();
@@ -220,7 +223,8 @@ export function buildBuildingTileSet(map: MapData): Set<string> {
  *    ty-spacing .. ty+footprint+spacing-1) must not overlap any tile from
  *    `buildBuildingTileSet` (HQ, completed buildings, construction sites).
  *    Out-of-bounds perimeter cells are silently ignored.
- *    Resources, decor, and builders do NOT block the spacing perimeter.
+ *    Resources and builders do NOT block the spacing perimeter.
+ *    Decor is non-blocking and does not appear in the occupied set at all.
  */
 export function isFootprintWithSpacingBuildable(
   map: MapData,

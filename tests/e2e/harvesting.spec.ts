@@ -141,11 +141,13 @@ test.describe('NEXT-06B harvester raw delivery', () => {
     const finiteNodes = harvesterState!.resourceNodes.filter((n) => !n.infinite);
     if (finiteNodes.length > 0) {
       // Small nodes start at 50, medium at 100, large at 200
-      // After 30s, at least some harvesting should have occurred
-      const smallNodes = finiteNodes.filter((n) => n.type === 'small');
-      // A small node (50 raw) could be depleted after 5 deliveries (10 raw each)
-      // Not guaranteed to be depleted but should have less than initial
-      const someHarvested = smallNodes.some((n) => n.remaining < 50);
+      // After 25s, at least some harvesting should have occurred.
+      // Check any finite node type — harvesters may target medium or large
+      // nodes depending on which is nearest, not just small ones.
+      const INITIAL_AMOUNTS: Record<string, number> = { small: 50, medium: 100, large: 200 };
+      const someHarvested = finiteNodes.some(
+        (n) => n.remaining < (INITIAL_AMOUNTS[n.type] ?? Infinity),
+      );
       expect(someHarvested).toBe(true);
     }
   });
