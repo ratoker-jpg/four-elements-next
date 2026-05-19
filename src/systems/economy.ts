@@ -37,26 +37,37 @@ export interface EconomyState {
 
 // ── Constants ────────────────────────────────────────────────────────
 
-/** HQ base capacity (no Storage buildings). */
+/** Number of internal elementUnits per displayed element.
+ *  10 elementUnits = 1 displayed element.
+ *  All element amounts and caps are stored internally as elementUnits
+ *  to avoid floating-point drift.
+ */
+export const ELEMENT_UNITS_PER_ELEMENT = 10;
+
+/** HQ base capacity (no Storage buildings). Values in elementUnits for element fields. */
 export const HQ_RAW_CAP = 200;
 export const HQ_MATTER_CAP = 200;
-export const HQ_ELEMENT_CAP = 10;
+/** HQ element cap: 200 elementUnits = 20 displayed elements. */
+export const HQ_ELEMENT_CAP = 200;
 
 /** Capacity bonus per Raw Storage building. */
 export const RAW_STORAGE_RAW_BONUS = 200;
 
-/** Capacity bonus per Matter Storage building. */
+/** Capacity bonus per Matter Storage building. Element bonus in elementUnits. */
 export const MATTER_STORAGE_MATTER_BONUS = 200;
-export const MATTER_STORAGE_ELEMENT_BONUS = 10;
+/** Matter-storage element cap bonus: 200 elementUnits = +20 displayed elements. */
+export const MATTER_STORAGE_ELEMENT_BONUS = 200;
 
-/** Starting resources. */
+/** Starting resources. START_ELEMENT is in elementUnits: 30 units = 3.0 displayed elements. */
 export const START_RAW = 0;
 export const START_MATTER = 100;
-export const START_ELEMENT = 3;
+export const START_ELEMENT = 30;
 
-/** Separator conversion: 15 Raw → 10 Matter + 1 faction Element per cycle. */
+/** Separator conversion: 15 Raw → 10 Matter + 1 elementUnit (= 0.1 displayed element) per cycle. */
 export const SEP_RAW_COST = 15;
 export const SEP_MATTER_YIELD = 10;
+/** Separator element yield: 1 elementUnit per cycle = 0.1 displayed element.
+ *  10 cycles produce 10 elementUnits = 1.0 displayed element. */
 export const SEP_ELEMENT_YIELD = 1;
 export const SEP_CYCLE_SECONDS = 6;
 
@@ -199,6 +210,20 @@ export function getSeparatorPositions(
   return buildings
     .filter((building): building is { tx: number; ty: number; type: BuildingType } => building.type === 'separator')
     .map((building) => ({ tx: building.tx, ty: building.ty }));
+}
+
+// ── Element display helpers ───────────────────────────────────────────
+
+/** Convert internal elementUnits to displayed element value.
+ *  Example: 31 elementUnits → 3.1 */
+export function toDisplayElements(elementUnits: number): number {
+  return elementUnits / ELEMENT_UNITS_PER_ELEMENT;
+}
+
+/** Format elementUnits as a displayed element string with 1 decimal place.
+ *  Example: 31 → "3.1", 30 → "3.0", 200 → "20.0" */
+export function formatDisplayElements(elementUnits: number): string {
+  return (elementUnits / ELEMENT_UNITS_PER_ELEMENT).toFixed(1);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

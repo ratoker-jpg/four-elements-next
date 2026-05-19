@@ -16,6 +16,9 @@ import {
   SEP_MATTER_YIELD,
   SEP_ELEMENT_YIELD,
   SEP_CYCLE_SECONDS,
+  ELEMENT_UNITS_PER_ELEMENT,
+  toDisplayElements,
+  formatDisplayElements,
   type EconomyState,
 } from '../../src/systems/economy.js';
 
@@ -23,7 +26,11 @@ describe('economy constants', () => {
   it('HQ base caps are correct', () => {
     expect(HQ_RAW_CAP).toBe(200);
     expect(HQ_MATTER_CAP).toBe(200);
-    expect(HQ_ELEMENT_CAP).toBe(10);
+    expect(HQ_ELEMENT_CAP).toBe(200); // 200 elementUnits = 20 displayed elements
+  });
+
+  it('ELEMENT_UNITS_PER_ELEMENT is 10', () => {
+    expect(ELEMENT_UNITS_PER_ELEMENT).toBe(10);
   });
 
   it('Raw Storage bonuses are correct', () => {
@@ -32,20 +39,57 @@ describe('economy constants', () => {
 
   it('Matter Storage bonuses are correct', () => {
     expect(MATTER_STORAGE_MATTER_BONUS).toBe(200);
-    expect(MATTER_STORAGE_ELEMENT_BONUS).toBe(10);
+    expect(MATTER_STORAGE_ELEMENT_BONUS).toBe(200); // 200 elementUnits = +20 displayed elements
   });
 
-  it('starting resources are correct', () => {
+  it('starting resources are correct (elementUnits)', () => {
     expect(START_RAW).toBe(0);
     expect(START_MATTER).toBe(100);
-    expect(START_ELEMENT).toBe(3);
+    expect(START_ELEMENT).toBe(30); // 30 elementUnits = 3.0 displayed elements
   });
 
   it('separator conversion params are correct', () => {
     expect(SEP_RAW_COST).toBe(15);
     expect(SEP_MATTER_YIELD).toBe(10);
-    expect(SEP_ELEMENT_YIELD).toBe(1);
+    expect(SEP_ELEMENT_YIELD).toBe(1); // 1 elementUnit = 0.1 displayed element per cycle
     expect(SEP_CYCLE_SECONDS).toBe(6);
+  });
+});
+
+describe('element display helpers', () => {
+  it('toDisplayElements converts elementUnits to displayed elements', () => {
+    expect(toDisplayElements(30)).toBe(3);
+    expect(toDisplayElements(31)).toBe(3.1);
+    expect(toDisplayElements(200)).toBe(20);
+    expect(toDisplayElements(0)).toBe(0);
+  });
+
+  it('formatDisplayElements formats elementUnits with 1 decimal place', () => {
+    expect(formatDisplayElements(30)).toBe('3.0');
+    expect(formatDisplayElements(31)).toBe('3.1');
+    expect(formatDisplayElements(200)).toBe('20.0');
+    expect(formatDisplayElements(0)).toBe('0.0');
+  });
+
+  it('no floating-point drift: 10 cycles produce exactly 1.0 displayed element', () => {
+    let elementUnits = 30;
+    for (let i = 0; i < 10; i++) {
+      elementUnits += 1; // +1 elementUnit per separator cycle
+    }
+    expect(elementUnits).toBe(40);
+    expect(toDisplayElements(elementUnits)).toBe(4);
+    expect(formatDisplayElements(elementUnits)).toBe('4.0');
+    expect(Number.isInteger(elementUnits)).toBe(true);
+  });
+
+  it('no floating-point drift over 1000 cycles', () => {
+    let elementUnits = 0;
+    for (let i = 0; i < 1000; i++) {
+      elementUnits += 1;
+    }
+    expect(elementUnits).toBe(1000);
+    expect(Number.isInteger(elementUnits)).toBe(true);
+    expect(toDisplayElements(elementUnits)).toBe(100);
   });
 });
 
@@ -54,47 +98,55 @@ describe('createEconomyState', () => {
     const state = createEconomyState([{ tx: 7, ty: 4 }], 0, 0, 'cyan');
     expect(state.resources.rawCap).toBe(200);
     expect(state.resources.matterCap).toBe(200);
-    expect(state.resources.elementCap).toBe(10);
+    expect(state.resources.elementCap).toBe(200); // 200 elementUnits = 20 displayed elements
   });
 
   it('creates state with correct caps for raw-storage', () => {
     const one = createEconomyState([{ tx: 7, ty: 4 }], 1, 0, 'cyan');
     expect(one.resources.rawCap).toBe(400);
     expect(one.resources.matterCap).toBe(200);
-    expect(one.resources.elementCap).toBe(10);
+    expect(one.resources.elementCap).toBe(200); // raw-storage doesn't affect element cap
 
     const two = createEconomyState([{ tx: 7, ty: 4 }], 2, 0, 'cyan');
     expect(two.resources.rawCap).toBe(600);
     expect(two.resources.matterCap).toBe(200);
-    expect(two.resources.elementCap).toBe(10);
+    expect(two.resources.elementCap).toBe(200);
   });
 
   it('creates state with correct caps for matter-storage', () => {
     const one = createEconomyState([{ tx: 7, ty: 4 }], 0, 1, 'cyan');
     expect(one.resources.rawCap).toBe(200);
     expect(one.resources.matterCap).toBe(400);
-    expect(one.resources.elementCap).toBe(20);
+    expect(one.resources.elementCap).toBe(400); // 200 + 200 = 400 elementUnits = 40 displayed elements
 
     const two = createEconomyState([{ tx: 7, ty: 4 }], 0, 2, 'cyan');
     expect(two.resources.rawCap).toBe(200);
     expect(two.resources.matterCap).toBe(600);
-    expect(two.resources.elementCap).toBe(30);
+    expect(two.resources.elementCap).toBe(600); // 200 + 400 = 600 elementUnits = 60 displayed elements
   });
 
   it('creates state with correct caps for mixed storage types', () => {
     const state = createEconomyState([{ tx: 7, ty: 4 }], 1, 1, 'cyan');
     expect(state.resources.rawCap).toBe(400);
     expect(state.resources.matterCap).toBe(400);
-    expect(state.resources.elementCap).toBe(20);
+    expect(state.resources.elementCap).toBe(400); // 200 + 200 = 400 elementUnits
   });
 
-  it('sets starting raw, matter and active faction element only', () => {
+  it('sets starting raw, matter and active faction element only (elementUnits)', () => {
     const state = createEconomyState([{ tx: 7, ty: 4 }], 1, 0, 'green');
     expect(state.faction).toBe('green');
     expect(state.resources.raw).toBe(0);
     expect(state.resources.matter).toBe(100);
-    expect(state.resources.elements).toEqual({ cyan: 0, green: 3, yellow: 0, purple: 0 });
-    expect(getFactionElement(state, 'green')).toBe(3);
+    expect(state.resources.elements).toEqual({ cyan: 0, green: 30, yellow: 0, purple: 0 }); // 30 elementUnits = 3.0 displayed
+    expect(getFactionElement(state, 'green')).toBe(30);
+    // Verify display conversion
+    expect(toDisplayElements(getFactionElement(state, 'green'))).toBe(3);
+  });
+
+  it('starting element amounts display as 3.0', () => {
+    const state = createEconomyState([{ tx: 7, ty: 4 }], 0, 0, 'cyan');
+    expect(formatDisplayElements(getFactionElement(state, 'cyan'))).toBe('3.0');
+    expect(formatDisplayElements(state.resources.elementCap)).toBe('20.0');
   });
 
   it('creates separator states from positions', () => {
@@ -130,14 +182,62 @@ describe('tickEconomy', () => {
     expect(state.separators[0]!.progress).toBeGreaterThan(0);
   });
 
+  it('separator adds exactly 1 elementUnit per cycle', () => {
+    const state = createStateWithRaw(100, 1, 0, 'purple');
+    const elementBefore = state.resources.elements.purple;
+    tickEconomy(state, SEP_CYCLE_SECONDS);
+
+    expect(state.resources.raw).toBe(100 - SEP_RAW_COST);
+    expect(state.resources.matter).toBe(100 + SEP_MATTER_YIELD);
+    expect(state.resources.elements.purple).toBe(elementBefore + 1); // +1 elementUnit
+    expect(state.separators[0]!.progress).toBe(0);
+  });
+
+  it('separator +1 elementUnit = +0.1 displayed element per cycle', () => {
+    const state = createStateWithRaw(100, 1, 0, 'purple');
+    const displayBefore = toDisplayElements(state.resources.elements.purple);
+    tickEconomy(state, SEP_CYCLE_SECONDS);
+    const displayAfter = toDisplayElements(state.resources.elements.purple);
+    expect(displayAfter).toBeCloseTo(displayBefore + 0.1, 10);
+  });
+
+  it('10 separator cycles accumulate exactly 10 elementUnits = 1.0 displayed element', () => {
+    const state = createStateWithRaw(200, 1, 0, 'cyan');
+    state.resources.matterCap = 99999;
+    const elementBefore = state.resources.elements.cyan;
+
+    for (let i = 0; i < 10; i++) {
+      tickEconomy(state, SEP_CYCLE_SECONDS);
+    }
+
+    expect(state.resources.elements.cyan).toBe(elementBefore + 10); // +10 elementUnits
+    expect(toDisplayElements(state.resources.elements.cyan)).toBe(toDisplayElements(elementBefore) + 1);
+    expect(formatDisplayElements(state.resources.elements.cyan)).toBe('4.0');
+    expect(Number.isInteger(state.resources.elements.cyan)).toBe(true);
+  });
+
+  it('no floating-point drift over many separator cycles', () => {
+    const state = createStateWithRaw(99999, 1, 5, 'cyan'); // 5 matter-storages for high element cap
+    state.resources.matterCap = 99999;
+    const elementBefore = state.resources.elements.cyan;
+
+    for (let i = 0; i < 1000; i++) {
+      tickEconomy(state, SEP_CYCLE_SECONDS);
+    }
+
+    expect(state.resources.elements.cyan).toBe(elementBefore + 1000);
+    expect(Number.isInteger(state.resources.elements.cyan)).toBe(true);
+  });
+
   it('separator completes cycle after 6 seconds and adds active faction element', () => {
     const state = createStateWithRaw(100, 1, 0, 'purple');
     tickEconomy(state, 6);
 
     expect(state.resources.raw).toBe(100 - SEP_RAW_COST);
     expect(state.resources.matter).toBe(100 + SEP_MATTER_YIELD);
-    expect(state.resources.elements).toEqual({ cyan: 0, green: 0, yellow: 0, purple: 4 });
-    expect(getFactionElement(state, 'purple')).toBe(4);
+    expect(state.resources.elements).toEqual({ cyan: 0, green: 0, yellow: 0, purple: 31 }); // 30 + 1
+    expect(getFactionElement(state, 'purple')).toBe(31);
+    expect(toDisplayElements(getFactionElement(state, 'purple'))).toBe(3.1);
     expect(state.separators[0]!.progress).toBe(0);
   });
 
@@ -146,6 +246,18 @@ describe('tickEconomy', () => {
     state.resources.elements.yellow = state.resources.elementCap;
     tickEconomy(state, 1);
     expect(state.separators[0]!.active).toBe(false);
+  });
+
+  it('element cap prevents overproduction at elementUnit scale', () => {
+    const state = createStateWithRaw(99999, 1, 0, 'cyan');
+    state.resources.matterCap = 99999;
+    state.resources.elements.cyan = state.resources.elementCap - 1; // 199 elementUnits
+    tickEconomy(state, SEP_CYCLE_SECONDS);
+    expect(state.resources.elements.cyan).toBe(state.resources.elementCap); // 200 exactly
+    // Second cycle should not exceed cap
+    state.resources.raw = 99999;
+    tickEconomy(state, SEP_CYCLE_SECONDS);
+    expect(state.resources.elements.cyan).toBe(state.resources.elementCap); // still 200
   });
 
   it('separator pauses when matter cap is reached', () => {
@@ -177,7 +289,7 @@ describe('tickEconomy', () => {
     tickEconomy(state, 6);
     expect(state.resources.raw).toBe(0);
     expect(state.resources.matter).toBe(110);
-    expect(state.resources.elements.cyan).toBe(4);
+    expect(state.resources.elements.cyan).toBe(31); // 30 + 1 elementUnit
   });
   it('separator pauses when offline (power deficit)', () => {
     const state = createStateWithRaw(15);
@@ -199,6 +311,28 @@ describe('tickEconomy', () => {
     const state = createStateWithRaw(15);
     tickEconomy(state, 1);
     expect(state.separators[0]!.active).toBe(true);
+  });
+});
+
+describe('matter-storage adds +200 elementUnits to cap', () => {
+  it('starting element cap is 200 elementUnits (20.0 displayed elements)', () => {
+    const state = createEconomyState([], 0, 0, 'cyan');
+    expect(state.resources.elementCap).toBe(200);
+    expect(toDisplayElements(state.resources.elementCap)).toBe(20);
+    expect(formatDisplayElements(state.resources.elementCap)).toBe('20.0');
+  });
+
+  it('one matter-storage adds +200 elementUnits (+20.0 displayed elements)', () => {
+    const state = createEconomyState([], 0, 1, 'cyan');
+    expect(state.resources.elementCap).toBe(400); // 200 + 200
+    expect(toDisplayElements(state.resources.elementCap)).toBe(40);
+    expect(formatDisplayElements(state.resources.elementCap)).toBe('40.0');
+  });
+
+  it('two matter-storages add +400 elementUnits (+40.0 displayed elements)', () => {
+    const state = createEconomyState([], 0, 2, 'cyan');
+    expect(state.resources.elementCap).toBe(600); // 200 + 400
+    expect(toDisplayElements(state.resources.elementCap)).toBe(60);
   });
 });
 

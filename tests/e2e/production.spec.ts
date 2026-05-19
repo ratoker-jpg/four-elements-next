@@ -145,8 +145,8 @@ test.describe('NEXT-06C2 production system', () => {
     // Matter should be less than 500 (initial) - 150 (factory cost) = 350
     // Further reduced by 50 (builder cost) = 300, but economy may have changed
     expect(afterState.matter).toBeLessThan(350);
-    // Active element should be reduced by 1 from initial 3
-    expect(afterState.activeElement).toBe(2);
+    // Active element should be reduced by 10 elementUnits (= 1 displayed element) from initial 30 elementUnits
+    expect(afterState.activeElement).toBe(20);
     // Control used should have increased by 1 (initial 3 + 1 = 4)
     expect(afterState.used).toBeGreaterThanOrEqual(4); // initial builder(1) + 2 harvesters(2) + produced builder(1)
 

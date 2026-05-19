@@ -18,15 +18,17 @@ export const QUEUE_LIMIT = 2;
 /** Unit types that can be produced by a Units Factory. */
 export type ProducibleUnitType = 'builder' | 'harvester';
 
-/** Cost and time for each producible unit type. */
+/** Cost and time for each producible unit type.
+ *  Element costs are in elementUnits: 10 elementUnits = 1 displayed element. */
 export const PRODUCTION_COSTS: Record<ProducibleUnitType, {
   matter: number;
+  /** Element cost in elementUnits. 10 elementUnits = 1 displayed element. */
   element: number;
   control: number;
   duration: number;
 }> = {
-  builder: { matter: 50, element: 1, control: BUILDER_CONTROL_COST, duration: 20 },
-  harvester: { matter: 60, element: 1, control: HARVESTER_CONTROL_COST, duration: 25 },
+  builder: { matter: 50, element: 10, control: BUILDER_CONTROL_COST, duration: 20 },
+  harvester: { matter: 60, element: 10, control: HARVESTER_CONTROL_COST, duration: 25 },
 };
 
 // ── State types ──────────────────────────────────────────────────────

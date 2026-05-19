@@ -22,12 +22,13 @@ test.describe('NEXT-03 economy baseline', () => {
     await expect(items).toHaveCount(5);
   });
 
-  test('economy HUD shows correct starting resources', async ({ page }) => {
+  test('economy HUD shows correct starting resources (elementUnits displayed as elements)', async ({ page }) => {
     await navigateToGameScreen(page);
     const values = page.locator('.economy-hud__value');
     await expect(values.nth(0)).toHaveText('0/200');
     await expect(values.nth(1)).toHaveText('100/200');
-    await expect(values.nth(2)).toHaveText('3/10');
+    // Element display: 30 elementUnits → "3.0", 200 elementUnits cap → "20.0"
+    await expect(values.nth(2)).toHaveText('3.0/20.0');
   });
 
   test('economy HUD labels are in Russian and show active faction element', async ({ page }) => {
@@ -38,7 +39,7 @@ test.describe('NEXT-03 economy baseline', () => {
     await expect(labels.nth(2)).toHaveText('Голубой элемент');
   });
 
-  test('economy state stores four faction elements', async ({ page }) => {
+  test('economy state stores four faction elements (elementUnits)', async ({ page }) => {
     await navigateToGameScreen(page);
     const economyState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__economyState as {
@@ -56,14 +57,15 @@ test.describe('NEXT-03 economy baseline', () => {
     expect(economyState!.faction).toBe('cyan');
     expect(economyState!.raw).toBe(0);
     expect(economyState!.matter).toBe(100);
-    expect(economyState!.elements).toEqual({ cyan: 3, green: 0, yellow: 0, purple: 0 });
-    expect(economyState!.activeElement).toBe(3);
+    // Elements stored in elementUnits: 30 units = 3.0 displayed elements
+    expect(economyState!.elements).toEqual({ cyan: 30, green: 0, yellow: 0, purple: 0 });
+    expect(economyState!.activeElement).toBe(30); // 30 elementUnits
     expect(economyState!.rawCap).toBe(200);
     expect(economyState!.matterCap).toBe(200);
-    expect(economyState!.elementCap).toBe(10);
+    expect(economyState!.elementCap).toBe(200); // 200 elementUnits = 20 displayed elements
   });
 
-  test('green faction starts with green element only', async ({ page }) => {
+  test('green faction starts with green element only (elementUnits)', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Стандартная/ }).click();
@@ -80,8 +82,9 @@ test.describe('NEXT-03 economy baseline', () => {
       } | null;
     });
     expect(economyState!.faction).toBe('green');
-    expect(economyState!.elements).toEqual({ cyan: 0, green: 3, yellow: 0, purple: 0 });
-    expect(economyState!.activeElement).toBe(3);
+    // Elements stored in elementUnits: 30 units = 3.0 displayed elements
+    expect(economyState!.elements).toEqual({ cyan: 0, green: 30, yellow: 0, purple: 0 });
+    expect(economyState!.activeElement).toBe(30); // 30 elementUnits
   });
 
   test('separator state is empty at game start (no separators)', async ({ page }) => {

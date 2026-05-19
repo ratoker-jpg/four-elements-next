@@ -31,9 +31,9 @@ function createStateWithFactory(factoryTx = 10, factoryTy = 10) {
   // Register in production state
   state.production.factories.push({ tx: factoryTx, ty: factoryTy, queue: [] });
 
-  // Give plenty of resources for tests
+  // Give plenty of resources for tests (element values are in elementUnits)
   state.economy.resources.matter = 500;
-  state.economy.resources.elements.cyan = 10;
+  state.economy.resources.elements.cyan = 100; // 100 elementUnits = 10 displayed elements
 
   return state;
 }
@@ -78,16 +78,16 @@ describe('applyCompletedBuildingToProduction', () => {
 // ── PRODUCTION_COSTS ───────────────────────────────────────────────────
 
 describe('PRODUCTION_COSTS', () => {
-  it('builder costs 50 Matter + 1 Element, 20s, 1 Control', () => {
+  it('builder costs 50 Matter + 10 elementUnits (= 1 Element), 20s, 1 Control', () => {
     expect(PRODUCTION_COSTS.builder.matter).toBe(50);
-    expect(PRODUCTION_COSTS.builder.element).toBe(1);
+    expect(PRODUCTION_COSTS.builder.element).toBe(10); // 10 elementUnits = 1 displayed element
     expect(PRODUCTION_COSTS.builder.control).toBe(1);
     expect(PRODUCTION_COSTS.builder.duration).toBe(20);
   });
 
-  it('harvester costs 60 Matter + 1 Element, 25s, 1 Control', () => {
+  it('harvester costs 60 Matter + 10 elementUnits (= 1 Element), 25s, 1 Control', () => {
     expect(PRODUCTION_COSTS.harvester.matter).toBe(60);
-    expect(PRODUCTION_COSTS.harvester.element).toBe(1);
+    expect(PRODUCTION_COSTS.harvester.element).toBe(10); // 10 elementUnits = 1 displayed element
     expect(PRODUCTION_COSTS.harvester.control).toBe(1);
     expect(PRODUCTION_COSTS.harvester.duration).toBe(25);
   });
@@ -117,7 +117,7 @@ describe('startProduction', () => {
     expect(factory.queue[0]!.completed).toBe(false);
   });
 
-  it('deducts matter and element on enqueue', () => {
+  it('deducts matter and element (elementUnits) on enqueue', () => {
     const state = createStateWithFactory();
     const matterBefore = state.economy.resources.matter;
     const elemBefore = state.economy.resources.elements.cyan;
@@ -125,7 +125,7 @@ describe('startProduction', () => {
     startProduction(state, 10, 10, 'builder');
 
     expect(state.economy.resources.matter).toBe(matterBefore - 50);
-    expect(state.economy.resources.elements.cyan).toBe(elemBefore - 1);
+    expect(state.economy.resources.elements.cyan).toBe(elemBefore - 10); // 10 elementUnits = 1 displayed element
   });
 
   it('reserves control.used on enqueue', () => {
@@ -188,9 +188,9 @@ describe('startProduction', () => {
     expect(result.reason).toBe('insufficient-matter');
   });
 
-  it('fails with insufficient-element when active faction element is 0', () => {
+  it('fails with insufficient-element when active faction element < 10 elementUnits', () => {
     const state = createStateWithFactory();
-    state.economy.resources.elements.cyan = 0;
+    state.economy.resources.elements.cyan = 9; // 9 elementUnits < 10 required
 
     const result = startProduction(state, 10, 10, 'builder');
     expect(result.ok).toBe(false);
