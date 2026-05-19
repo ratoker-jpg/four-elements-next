@@ -150,6 +150,7 @@ export class GameWorld {
     delete (window as any).__harvesterState;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__productionState;
+    delete (window as any).__territoryState;
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,7 +199,7 @@ export class GameWorld {
     const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
       ? this.prevHarvesterPositions
       : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory);
     // Snapshot current harvester positions for next frame's direction computation
     // only when the spritesheet flag is ON (no point burning cycles otherwise).
     if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
@@ -332,6 +333,17 @@ export class GameWorld {
           progress: item.progress,
           completed: item.completed,
         })),
+      })),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__territoryState = {
+      width: this.state.territory.width,
+      height: this.state.territory.height,
+      claimedCount: this.state.territory.tiles.filter((t) => t.progress > 0).length,
+      sources: this.state.territory.sources.map((s) => ({
+        cx: s.cx,
+        cy: s.cy,
+        footprintClaimed: s.footprintClaimed,
       })),
     };
 

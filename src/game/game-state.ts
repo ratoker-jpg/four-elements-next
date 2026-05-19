@@ -30,6 +30,11 @@ import {
   createProductionState,
   type ProductionState,
 } from '../systems/production.js';
+import {
+  createTerritoryState,
+  initTerritoryFromHq,
+  type TerritoryState,
+} from '../systems/territory.js';
 import { getBuildingFootprint } from '../config/buildings.js';
 
 /** Map the UI map-size string to a grid dimension. */
@@ -50,6 +55,8 @@ export interface GameState {
   resourceNodes: ResourceNodeState[];
   /** Production system state: factory queues and progress. Managed by tickProduction. */
   production: ProductionState;
+  /** Territory spread state: per-tile ownership and frontier. Managed by tickTerritory. */
+  territory: TerritoryState;
 }
 
 /** Resolve "random" faction to a concrete FactionId. */
@@ -129,6 +136,10 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
 
   const production = createProductionState();
 
+  // Territory: initialize with HQ footprint as fully owned
+  const territory = createTerritoryState(size, size);
+  initTerritoryFromHq(territory, map.hq.tx, map.hq.ty, resolvedFaction);
+
   return {
     map,
     economy,
@@ -138,5 +149,6 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
     harvesters,
     resourceNodes,
     production,
+    territory,
   };
 }

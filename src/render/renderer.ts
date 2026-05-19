@@ -22,6 +22,8 @@ import {
 import type { Camera } from './camera.js';
 import { renderResourceNode, renderObstacle, renderDecor } from './environment.js';
 import { renderTerrain } from './terrain.js';
+import { renderTerritory } from './territory.js';
+import type { TerritoryState } from '../systems/territory.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import { isAssetPreviewEnabled, drawAssetPreview } from '../dev/asset-preview.js';
 
@@ -44,6 +46,7 @@ export function render(
   harvesters: readonly HarvesterState[],
   ticks: number,
   prevHarvesterPositions: ReadonlyMap<number, { tx: number; ty: number }>,
+  territory: TerritoryState,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -53,6 +56,9 @@ export function render(
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   renderTerrain(ctx, map, camera, assets);
+
+  // Territory overlay: after terrain, before entities
+  renderTerritory(ctx, territory, camera);
 
   const entities: SortedEntity[] = [];
   entities.push({

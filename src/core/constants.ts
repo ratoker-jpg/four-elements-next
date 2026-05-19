@@ -65,6 +65,17 @@ export const GRID_COLOR = 'rgba(0,0,0,0.06)';
 export const HQ_COLOR = '#d4a544';
 export const BG_COLOR = '#171008';
 
+// Territory spread
+export const TERRITORY_TILE_FILL_SECONDS = 15; // Seconds to fill one footprint tile
+export const TERRITORY_SPREAD_STEP_SECONDS = 2; // Seconds between each frontier spread step
+export const TERRITORY_MAX_RADIUS = 10; // Max Chebyshev distance from source center
+export const TERRITORY_FACTION_COLORS: Record<string, string> = {
+  cyan: '#00e5ff',
+  green: '#76ff03',
+  yellow: '#ffd600',
+  purple: '#d500f9',
+};
+
 // Asset manifest — paths relative to public dir (no leading slash).
 // Resolved at runtime via assetPath() which prepends BASE_URL.
 export const ASSET_MANIFEST: Record<string, string> = {
