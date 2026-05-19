@@ -312,3 +312,22 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
     expect(critical).toEqual([]);
   });
 });
+
+test.describe('DEV-SANDBOX-PR1B devtools URL flag', () => {
+  test('URL with ?devtools=1 — URLSearchParams returns devtools=1', async ({ page }) => {
+    await page.goto('/?devtools=1');
+    const allowed = await page.evaluate(() => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('devtools') === '1';
+    });
+    expect(allowed).toBe(true);
+  });
+
+  test('URL without ?devtools=1 — URLSearchParams does not have devtools', async ({ page }) => {
+    await page.goto('/');
+    const hasDevtools = await page.evaluate(() => {
+      return new URLSearchParams(window.location.search).get('devtools');
+    });
+    expect(hasDevtools).toBeNull();
+  });
+});

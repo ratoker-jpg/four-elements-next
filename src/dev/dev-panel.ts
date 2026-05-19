@@ -7,7 +7,8 @@
  * Availability:
  * - import.meta.env.DEV === true (vite dev server)
  * - import.meta.env.MODE === 'test' (E2E builds)
- * - NOT available in production/GitHub Pages builds.
+ * - URL query parameter ?devtools=1 (GitHub Pages / production)
+ * - NOT available on production/GitHub Pages URLs without ?devtools=1.
  *
  * Toggle: backtick/tilde key (`).
  * Hidden by default.
@@ -65,7 +66,14 @@ export interface DevPanelActions {
 
 /** Whether the dev panel is allowed in the current build mode. */
 export function isDevPanelAllowed(): boolean {
-  return import.meta.env.DEV === true || import.meta.env.MODE === 'test';
+  if (import.meta.env.DEV === true) return true;
+  if (import.meta.env.MODE === 'test') return true;
+  // Allow on production/GitHub Pages when explicitly enabled via URL flag
+  if (typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('devtools') === '1') {
+    return true;
+  }
+  return false;
 }
 
 // ── Panel state ────────────────────────────────────────────────────
