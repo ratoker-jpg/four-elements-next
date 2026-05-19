@@ -12,6 +12,7 @@ import {
   STARTER_POCKET_SUBCLUSTER_MAX,
   STARTER_POCKET_SUBCLUSTER_RADIUS,
   STARTER_POCKET_CORNER_BIAS,
+  STARTER_POCKET_WEDGE_HALF_ANGLE,
   CENTER_FIELD_LARGE_COUNT,
   CENTER_FIELD_MEDIUM_COUNT,
   CENTER_INFINITE_OFFSET_MAX,
@@ -219,7 +220,9 @@ function placeResources(
   return resources;
 }
 
-/** Place a dense starter resource pocket biased toward the nearest map corner. */
+/** Place a dense starter resource pocket biased toward the nearest map corner.
+ *  Uses a corner-side wedge for sub-cluster placement and rejects any
+ *  candidate that falls on the playfield side of HQ. */
 function placeStarterResourcePocket(
   w: number,
   h: number,
@@ -239,6 +242,13 @@ function placeStarterResourcePocket(
   const pocketCx = hqCx + (cornerX - hqCx) * STARTER_POCKET_CORNER_BIAS;
   const pocketCy = hqCy + (cornerY - hqCy) * STARTER_POCKET_CORNER_BIAS;
 
+  // Direction from HQ toward map center ("playfield direction")
+  const playDirX = w / 2 - hqCx;
+  const playDirY = h / 2 - hqCy;
+
+  // Direction from HQ toward corner (for wedge)
+  const cornerAngle = Math.atan2(cornerY - hqCy, cornerX - hqCx);
+
   // Build a list of (type, count) pairs
   const toPlace: Array<{ type: ResourceType; remaining: number }> = [];
   for (let i = 0; i < STARTER_POCKET_SMALL_COUNT; i++) {
@@ -248,14 +258,15 @@ function placeStarterResourcePocket(
     toPlace.push({ type: 'medium', remaining: 1 });
   }
 
-  // Create 2-4 sub-clusters around pocket center
+  // Create 2-4 sub-clusters around pocket center, within a wedge toward the corner
   const subClusterCount = STARTER_POCKET_SUBCLUSTER_MIN
     + Math.floor(rand() * (STARTER_POCKET_SUBCLUSTER_MAX - STARTER_POCKET_SUBCLUSTER_MIN + 1));
 
-  // Generate sub-cluster centers
+  // Generate sub-cluster centres constrained to the corner-side wedge
   const subClusters: Array<{ cx: number; cy: number }> = [];
   for (let s = 0; s < subClusterCount; s++) {
-    const angle = rand() * Math.PI * 2;
+    // Angle within ±WEDGE_HALF_ANGLE of the corner direction
+    const angle = cornerAngle + (rand() * 2 - 1) * STARTER_POCKET_WEDGE_HALF_ANGLE;
     const dist = 2 + rand() * 4;
     subClusters.push({
       cx: pocketCx + Math.cos(angle) * dist,
@@ -278,6 +289,15 @@ function placeStarterResourcePocket(
     const offsetRange = STARTER_POCKET_SUBCLUSTER_RADIUS;
     const tx = Math.floor(sc.cx + (rand() - 0.5) * offsetRange * 2);
     const ty = Math.floor(sc.cy + (rand() - 0.5) * offsetRange * 2);
+
+    // Reject if candidate falls on the playfield side of HQ
+    const toRx = tx + fp / 2 - hqCx;
+    const toRy = ty + fp / 2 - hqCy;
+    if (toRx * playDirX + toRy * playDirY > 0) {
+      // Candidate is on the inner/playfield side — skip
+      clusterIdx++;
+      continue;
+    }
 
     // Validate placement
     if (canPlaceResource(tx, ty, fp, w, h, occupied, hqCx, hqCy)) {
