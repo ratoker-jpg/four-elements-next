@@ -9,8 +9,8 @@
  * 1. HQ footprint starts as fully owned territory (progress = 1).
  * 2. When a building is completed, its footprint tiles begin filling sequentially.
  * 3. After a tile reaches progress 1, it can spread to unclaimed neighbors.
- * 4. Spread is wave-like, one tile per step, with a max radius of 10 from
- *    the source building center.
+ * 4. Spread is wave-like, one tile per spread step, with a max radius of 10
+ *    from the source building center.
  * 5. Territory does not affect construction, movement, or pathfinding.
  */
 
@@ -252,9 +252,9 @@ export function tickTerritory(
 }
 
 /**
- * Process one spread step: claim the next frontier wave.
- * Each step claims all tiles at the current frontier distance,
- * then expands the frontier to their unclaimed neighbors.
+ * Process one spread step: claim exactly one deterministic frontier tile.
+ * Order: sort frontier by (distance, ty, tx), claim the first unclaimed
+ * entry, then add its unclaimed neighbors to the frontier (de-duplicated).
  */
 function processSpreadStep(state: TerritoryState, faction: FactionId): void {
   if (state.frontier.length === 0) return;
@@ -262,41 +262,46 @@ function processSpreadStep(state: TerritoryState, faction: FactionId): void {
   // Sort frontier for deterministic order: by distance, then by ty, then by tx
   state.frontier.sort((a, b) => a.dist - b.dist || a.ty - b.ty || a.tx - b.tx);
 
-  // Claim all frontier tiles at the minimum distance
-  const nextFrontier: Array<{ tx: number; ty: number; dist: number; owner: FactionId }> = [];
-
-  // Process tiles in order — claim them and expand
-  let i = 0;
-  while (i < state.frontier.length) {
+  // Find and claim the first unclaimed frontier tile (one tile per step)
+  let claimed = false;
+  for (let i = 0; i < state.frontier.length; i++) {
     const entry = state.frontier[i]!;
     const idx = entry.ty * state.width + entry.tx;
     const tile = state.tiles[idx]!;
 
-    // Only claim if still unclaimed
-    if (tile.progress === 0) {
-      state.tiles[idx] = { progress: 1, owner: faction, distFromSource: entry.dist };
+    if (tile.progress > 0) continue; // already claimed or filling — skip
 
-      // Expand to unclaimed neighbors
-      for (const [nx, ny] of getNeighbors(entry.tx, entry.ty, state.width, state.height)) {
-        const nIdx = ny * state.width + nx;
-        const nTile = state.tiles[nIdx]!;
-        if (nTile.progress > 0) continue; // already claimed or filling
+    // Claim this tile
+    state.tiles[idx] = { progress: 1, owner: faction, distFromSource: entry.dist };
+    claimed = true;
 
-        // Check distance from nearest source
-        const minDist = getMinDistFromSources(state, nx, ny);
-        if (minDist > TERRITORY_MAX_RADIUS) continue;
+    // Remove the claimed entry from the frontier
+    state.frontier.splice(i, 1);
 
-        // Avoid duplicates — check by position
-        const alreadyInNext = nextFrontier.some(f => f.tx === nx && f.ty === ny);
-        if (alreadyInNext) continue;
+    // Add unclaimed neighbors of the newly claimed tile to the frontier
+    for (const [nx, ny] of getNeighbors(entry.tx, entry.ty, state.width, state.height)) {
+      const nIdx = ny * state.width + nx;
+      const nTile = state.tiles[nIdx]!;
+      if (nTile.progress > 0) continue; // already claimed or filling
 
-        nextFrontier.push({ tx: nx, ty: ny, dist: minDist, owner: faction });
-      }
+      // Check distance from nearest source
+      const minDist = getMinDistFromSources(state, nx, ny);
+      if (minDist > TERRITORY_MAX_RADIUS) continue;
+
+      // De-duplicate: skip if already in frontier
+      const alreadyInFrontier = state.frontier.some(f => f.tx === nx && f.ty === ny);
+      if (alreadyInFrontier) continue;
+
+      state.frontier.push({ tx: nx, ty: ny, dist: minDist, owner: faction });
     }
-    i++;
+
+    break; // one tile per step
   }
 
-  state.frontier = nextFrontier;
+  // If no tile was claimed (all frontier entries already claimed), clear the frontier
+  if (!claimed) {
+    state.frontier = [];
+  }
 }
 
 /** Get the minimum Chebyshev distance from (tx,ty) to any territory source center. */

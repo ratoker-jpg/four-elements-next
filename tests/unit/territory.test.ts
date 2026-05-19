@@ -8,6 +8,7 @@ import {
   countClaimedTiles,
   isTileClaimed,
 } from '../../src/systems/territory.js';
+import { buildOccupiedTileSet } from '../../src/systems/construction.js';
 import { HQ_FOOTPRINT, TERRITORY_TILE_FILL_SECONDS, TERRITORY_SPREAD_STEP_SECONDS, TERRITORY_MAX_RADIUS } from '../../src/core/constants.js';
 import type { MapData, BuildingPlacement } from '../../src/game/map-types.js';
 
@@ -199,6 +200,39 @@ describe('tickTerritory — footprint fill', () => {
 });
 
 describe('tickTerritory — spread', () => {
+  it('one spread step claims exactly one tile beyond the HQ footprint', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 3×3 = 9
+    expect(countClaimedTiles(state)).toBe(hqTiles);
+
+    // One spread step
+    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+
+    // Exactly one new tile should be claimed
+    expect(countClaimedTiles(state)).toBe(hqTiles + 1);
+  });
+
+  it('several spread steps claim several tiles, not whole rings', () => {
+    const map = createMinimalMap();
+    const state = createTerritoryState(20, 20);
+    initTerritoryFromHq(state, 4, 4, 'cyan');
+
+    const hqTiles = HQ_FOOTPRINT * HQ_FOOTPRINT; // 9
+
+    // After 3 spread steps → exactly 3 new tiles
+    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 1);
+
+    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 2);
+
+    tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    expect(countClaimedTiles(state)).toBe(hqTiles + 3);
+  });
+
   it('territory spreads outward after source is claimed', () => {
     const map = createMinimalMap();
     const state = createTerritoryState(20, 20);
@@ -213,7 +247,7 @@ describe('tickTerritory — spread', () => {
     expect(countClaimedTiles(state)).toBeGreaterThan(initialCount);
   });
 
-  it('spread is wave-like (one step at a time)', () => {
+  it('spread is wave-like (one tile per step)', () => {
     const map = createMinimalMap();
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
@@ -303,17 +337,53 @@ describe('tickTerritory — safety', () => {
 });
 
 describe('territory does not block construction', () => {
-  it('territory data has no impact on buildOccupiedTileSet', () => {
-    // This is an architectural test — territory state is separate from
-    // the construction occupied set. Verify by checking that territory
-    // progress exists but construction.buildOccupiedTileSet ignores it.
+  it('claimed territory tiles are not present in the construction occupied set', () => {
+    const map = createMinimalMap();
     const state = createTerritoryState(20, 20);
     initTerritoryFromHq(state, 4, 4, 'cyan');
-    // Territory has claimed tiles
-    expect(countClaimedTiles(state)).toBeGreaterThan(0);
-    // Construction system does not import or reference territory state
-    // This is guaranteed by architecture: territory.ts is not imported by construction.ts
-    expect(true).toBe(true);
+
+    // Tick enough for territory to spread beyond HQ
+    for (let i = 0; i < 5; i++) {
+      tickTerritory(state, map, TERRITORY_SPREAD_STEP_SECONDS);
+    }
+
+    // Collect all territory-claimed tile coordinates
+    const claimedCoords: string[] = [];
+    for (let ty = 0; ty < state.height; ty++) {
+      for (let tx = 0; tx < state.width; tx++) {
+        const tile = getTerritoryTile(state, tx, ty);
+        if (tile && tile.progress > 0) {
+          claimedCoords.push(`${tx},${ty}`);
+        }
+      }
+    }
+
+    // Territory must have spread beyond just the HQ footprint
+    expect(claimedCoords.length).toBeGreaterThan(HQ_FOOTPRINT * HQ_FOOTPRINT);
+
+    // Build the construction occupied set from the same map data
+    const occupied = buildOccupiedTileSet(map);
+
+    // No territory-claimed tile outside the HQ footprint should appear in
+    // the construction occupied set. HQ tiles will overlap (expected — HQ
+    // occupies itself), so filter those out.
+    const hqTileSet = new Set<string>();
+    for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+      for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+        hqTileSet.add(`${map.hq.tx + dx},${map.hq.ty + dy}`);
+      }
+    }
+
+    let territoryOnlyButOccupied = 0;
+    for (const coord of claimedCoords) {
+      if (hqTileSet.has(coord)) continue; // HQ overlap is expected
+      if (occupied.has(coord)) {
+        territoryOnlyButOccupied++;
+      }
+    }
+
+    // Territory spread tiles must NOT be in the construction occupied set
+    expect(territoryOnlyButOccupied).toBe(0);
   });
 });
 
