@@ -3,6 +3,7 @@ import { generateMap } from '../../src/game/mapgen.js';
 import {
   HQ_FOOTPRINT,
   MAP_SIZE_STANDARD,
+  SPRITE_PROFILES,
   START_CORE_RADIUS,
   START_ECONOMY_RADIUS,
 } from '../../src/core/constants.js';
@@ -247,22 +248,71 @@ describe('mapgen', () => {
     }
   });
 
-  it('starter pocket is biased toward corner', () => {
+  it('starter pocket is mostly on corner-side of HQ, not distributed around all sides', () => {
     const map = generateMap();
     const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
     const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
-    const nearSmall = map.resources.filter(
-      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
+    // Playfield direction: from HQ center toward map center
+    const playDirX = map.width / 2 - hqCx;
+    const playDirY = map.height / 2 - hqCy;
+
+    const nearResources = map.resources.filter(
+      (r) => (r.type === 'small' || r.type === 'medium')
+        && Math.hypot(r.tx + r.footprint / 2 - hqCx, r.ty + r.footprint / 2 - hqCy) < START_ECONOMY_RADIUS,
     );
-    // Compute average position of small resources near HQ
-    if (nearSmall.length >= 3) {
-      const avgX = nearSmall.reduce((sum, r) => sum + r.tx, 0) / nearSmall.length;
-      const avgY = nearSmall.reduce((sum, r) => sum + r.ty, 0) / nearSmall.length;
-      // Average should be closer to corner (0,0) than to the opposite corner
-      const distToCorner = Math.hypot(avgX, avgY);
-      const distToOpposite = Math.hypot(avgX - map.width, avgY - map.height);
-      expect(distToCorner).toBeLessThan(distToOpposite);
+
+    let cornerSide = 0;
+    let playfieldSide = 0;
+    for (const r of nearResources) {
+      const toRx = r.tx + r.footprint / 2 - hqCx;
+      const toRy = r.ty + r.footprint / 2 - hqCy;
+      const dot = toRx * playDirX + toRy * playDirY;
+      if (dot <= 0) cornerSide++;
+      else playfieldSide++;
     }
+
+    // The majority of starter resources must be on the corner side
+    expect(cornerSide).toBeGreaterThan(playfieldSide);
+    // At least 70% should be on the corner side
+    if (nearResources.length > 0) {
+      expect(cornerSide).toBeGreaterThanOrEqual(Math.floor(nearResources.length * 0.7));
+    }
+  });
+
+  it('starter pocket corner-side bias is robust across multiple seeds', () => {
+    // Verify that the corner-side majority holds across many seeds
+    const seeds = [1, 7, 42, 100, 200, 300, 500, 777, 999, 1234];
+    let allPass = true;
+    for (const seed of seeds) {
+      const map = generateMap(48, 48, 'cyan', seed);
+      const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
+      const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
+      const playDirX = map.width / 2 - hqCx;
+      const playDirY = map.height / 2 - hqCy;
+      const near = map.resources.filter(
+        (r) => (r.type === 'small' || r.type === 'medium')
+          && Math.hypot(r.tx + r.footprint / 2 - hqCx, r.ty + r.footprint / 2 - hqCy) < START_ECONOMY_RADIUS,
+      );
+      let cornerSide = 0;
+      for (const r of near) {
+        const toRx = r.tx + r.footprint / 2 - hqCx;
+        const toRy = r.ty + r.footprint / 2 - hqCy;
+        if (toRx * playDirX + toRy * playDirY <= 0) cornerSide++;
+      }
+      if (near.length > 0 && cornerSide < Math.floor(near.length * 0.7)) {
+        allPass = false;
+        break;
+      }
+    }
+    expect(allPass).toBe(true);
+  });
+
+  // ── Sprite profile tests ────────────────────────────────────────────────
+
+  it('mineral_infinite sprite profile has size [170, 170] and groundOffset 3', () => {
+    const profile = SPRITE_PROFILES.mineral_infinite;
+    expect(profile.size).toEqual([170, 170]);
+    expect(profile.groundOffset).toBe(3);
   });
 
   // ── Stage B: Center resource field tests ──────────────────────────────

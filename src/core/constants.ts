@@ -27,7 +27,11 @@ export const STARTER_POCKET_SUBCLUSTER_MIN = 2;
 export const STARTER_POCKET_SUBCLUSTER_MAX = 4;
 export const STARTER_POCKET_SUBCLUSTER_RADIUS = 3;
 /** Bias factor toward nearest corner: 0 = centered on HQ, 1 = at corner. */
-export const STARTER_POCKET_CORNER_BIAS = 0.5;
+export const STARTER_POCKET_CORNER_BIAS = 0.6;
+
+/** Half-angle of the wedge (radians) in which sub-cluster centers are placed.
+ *  π/2 = 180° wedge centred on the corner direction. */
+export const STARTER_POCKET_WEDGE_HALF_ANGLE = Math.PI / 2;
 
 // Center resource field (Stage B of MAPGEN-QA-ARCH-01)
 export const CENTER_FIELD_LARGE_COUNT = 4;
@@ -51,7 +55,7 @@ export const SPRITE_PROFILES = {
   mineral_small: { size: [42, 42], groundOffset: -12 },
   mineral_medium: { size: [58, 58], groundOffset: 0 },
   mineral_large: { size: [74, 74], groundOffset: 0 },
-  mineral_infinite: { size: [110, 96], groundOffset: 28 },
+  mineral_infinite: { size: [170, 170], groundOffset: 3 },
   mountain_small_01: { size: [80, 72], groundOffset: 0 },
   mountain_medium_01: { size: [120, 96], groundOffset: 12 },
   mountain_large_01: { size: [160, 142], groundOffset: 28 },
