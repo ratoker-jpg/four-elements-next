@@ -897,7 +897,12 @@ export function renderHarvester(
       const profile = SPRITE_PROFILES.harvester_base;
       const dx = harvester.tx - prevTx;
       const dy = harvester.ty - prevTy;
-      const row = directionToRow(dx, dy);
+      // directionToRow returns tile-space row indices, but spritesheet art
+      // follows screen-space direction convention (row 0 = screen-east).
+      // In isometric: tile-east appears as screen-SE, tile-south as screen-SW, etc.
+      // Mapping: screenRow = (tileRow + 1) % 8 rotates tile-space to screen-space.
+      const tileRow = directionToRow(dx, dy);
+      const row = (tileRow + 1) % 8;
       const col = harvesterAnimColumn(harvester.phase, ticks);
       drawSpritesheetFrame(ctx, sprite, row, col, cv.x, cv.y, z, profile);
       return;
