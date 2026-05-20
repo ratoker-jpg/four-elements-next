@@ -384,6 +384,8 @@ export class GameWorld {
         carry: h.carry,
         targetDropoffTx: h.targetDropoffTx,
         targetDropoffTy: h.targetDropoffTy,
+        pathLength: h.path.length,
+        pathIndex: h.pathIndex,
       })),
       resourceNodes: this.state.resourceNodes.map((n) => ({
         tx: n.tx,

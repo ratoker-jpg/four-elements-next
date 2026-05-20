@@ -238,6 +238,8 @@ function trySpawnUnit(
       carry: 0,
       targetDropoffTx: 0,
       targetDropoffTy: 0,
+      path: [],
+      pathIndex: 0,
     });
   }
 
