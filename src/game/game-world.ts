@@ -458,6 +458,7 @@ export class GameWorld {
 
     if (result.reason === 'busy') return 'Строитель уже занят.';
     if (result.reason === 'insufficient-matter') return 'Недостаточно материи для строительства.';
+    if (result.reason === 'no-route') return 'Нет прохода к месту строительства.';
     return 'Не удалось найти место для строительства.';
   }
 

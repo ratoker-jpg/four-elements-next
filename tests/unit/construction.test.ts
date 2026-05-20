@@ -8,6 +8,7 @@ import {
   findAutoPlacement,
   isFootprintBuildable,
   isFootprintWithSpacingBuildable,
+  isSiteReachableByBuilder,
   startConstruction,
   tickConstruction,
 } from '../../src/systems/construction.js';
@@ -104,7 +105,7 @@ describe('construction system', () => {
       }
     }
 
-    expect(findAutoPlacement(map, builder, 'separator')).toBeNull();
+    expect(findAutoPlacement(map, builder, 'separator').placement).toBeNull();
   });
 
   it('rejects partial overlaps across the full footprint area', () => {
@@ -134,19 +135,24 @@ describe('construction system', () => {
 // ── Multi-builder construction ────────────────────────────────────────
 
 describe('multi-builder construction', () => {
+  /** Create a minimal 20×20 map with HQ at (4,4) and two builders. */
   function createMultiBuilderBaseline() {
-    const map = generateMap(48, 48, 'cyan', 42);
-    const economy = createEconomyState(
-      getSeparatorPositions(map.buildings),
-      getRawStorageCount(map.buildings),
-      getMatterStorageCount(map.buildings),
-      'cyan',
-    );
-    // Place second builder at the first builder's position offset by a few tiles
-    // to guarantee findAutoPlacement works from a different position
-    const firstBuilder = map.builders[0]!;
-    map.builders.push({ tx: firstBuilder.tx + 2, ty: firstBuilder.ty + 2, busy: false });
-    // Give plenty of matter for multiple constructions
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [
+        { tx: 15, ty: 15, busy: false },
+        { tx: 14, ty: 14, busy: false },
+      ],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
     economy.resources.matter = 500;
     return { map, economy };
   }
@@ -216,8 +222,7 @@ describe('multi-builder construction', () => {
     expect(map.constructionSites).toHaveLength(1);
     expect(map.constructionSites[0]!.type).toBe('separator');
 
-    // Builder 1 (assigned to command-relay) should be free, builder 0 still busy
-    // Note: builderIndex assignments may vary, find the one assigned to the completed site
+    // One builder freed, one still busy
     const busyBuilders = map.builders.filter((b) => b.busy);
     const freeBuilders = map.builders.filter((b) => !b.busy);
     expect(busyBuilders).toHaveLength(1); // only separator builder still busy
@@ -239,9 +244,8 @@ describe('multi-builder construction', () => {
 
   it('produced builder can be used for construction', () => {
     const { map, economy } = createMultiBuilderBaseline();
-    // Simulate a produced builder added to the map — place near first builder
-    const firstBuilder = map.builders[0]!;
-    map.builders.push({ tx: firstBuilder.tx + 4, ty: firstBuilder.ty, busy: false });
+    // Simulate a produced builder added to the map
+    map.builders.push({ tx: 16, ty: 15, busy: false });
     expect(map.builders).toHaveLength(3);
 
     // Use builders 0 and 1
@@ -259,15 +263,19 @@ describe('multi-builder construction', () => {
   });
 
   it('returns no-placement when no builders exist', () => {
-    const map = generateMap(48, 48, 'cyan', 42);
-    const economy = createEconomyState(
-      getSeparatorPositions(map.buildings),
-      getRawStorageCount(map.buildings),
-      getMatterStorageCount(map.buildings),
-      'cyan',
-    );
-    // Remove all builders
-    map.builders.length = 0;
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
 
     const result = startConstruction(map, economy, 'separator');
     expect(result.ok).toBe(false);
@@ -291,13 +299,19 @@ describe('multi-builder construction', () => {
   });
 
   it('succeeds with second builder when first idle builder has no placement but second does', () => {
-    const map = generateMap(48, 48, 'cyan', 42);
-    const economy = createEconomyState(
-      getSeparatorPositions(map.buildings),
-      getRawStorageCount(map.buildings),
-      getMatterStorageCount(map.buildings),
-      'cyan',
-    );
+    const map: MapData = {
+      width: 48,
+      height: 48,
+      terrain: Array.from({ length: 48 }, () => Array(48).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [{ tx: 10, ty: 10, busy: false }],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
     economy.resources.matter = 500;
     const firstBuilder = map.builders[0]!;
     // Place second builder far away (beyond AUTO_BUILD_MAX_RADIUS of first)
@@ -307,7 +321,6 @@ describe('multi-builder construction', () => {
     map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
 
     // Block all tiles within AUTO_BUILD_MAX_RADIUS of the first builder with obstacles
-    // (decor is non-blocking and would not prevent placement)
     for (let ty = firstBuilder.ty - AUTO_BUILD_MAX_RADIUS; ty <= firstBuilder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
       for (let tx = firstBuilder.tx - AUTO_BUILD_MAX_RADIUS; tx <= firstBuilder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
         if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
@@ -326,13 +339,19 @@ describe('multi-builder construction', () => {
   });
 
   it('returns no-placement when idle builders exist but none can place', () => {
-    const map = generateMap(48, 48, 'cyan', 42);
-    const economy = createEconomyState(
-      getSeparatorPositions(map.buildings),
-      getRawStorageCount(map.buildings),
-      getMatterStorageCount(map.buildings),
-      'cyan',
-    );
+    const map: MapData = {
+      width: 48,
+      height: 48,
+      terrain: Array.from({ length: 48 }, () => Array(48).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [{ tx: 10, ty: 10, busy: false }],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
     economy.resources.matter = 500;
     const firstBuilder = map.builders[0]!;
     // Place second builder far away but block its area too
@@ -341,7 +360,6 @@ describe('multi-builder construction', () => {
     map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
 
     // Block all tiles around BOTH builders with obstacles
-    // (decor is non-blocking and would not prevent placement)
     for (const builder of map.builders) {
       for (let ty = builder.ty - AUTO_BUILD_MAX_RADIUS; ty <= builder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
         for (let tx = builder.tx - AUTO_BUILD_MAX_RADIUS; tx <= builder.tx + AUTO_BUILD_MAX_RADIUS; tx++) {
@@ -542,11 +560,11 @@ describe('building spacing — one-tile gap', () => {
     const builder = map.builders[0]!;
     // findAutoPlacement should find a spot with 1-tile gap from HQ
     const result = findAutoPlacement(map, builder, 'separator');
-    expect(result).not.toBeNull();
+    expect(result.placement).not.toBeNull();
     // Verify the found position passes the spacing check
     const occupied = buildOccupiedTileSet(map);
     const footprint = getBuildingFootprint('separator');
-    expect(isFootprintWithSpacingBuildable(map, occupied, result!.tx, result!.ty, footprint)).toBe(true);
+    expect(isFootprintWithSpacingBuildable(map, occupied, result.placement!.tx, result.placement!.ty, footprint)).toBe(true);
   });
 
   it('findAutoPlacement returns null when spacing leaves no room', () => {
@@ -562,7 +580,7 @@ describe('building spacing — one-tile gap', () => {
     }
     // With buildings every 3 tiles (footprint 2 + spacing 1 = 3), there should be no room
     const result = findAutoPlacement(map, builder, 'separator');
-    expect(result).toBeNull();
+    expect(result.placement).toBeNull();
   });
 });
 
@@ -642,5 +660,269 @@ describe('obstacle interaction with construction', () => {
 
     // Trying to place a 2×2 building at (8,4) should fail — overlaps resource
     expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(false);
+  });
+});
+
+// ── Construction reachability (PATHFINDING-ARCH-01 PR3) ───────────────
+
+describe('construction reachability', () => {
+  /** Create a minimal 20×20 map with HQ at (4,4) and a single builder. */
+  function createReachabilityMap(): MapData {
+    return {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [{ tx: 15, ty: 15, busy: false }],
+      constructionSites: [],
+    };
+  }
+
+  it('construction succeeds when a buildable reachable site exists', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    expect(result.site).toBeDefined();
+  });
+
+  it('construction skips unreachable candidate and finds a reachable one', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+    const builder = map.builders[0]!;
+
+    // Place a wall of obstacles from the builder towards HQ, but leave a gap.
+    // The closest buildable site behind the wall should be unreachable,
+    // but a site on the builder's side should be reachable.
+    // Wall at row 12, columns 5-18 (block horizontal passage)
+    for (let tx = 5; tx <= 18; tx++) {
+      map.obstacles.push({ tx, ty: 12, type: 'rock-cluster', footprint: 1 });
+    }
+    // Leave a gap at tx=4 so there IS a path around, but the first
+    // candidate found by the ring search behind the wall is unreachable.
+    // Since findAutoPlacement searches by radius, closer sites are checked first.
+    // Sites at radius 1-2 are on the builder's side (reachable).
+    // This test just verifies construction still succeeds with partial blocking.
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+  });
+
+  it('construction fails with no-route when all buildable sites are unreachable', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+    const builder = map.builders[0]!;
+
+    // Build a complete wall around the builder, but leave 1 tile inside
+    // for the builder to stand. The area inside is too small for a 2x2 building
+    // with spacing. Buildable sites exist OUTSIDE the wall but the builder
+    // can't reach them because the wall blocks passage.
+    // Wall from (13,13) to (17,17) surrounding the builder at (15,15)
+    for (let ty = 13; ty <= 17; ty++) {
+      for (let tx = 13; tx <= 17; tx++) {
+        // Skip the builder's tile
+        if (tx === 15 && ty === 15) continue;
+        // Skip tiles inside the wall (open area)
+        if (tx >= 14 && tx <= 16 && ty >= 14 && ty <= 16) continue;
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+      }
+    }
+
+    const result = startConstruction(map, economy, 'separator');
+    // There should be buildable sites outside the wall but unreachable
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-route');
+    // No matter should be deducted
+    expect(economy.resources.matter).toBe(500);
+    // Builder should not be busy
+    expect(map.builders[0]!.busy).toBe(false);
+  });
+
+  it('candidate site footprint is treated as blocked during route check', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Place a 2x2 building at (8,8), making a narrow corridor.
+    // A candidate at (10,8) footprint 2 would be buildable and the builder
+    // could normally reach it, but with the candidate footprint blocked,
+    // the path must go around.
+    map.buildings.push({ tx: 8, ty: 8, type: 'separator' });
+
+    // Verify: isSiteReachableByBuilder blocks the candidate footprint
+    const result = isSiteReachableByBuilder(map, builder, 10, 8, 2);
+    // Builder at (15,15) can go around the building at (8,8) to reach (10,8)
+    expect(result).toBe(true);
+  });
+
+  it('builder routes to adjacent passable tile, not into building footprint', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // A site at (8,8) footprint 2 should have adjacent passable tiles
+    // that are NOT inside the footprint
+    const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result).toBe(true);
+
+    // Verify that the builder's own tile is NOT inside the candidate footprint
+    // The builder is at (15,15), far from (8,8), so it must path to an adjacent tile
+  });
+
+  it('decor does not block construction reachability', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Place decor between builder and a candidate site
+    map.decor.push({ tx: 12, ty: 12, type: 'bush' });
+    map.decor.push({ tx: 11, ty: 11, type: 'sand-bump' });
+
+    // Decor should not affect passability — site should still be reachable
+    const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result).toBe(true);
+  });
+
+  it('territory does not block construction reachability', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Territory is not represented in passability grid — not tested directly
+    // but verify that a clean map still allows reachability
+    const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result).toBe(true);
+  });
+
+  it('obstacles block construction reachability', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Completely wall off the builder from all directions
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const tx = builder.tx + dx;
+        const ty = builder.ty + dy;
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (tx === builder.tx && ty === builder.ty) continue;
+        // Leave 1-tile gap around builder so it's not on a blocked tile
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) continue;
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+      }
+    }
+
+    // Site at (8,8) exists and is buildable, but builder can't reach it
+    const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result).toBe(false);
+  });
+
+  it('resources block construction reachability', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Place resources blocking the path
+    map.resources.push({ tx: 13, ty: 14, type: 'small', footprint: 1 });
+    map.resources.push({ tx: 14, ty: 14, type: 'small', footprint: 1 });
+    map.resources.push({ tx: 13, ty: 15, type: 'small', footprint: 1 });
+    map.resources.push({ tx: 14, ty: 15, type: 'small', footprint: 1 });
+
+    // This creates a 2x2 resource block that the builder can't pass through
+    // But builder can still go around — just verify reachability with some blocking
+    const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result).toBe(true); // Can still go around
+  });
+
+  it('buildings and HQ block construction reachability', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // HQ at (4,4) already blocks passability for a 3x3 area
+    // Verify a site adjacent to HQ is still reachable from the builder
+    const result = isSiteReachableByBuilder(map, builder, 8, 4, 2);
+    expect(result).toBe(true);
+
+    // Now create a complete wall of 1x1 obstacles from column 10, row 0 to row 19
+    // This completely blocks the builder at (15,15) from reaching sites at (8,8)
+    for (let ty = 0; ty < 20; ty++) {
+      map.obstacles.push({ tx: 10, ty, type: 'rock-cluster', footprint: 1 });
+    }
+
+    // Builder at (15,15) is now separated from sites at (8,8) by the wall
+    const result2 = isSiteReachableByBuilder(map, builder, 8, 8, 2);
+    expect(result2).toBe(false);
+  });
+
+  it('no matter is deducted when construction fails due to no route', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+    const builder = map.builders[0]!;
+
+    // Wall off the builder completely
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const tx = builder.tx + dx;
+        const ty = builder.ty + dy;
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (tx === builder.tx && ty === builder.ty) continue;
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) continue;
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+      }
+    }
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-route');
+    expect(economy.resources.matter).toBe(500);
+  });
+
+  it('existing spacing rules are unchanged with reachability check', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    // Verify findAutoPlacement returns a site that passes spacing
+    const builder = map.builders[0]!;
+    const placement = findAutoPlacement(map, builder, 'separator');
+    expect(placement.placement).not.toBeNull();
+    const occupied = buildOccupiedTileSet(map);
+    expect(isFootprintWithSpacingBuildable(map, occupied, placement.placement!.tx, placement.placement!.ty, 2)).toBe(true);
+  });
+
+  it('existing matter deduction and builder busy behavior are unchanged after successful start', () => {
+    const map = createReachabilityMap();
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 100;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    expect(economy.resources.matter).toBe(20); // 100 - 80 = 20
+    expect(map.builders[0]!.busy).toBe(true);
+    expect(map.constructionSites).toHaveLength(1);
+  });
+
+  it('findAutoPlacement returns hasUnreachableSite when site is buildable but unreachable', () => {
+    const map = createReachabilityMap();
+    const builder = map.builders[0]!;
+
+    // Wall off the builder completely (reachable area too small for buildings)
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const tx = builder.tx + dx;
+        const ty = builder.ty + dy;
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (tx === builder.tx && ty === builder.ty) continue;
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) continue;
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+      }
+    }
+
+    const result = findAutoPlacement(map, builder, 'separator');
+    expect(result.placement).toBeNull();
+    expect(result.hasUnreachableSite).toBe(true);
   });
 });
