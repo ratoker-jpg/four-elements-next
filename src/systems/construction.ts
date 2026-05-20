@@ -8,13 +8,27 @@ import type {
   MapData,
 } from '../game/map-types.js';
 import type { EconomyState } from './economy.js';
-import { buildPassabilityGrid, findAdjacentPassableTiles, type PassabilityGrid } from './passability.js';
+import { buildPassabilityGrid, findAdjacentPassableTiles, isTileBlocked, type PassabilityGrid } from './passability.js';
 import { findPathToAdjacent } from './pathfinding.js';
 
 export const BUILDER_CONTROL_COST = 1;
 export const AUTO_BUILD_MAX_RADIUS = 15;
 
-export type ConstructionFailureReason = 'busy' | 'insufficient-matter' | 'no-placement' | 'no-route';
+/** Builder movement speed in tiles per second. */
+export const BUILDER_SPEED = 2.0;
+
+/** Arrival threshold in tile-space distance. */
+const ARRIVAL_THRESHOLD = 0.15;
+
+/** Monotonically increasing site ID counter. */
+let nextSiteId = 1;
+
+/** Reset the site ID counter (for tests). */
+export function resetSiteIdCounter(): void {
+  nextSiteId = 1;
+}
+
+export type ConstructionFailureReason = 'busy' | 'insufficient-matter' | 'no-placement' | 'no-route' | 'path-blocked';
 
 export interface ConstructionCommandResult {
   ok: boolean;
@@ -65,6 +79,20 @@ export function startConstruction(
       economy.resources.matter -= definition.costMatter;
       builder.busy = true;
 
+      // Get path to the site (reuse reachability computation)
+      const pathResult = findPathToSite(map, builder, result.placement.tx, result.placement.ty, buildingType);
+
+      // Determine the final adjacent tile (last waypoint or current position)
+      const isAdjacent = pathResult.path.length === 0 && pathResult.found;
+      const lastWaypoint = pathResult.path.length > 0
+        ? pathResult.path[pathResult.path.length - 1]!
+        : { tx: builder.tx, ty: builder.ty };
+
+      const siteId = nextSiteId++;
+
+      // If builder is already adjacent, site starts non-pending and builder goes to building
+      const pending = !isAdjacent;
+
       const site: ConstructionSitePlacement = {
         tx: result.placement.tx,
         ty: result.placement.ty,
@@ -73,8 +101,28 @@ export function startConstruction(
         duration: definition.buildTimeSeconds,
         progress: 0,
         builderIndex,
+        id: siteId,
+        pending,
       };
       map.constructionSites.push(site);
+
+      // Assign builder state
+      builder.assignedSiteId = siteId;
+      builder.path = pathResult.path;
+      builder.pathIndex = 0;
+      builder.targetTx = lastWaypoint.tx;
+      builder.targetTy = lastWaypoint.ty;
+
+      if (isAdjacent) {
+        // Builder already adjacent — start building immediately
+        builder.phase = 'building';
+        builder.ftx = builder.tx + 0.5;
+        builder.fty = builder.ty + 0.5;
+      } else {
+        builder.phase = 'moving-to-site';
+        builder.ftx = builder.tx + 0.5;
+        builder.fty = builder.ty + 0.5;
+      }
 
       return { ok: true, buildingType, site };
     }
@@ -89,11 +137,52 @@ export function startConstruction(
   return { ok: false, reason: 'no-placement', buildingType };
 }
 
-export function tickConstruction(map: MapData, dt: number): ConstructionTickResult {
+export function tickConstruction(map: MapData, economy: EconomyState, dt: number): ConstructionTickResult {
   const completedBuildings: BuildingPlacement[] = [];
 
   for (let index = map.constructionSites.length - 1; index >= 0; index--) {
     const site = map.constructionSites[index]!;
+    const builder = map.builders[site.builderIndex];
+
+    if (site.pending) {
+      // Builder should be moving to the site
+      if (builder && builder.phase === 'moving-to-site' && builder.assignedSiteId === site.id) {
+        // Check if next waypoint is still passable
+        if (builder.pathIndex < builder.path.length) {
+          const grid = buildPassabilityGrid(map);
+          const waypoint = builder.path[builder.pathIndex]!;
+          if (isTileBlocked(grid, waypoint.tx, waypoint.ty)) {
+            // Try one immediate repath
+            const repathResult = tryRepath(map, builder, site);
+            if (!repathResult) {
+              // Repath failed — cancel site, refund matter, free builder
+              cancelSite(map, economy, site, builder, index);
+              continue;
+            }
+          }
+        }
+
+        // Move builder along path
+        if (followBuilderPath(builder, dt)) {
+          // Builder arrived at adjacent tile
+          builder.tx = builder.targetTx;
+          builder.ty = builder.targetTy;
+          builder.ftx = builder.tx + 0.5;
+          builder.fty = builder.ty + 0.5;
+          builder.phase = 'building';
+          builder.path = [];
+          builder.pathIndex = 0;
+          site.pending = false;
+        } else {
+          // Update integer tile position when crossing into a new tile
+          updateBuilderTilePosition(builder);
+        }
+      }
+      // Pending site: do NOT advance elapsed/progress
+      continue;
+    }
+
+    // Non-pending site: advance construction progress
     site.elapsed += dt;
     site.progress = Math.min(site.elapsed / site.duration, 1);
 
@@ -108,15 +197,140 @@ export function tickConstruction(map: MapData, dt: number): ConstructionTickResu
     completedBuildings.push(building);
 
     // Free only the builder assigned to this completed site
-    const assignedBuilder = map.builders[site.builderIndex];
-    if (assignedBuilder) {
-      assignedBuilder.busy = false;
+    if (builder) {
+      resetBuilderToIdle(builder);
     }
 
     map.constructionSites.splice(index, 1);
   }
 
   return { completedBuildings };
+}
+
+/**
+ * Cancel a construction site: refund matter, free builder, remove site from array.
+ */
+function cancelSite(
+  map: MapData,
+  economy: EconomyState,
+  site: ConstructionSitePlacement,
+  builder: BuilderPlacement,
+  siteIndex: number,
+): void {
+  const definition = BUILDING_DEFINITIONS[site.type];
+  economy.resources.matter = Math.min(
+    economy.resources.matter + definition.costMatter,
+    economy.resources.matterCap,
+  );
+  resetBuilderToIdle(builder);
+  map.constructionSites.splice(siteIndex, 1);
+}
+
+/**
+ * Reset a builder to the idle state.
+ */
+function resetBuilderToIdle(builder: BuilderPlacement): void {
+  builder.busy = false;
+  builder.phase = 'idle';
+  builder.path = [];
+  builder.pathIndex = 0;
+  builder.targetTx = builder.tx;
+  builder.targetTy = builder.ty;
+  builder.assignedSiteId = -1;
+}
+
+/**
+ * Try to repath the builder to the assigned site's adjacent tile.
+ * Returns true if repath succeeded, false otherwise.
+ * On success, replaces builder.path and builder.pathIndex.
+ */
+function tryRepath(
+  map: MapData,
+  builder: BuilderPlacement,
+  site: ConstructionSitePlacement,
+): boolean {
+  const footprint = getBuildingFootprint(site.type);
+  const grid = buildPassabilityGrid(map);
+  // Temporarily block the site footprint on the grid
+  markGridBlocked(grid, site.tx, site.ty, footprint);
+
+  const pathResult = findPathToAdjacent(grid, builder.tx, builder.ty, site.tx, site.ty, footprint);
+  if (!pathResult.found) {
+    return false;
+  }
+
+  builder.path = pathResult.path;
+  builder.pathIndex = 0;
+  if (pathResult.path.length > 0) {
+    const last = pathResult.path[pathResult.path.length - 1]!;
+    builder.targetTx = last.tx;
+    builder.targetTy = last.ty;
+  }
+  return true;
+}
+
+/**
+ * Move builder along the current path by BUILDER_SPEED * dt.
+ * Returns true when the path is complete (all waypoints visited).
+ */
+function followBuilderPath(builder: BuilderPlacement, dt: number): boolean {
+  if (builder.pathIndex >= builder.path.length) {
+    return true; // already at destination or empty path
+  }
+
+  const waypoint = builder.path[builder.pathIndex]!;
+  const targetTx = waypoint.tx + 0.5; // tile center
+  const targetTy = waypoint.ty + 0.5;
+
+  if (moveBuilderToward(builder, targetTx, targetTy, dt)) {
+    // Arrived at this waypoint — advance to next
+    builder.pathIndex++;
+    // If no more waypoints, path is complete
+    return builder.pathIndex >= builder.path.length;
+  }
+
+  return false;
+}
+
+/**
+ * Move builder toward target by BUILDER_SPEED * dt.
+ * Returns true if arrived (within ARRIVAL_THRESHOLD).
+ */
+function moveBuilderToward(
+  builder: BuilderPlacement,
+  targetTx: number,
+  targetTy: number,
+  dt: number,
+): boolean {
+  const dx = targetTx - builder.ftx;
+  const dy = targetTy - builder.fty;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist <= ARRIVAL_THRESHOLD) return true;
+
+  const step = BUILDER_SPEED * dt;
+  if (dist <= step) {
+    builder.ftx = targetTx;
+    builder.fty = targetTy;
+    return true;
+  }
+
+  builder.ftx += (dx / dist) * step;
+  builder.fty += (dy / dist) * step;
+  return false;
+}
+
+/**
+ * Update integer tile position from floating-point position.
+ * Called during movement to keep tx/ty in sync with ftx/fty.
+ */
+function updateBuilderTilePosition(builder: BuilderPlacement): void {
+  const newTx = Math.floor(builder.ftx);
+  const newTy = Math.floor(builder.fty);
+  if (newTx !== builder.tx || newTy !== builder.ty) {
+    builder.tx = newTx;
+    builder.ty = newTy;
+  }
 }
 
 export function canAffordBuilding(economy: EconomyState, buildingType: BuildingType): boolean {
@@ -159,6 +373,66 @@ export function findAutoPlacement(
   }
 
   return { placement: null, hasUnreachableSite };
+}
+
+/**
+ * Result of a path query to a construction site.
+ * Includes the path and the target adjacent tile.
+ */
+export interface PathToSiteResult {
+  found: boolean;
+  path: Array<{ tx: number; ty: number }>;
+  targetAdjacentTx: number;
+  targetAdjacentTy: number;
+}
+
+/**
+ * Find a path from the builder to an adjacent passable tile of the site.
+ * Also returns the target adjacent tile coordinates.
+ * The candidate site footprint is treated as blocked during the path query.
+ */
+export function findPathToSite(
+  map: MapData,
+  builder: BuilderPlacement,
+  siteTx: number,
+  siteTy: number,
+  buildingType: BuildingType,
+): PathToSiteResult {
+  const footprint = getBuildingFootprint(buildingType);
+  const grid = buildPassabilityGrid(map);
+  // Temporarily block the candidate footprint on the grid
+  markGridBlocked(grid, siteTx, siteTy, footprint);
+
+  // Find adjacent passable tiles (after blocking the candidate)
+  const adjacentTiles = findAdjacentPassableTiles(grid, siteTx, siteTy, footprint);
+  if (adjacentTiles.length === 0) {
+    return { found: false, path: [], targetAdjacentTx: 0, targetAdjacentTy: 0 };
+  }
+
+  // Check if builder is already on an adjacent tile
+  for (const adj of adjacentTiles) {
+    if (builder.tx === adj.tx && builder.ty === adj.ty) {
+      return { found: true, path: [], targetAdjacentTx: adj.tx, targetAdjacentTy: adj.ty };
+    }
+  }
+
+  // Use BFS to find path to any adjacent tile
+  const pathResult = findPathToAdjacent(grid, builder.tx, builder.ty, siteTx, siteTy, footprint);
+  if (!pathResult.found) {
+    return { found: false, path: [], targetAdjacentTx: 0, targetAdjacentTy: 0 };
+  }
+
+  // Determine target adjacent tile from path
+  const lastWaypoint = pathResult.path.length > 0
+    ? pathResult.path[pathResult.path.length - 1]!
+    : { tx: builder.tx, ty: builder.ty };
+
+  return {
+    found: true,
+    path: pathResult.path,
+    targetAdjacentTx: lastWaypoint.tx,
+    targetAdjacentTy: lastWaypoint.ty,
+  };
 }
 
 /**

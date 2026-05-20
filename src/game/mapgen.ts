@@ -199,7 +199,18 @@ function placeBuildersNearHq(
     if (candidate.tx >= width || candidate.ty >= height) continue;
     if (occupied.has(`${candidate.tx},${candidate.ty}`)) continue;
     markOccupied(occupied, candidate.tx, candidate.ty, 1);
-    return [{ ...candidate, busy: false }];
+    return [{
+      ...candidate,
+      busy: false,
+      phase: 'idle' as const,
+      path: [],
+      pathIndex: 0,
+      ftx: candidate.tx + 0.5,
+      fty: candidate.ty + 0.5,
+      targetTx: candidate.tx,
+      targetTy: candidate.ty,
+      assignedSiteId: -1,
+    }];
   }
 
   throw new Error('Failed to place Builder near HQ');

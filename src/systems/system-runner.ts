@@ -20,7 +20,7 @@ import { tickTerritory, addBuildingSource } from './territory.js';
  */
 export function runSystems(state: GameState, dt: number): void {
   // 1. Construction tick
-  const constructionResult = tickConstruction(state.map, dt);
+  const constructionResult = tickConstruction(state.map, state.economy, dt);
 
   // 2. Completion cascade: wire each completed building into economy, power, and production
   for (const building of constructionResult.completedBuildings) {

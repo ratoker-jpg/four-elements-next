@@ -17,15 +17,16 @@ test.describe('NEXT-05 construction', () => {
     const constructionState = await page.evaluate(() => {
       return (window as Record<string, unknown>).__constructionState as {
         builderBusy: boolean;
-        builders: Array<{ tx: number; ty: number; busy: boolean }>;
+        builders: Array<{ tx: number; ty: number; busy: boolean; phase: string }>;
       };
     });
 
     expect(constructionState.builderBusy).toBe(false);
     expect(constructionState.builders).toHaveLength(1);
+    expect(constructionState.builders[0]!.phase).toBe('idle');
   });
 
-  test('starts construction from the menu, spends matter, and completes into a building', async ({ page }) => {
+  test('starts construction from the menu, builder moves to site, and completes into a building', async ({ page }) => {
     await navigateToGameScreen(page);
 
     // Give plenty of matter so cost is not an issue
@@ -47,22 +48,33 @@ test.describe('NEXT-05 construction', () => {
       const cs = await page.evaluate(() => {
         return (window as Record<string, unknown>).__constructionState as {
           builderBusy: boolean;
+          builders: Array<{ phase: string; assignedSiteId: number }>;
+          sites: Array<{ pending: boolean; id: number }>;
           statusMessage: string;
         };
       });
-      return cs.builderBusy;
-    }, { timeout: 3000 }).toBe(true);
+      return {
+        builderBusy: cs.builderBusy,
+        siteCount: cs.sites.length,
+      };
+    }, { timeout: 3000 }).toEqual({
+      builderBusy: true,
+      siteCount: 1,
+    });
 
-    // Now read the full construction state (guaranteed fresh after poll succeeded)
+    // Read full state after construction started
     const started = await page.evaluate(() => {
       const cs = (window as Record<string, unknown>).__constructionState as {
         builderBusy: boolean;
-        sites: Array<{ type: string; progress: number }>;
+        builders: Array<{ tx: number; ty: number; busy: boolean; phase: string; assignedSiteId: number; pathLength: number }>;
+        sites: Array<{ type: string; progress: number; pending: boolean; id: number }>;
         statusMessage: string;
       };
       const es = (window as Record<string, unknown>).__economyState as { matter: number };
       return {
         builderBusy: cs.builderBusy,
+        builderPhase: cs.builders[0]!.phase,
+        builderAssignedSiteId: cs.builders[0]!.assignedSiteId,
         sites: cs.sites,
         statusMessage: cs.statusMessage,
         matter: es.matter,
@@ -74,12 +86,46 @@ test.describe('NEXT-05 construction', () => {
     expect(started.sites[0]!.type).toBe('separator');
     // Verify matter was spent: addMatter(500) capped at matterCap (200), minus separator cost (80) = 120
     expect(started.matter).toBe(120);
+    // Builder should be assigned to the site
+    expect(started.builderAssignedSiteId).toBe(started.sites[0]!.id);
+    // Builder should be either moving-to-site or building (if already adjacent)
+    expect(['moving-to-site', 'building']).toContain(started.builderPhase);
 
+    // If site is pending (builder not yet adjacent), fast-forward movement
+    if (started.sites[0]!.pending) {
+      // Use fast-forward to advance builder movement and then construction
+      await page.evaluate(() => {
+        const debug = (window as Record<string, unknown>).__constructionTest as {
+          advanceConstruction: (seconds: number) => void;
+        };
+        // Advance enough for builder to arrive (generous time for movement)
+        debug.advanceConstruction(30);
+      });
+
+      // Verify builder arrived and site is no longer pending
+      await expect.poll(async () => {
+        const cs = await page.evaluate(() => {
+          return (window as Record<string, unknown>).__constructionState as {
+            builders: Array<{ phase: string }>;
+            sites: Array<{ pending: boolean }>;
+          };
+        });
+        return {
+          builderPhase: cs.builders[0]!.phase,
+          sitePending: cs.sites[0]?.pending ?? true,
+        };
+      }, { timeout: 5000 }).toEqual({
+        builderPhase: 'building',
+        sitePending: false,
+      });
+    }
+
+    // Fast-forward remaining build time (25 seconds for separator)
     await page.evaluate(() => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
         advanceConstruction: (seconds: number) => void;
       };
-      debug.advanceConstruction(25);
+      debug.advanceConstruction(30);
     });
 
     await expect.poll(async () => {
@@ -87,10 +133,12 @@ test.describe('NEXT-05 construction', () => {
         const construction = (window as Record<string, unknown>).__constructionState as {
           builderBusy: boolean;
           sites: Array<unknown>;
+          builders: Array<{ phase: string }>;
         };
         return {
           builderBusy: construction.builderBusy,
           siteCount: construction.sites.length,
+          builderPhase: construction.builders[0]!.phase,
           separatorCount: ((window as Record<string, unknown>).__economyState as {
             separators: Array<unknown>;
           }).separators.length,
@@ -102,6 +150,7 @@ test.describe('NEXT-05 construction', () => {
     }).toEqual({
       builderBusy: false,
       siteCount: 0,
+      builderPhase: 'idle',
       separatorCount: 1,
       netPower: 1,
     });
