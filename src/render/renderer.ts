@@ -161,6 +161,8 @@ export function render(
         prevTx: prevHarvesterPositions.get(i)?.tx ?? h.tx,
         prevTy: prevHarvesterPositions.get(i)?.ty ?? h.ty,
       })),
+      assets,
+      faction,
     };
     renderDevOverlays(ctx, map, camera, territory, resourceNodes ?? [], spriteDebugData);
   }

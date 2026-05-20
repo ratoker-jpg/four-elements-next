@@ -13,10 +13,13 @@ import type { SpriteProfile } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { Camera } from '../render/camera.js';
 import type { MapData } from '../game/map-types.js';
+import type { FactionId } from '../game/map-types.js';
 import type { TerritoryState } from '../systems/territory.js';
 import type { HarvesterState, ResourceNodeState } from '../systems/harvesting.js';
 import { getBuildingFootprint } from '../config/buildings.js';
-import { RESOURCE_ASSET_KEYS, OBSTACLE_ASSET_KEYS } from '../game/map-types.js';
+import { RESOURCE_ASSET_KEYS, OBSTACLE_ASSET_KEYS, DECOR_ASSET_KEYS } from '../game/map-types.js';
+import type { AssetStore } from '../core/assets.js';
+import { HQ_ASSET_KEYS, BUILDING_ASSET_KEYS, BUILDING_PROFILE_KEYS } from '../render/buildings.js';
 import { isDevPanelAllowed } from './dev-panel.js';
 
 // ── Overlay toggle state ──────────────────────────────────────────
@@ -482,6 +485,10 @@ export interface SpriteDebugData {
     prevTx: number;
     prevTy: number;
   }>;
+  /** AssetStore for looking up real sprite naturalWidth/naturalHeight. */
+  assets: AssetStore;
+  /** Current faction — needed to resolve HQ and building asset keys. */
+  faction: FactionId;
 }
 
 /**
@@ -603,6 +610,7 @@ function drawSpriteAnnotation(
   destRect: { x: number; y: number; w: number; h: number },
   label: string,
   profileLabel: string,
+  spriteMissing?: boolean,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -625,8 +633,19 @@ function drawSpriteAnnotation(
   ctx.closePath();
   ctx.stroke();
 
-  // Sprite bbox — yellow rectangle
-  if (destRect.w > 0 && destRect.h > 0) {
+  // Sprite bbox — yellow rectangle (only if sprite is present and has dimensions)
+  if (spriteMissing) {
+    // Draw a small "X" marker to indicate missing sprite
+    ctx.strokeStyle = 'rgba(255, 80, 80, 0.8)';
+    ctx.lineWidth = 1.5;
+    const xSize = Math.max(4, 6 * zoom);
+    ctx.beginPath();
+    ctx.moveTo(cx - xSize, cy - xSize - 10 * zoom);
+    ctx.lineTo(cx + xSize, cy + xSize - 10 * zoom);
+    ctx.moveTo(cx + xSize, cy - xSize - 10 * zoom);
+    ctx.lineTo(cx - xSize, cy + xSize - 10 * zoom);
+    ctx.stroke();
+  } else if (destRect.w > 0 && destRect.h > 0) {
     ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
     ctx.lineWidth = 1;
     ctx.strokeRect(destRect.x, destRect.y, destRect.w, destRect.h);
@@ -644,9 +663,10 @@ function drawSpriteAnnotation(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.fillStyle = 'rgba(255, 255, 200, 0.9)';
-  ctx.fillText(label, cx, destRect.y - 2);
-  ctx.fillStyle = 'rgba(255, 200, 255, 0.85)';
-  ctx.fillText(profileLabel, cx, destRect.y - 2 - fontSize - 1);
+  const labelY = (destRect.w > 0 && destRect.h > 0) ? destRect.y - 2 : cy - 10 * zoom;
+  ctx.fillText(label, cx, labelY);
+  ctx.fillStyle = spriteMissing ? 'rgba(255, 80, 80, 0.9)' : 'rgba(255, 200, 255, 0.85)';
+  ctx.fillText(profileLabel, cx, labelY - fontSize - 1);
 }
 
 function drawSpriteDebugOverlay(
@@ -658,6 +678,7 @@ function drawSpriteDebugOverlay(
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
   const z = camera.zoom;
+  const { assets, faction } = data;
 
   ctx.save();
 
@@ -669,33 +690,34 @@ function drawSpriteDebugOverlay(
     const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
     const profileKey = 'hq_base';
     const profile = SPRITE_PROFILES[profileKey];
-    // HQ uses drawBuildingSprite math — approximate with square sprite
-    const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, HQ_FOOTPRINT, 200, 200);
-    drawSpriteAnnotation(ctx, cv.x, cv.y, z, HQ_FOOTPRINT, destRect, 'HQ', `${profileKey} [${profile.size}] off=${profile.groundOffset}`);
+    const assetKey = HQ_ASSET_KEYS[map.hq.faction];
+    const sprite = assets.get(assetKey);
+    if (sprite) {
+      const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, HQ_FOOTPRINT, sprite.naturalWidth, sprite.naturalHeight);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, HQ_FOOTPRINT, destRect, 'HQ', `${profileKey} [${profile.size}] off=${profile.groundOffset} nat=${sprite.naturalWidth}x${sprite.naturalHeight}`);
+    } else {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, HQ_FOOTPRINT, { x: cv.x, y: cv.y, w: 0, h: 0 }, 'HQ', `${profileKey} [${profile.size}] NO SPRITE`, true);
+    }
   }
 
   // ── Completed buildings ────────────────────────────────────────
-  const BUILDING_SPRITE_PROFILE_KEYS: Record<string, string> = {
-    separator: 'building_separator',
-    'raw-storage': 'building_raw_storage',
-    'matter-storage': 'building_matter_storage',
-    'power-plant': 'building_power_plant',
-    'command-relay': 'building_command_relay',
-    'units-factory': 'building_units_factory',
-  };
   for (const b of map.buildings) {
     const footprint = getBuildingFootprint(b.type);
     const centerTx = b.tx + footprint / 2;
     const centerTy = b.ty + footprint / 2;
     const scr = tileToScreen(centerTx, centerTy);
     const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
-    const profileKey = BUILDING_SPRITE_PROFILE_KEYS[b.type] ?? '';
-    const profile = SPRITE_PROFILES[profileKey as keyof typeof SPRITE_PROFILES];
-    if (profile) {
-      const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, footprint, 128, 128);
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, destRect, b.type, `${profileKey} [${profile.size}] off=${profile.groundOffset}`);
+    const profileKey = BUILDING_PROFILE_KEYS[b.type];
+    const profile = SPRITE_PROFILES[profileKey];
+    const assetKey = BUILDING_ASSET_KEYS[b.type]?.[faction];
+    const sprite = assetKey ? assets.get(assetKey) : null;
+    if (profile && sprite) {
+      const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, footprint, sprite.naturalWidth, sprite.naturalHeight);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, destRect, b.type, `${profileKey} [${profile.size}] off=${profile.groundOffset} nat=${sprite.naturalWidth}x${sprite.naturalHeight}`);
+    } else if (profile) {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, b.type, `${profileKey} [${profile.size}] NO SPRITE`, true);
     } else {
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, b.type, '(fallback)');
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, b.type, '(no profile)', true);
     }
   }
 
@@ -705,7 +727,7 @@ function drawSpriteDebugOverlay(
     const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
     const profile = SPRITE_PROFILES.builder_base;
     const destRect = computeSpritesheetDestRect(cv.x, cv.y, z, profile);
-    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `builder (${builder.tx},${builder.ty})`, `builder_base [${profile.size}] off=${profile.groundOffset}`);
+    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `builder (${builder.tx},${builder.ty})`, `builder_base [${profile.size}] off=${profile.groundOffset} frame=256x256`);
   }
 
   // ── Harvester ──────────────────────────────────────────────────
@@ -715,7 +737,7 @@ function drawSpriteDebugOverlay(
     const profile = SPRITE_PROFILES.harvester_base;
     const destRect = computeSpritesheetDestRect(cv.x, cv.y, z, profile);
     const dirLabel = (harvester.tx !== prevTx || harvester.ty !== prevTy) ? ` dir=(${(harvester.tx - prevTx).toFixed(1)},${(harvester.ty - prevTy).toFixed(1)})` : '';
-    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `harvester (${harvester.tx.toFixed(1)},${harvester.ty.toFixed(1)})${dirLabel}`, `harvester_base [${profile.size}] off=${profile.groundOffset}`);
+    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `harvester (${harvester.tx.toFixed(1)},${harvester.ty.toFixed(1)})${dirLabel}`, `harvester_base [${profile.size}] off=${profile.groundOffset} frame=256x256`);
   }
 
   // ── Resources ──────────────────────────────────────────────────
@@ -725,11 +747,14 @@ function drawSpriteDebugOverlay(
     const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
     const assetKey = RESOURCE_ASSET_KEYS[r.type];
     const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
-    if (profile) {
-      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, 64, 64);
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, destRect, r.type, `${assetKey} [${profile.size}] off=${profile.groundOffset}`);
+    const sprite = assets.get(assetKey);
+    if (profile && sprite) {
+      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, sprite.naturalWidth, sprite.naturalHeight);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, destRect, r.type, `${assetKey} [${profile.size}] off=${profile.groundOffset} nat=${sprite.naturalWidth}x${sprite.naturalHeight}`);
+    } else if (profile) {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, r.type, `${assetKey} [${profile.size}] NO SPRITE`, true);
     } else {
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, r.type, '(no profile)');
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, r.type, '(no profile)', true);
     }
   }
 
@@ -740,11 +765,31 @@ function drawSpriteDebugOverlay(
     const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
     const assetKey = OBSTACLE_ASSET_KEYS[o.type];
     const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
-    if (profile) {
-      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, 64, 64);
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, destRect, o.type, `${assetKey} [${profile.size}] off=${profile.groundOffset}`);
+    const sprite = assets.get(assetKey);
+    if (profile && sprite) {
+      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, sprite.naturalWidth, sprite.naturalHeight);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, destRect, o.type, `${assetKey} [${profile.size}] off=${profile.groundOffset} nat=${sprite.naturalWidth}x${sprite.naturalHeight}`);
+    } else if (profile) {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, o.type, `${assetKey} [${profile.size}] NO SPRITE`, true);
     } else {
-      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, o.type, '(no profile)');
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, o.type, '(no profile)', true);
+    }
+  }
+
+  // ── Decor ──────────────────────────────────────────────────────
+  for (const d of map.decor) {
+    const scr = tileToScreen(d.tx + 0.5, d.ty + 0.5);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const assetKey = DECOR_ASSET_KEYS[d.type];
+    const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+    const sprite = assets.get(assetKey);
+    if (profile && sprite) {
+      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, sprite.naturalWidth, sprite.naturalHeight);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, d.type, `${assetKey} [${profile.size}] off=${profile.groundOffset} nat=${sprite.naturalWidth}x${sprite.naturalHeight}`);
+    } else if (profile) {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, { x: cv.x, y: cv.y, w: 0, h: 0 }, d.type, `${assetKey} [${profile.size}] NO SPRITE`, true);
+    } else {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, { x: cv.x, y: cv.y, w: 0, h: 0 }, d.type, '(no profile)', true);
     }
   }
 

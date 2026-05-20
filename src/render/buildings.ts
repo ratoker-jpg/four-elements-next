@@ -13,21 +13,21 @@ import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimC
 import { containFit } from './contain-fit.js';
 import { isDebugOverlayEnabled, drawBuildingDebugOverlay } from './debug-overlay.js';
 
-const HQ_ASSET_KEYS: Record<FactionId, string> = {
+export const HQ_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'hq_cyan',
   green: 'hq_green',
   yellow: 'hq_yellow',
   purple: 'hq_purple',
 };
 
-const BUILDER_ASSET_KEYS: Record<FactionId, string> = {
+export const BUILDER_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'builder_cyan',
   green: 'builder_green',
   yellow: 'builder_yellow',
   purple: 'builder_purple',
 };
 
-const HARVESTER_ASSET_KEYS: Record<FactionId, string> = {
+export const HARVESTER_ASSET_KEYS: Record<FactionId, string> = {
   cyan: 'harvester_cyan',
   green: 'harvester_green',
   yellow: 'harvester_yellow',
@@ -35,7 +35,7 @@ const HARVESTER_ASSET_KEYS: Record<FactionId, string> = {
 };
 
 /** Building type → faction → asset key mapping. */
-const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
+export const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
   separator: {
     cyan: 'building_cyan_separator',
     green: 'building_green_separator',
@@ -75,7 +75,7 @@ const BUILDING_ASSET_KEYS: Record<BuildingType, Record<FactionId, string>> = {
 };
 
 /** Profile key for each building type. */
-const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> = {
+export const BUILDING_PROFILE_KEYS: Record<BuildingType, keyof typeof SPRITE_PROFILES> = {
   separator: 'building_separator',
   'raw-storage': 'building_raw_storage',
   'matter-storage': 'building_matter_storage',
