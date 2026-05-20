@@ -28,6 +28,7 @@ import {
 } from '../systems/production.js';
 import { runSystems } from '../systems/system-runner.js';
 import { isDevPanelAllowed, buildDevPanelState, type DevPanelState, type DevPanelActions } from '../dev/dev-panel.js';
+import { getOverlayToggles, setOverlayToggle, type OverlayToggles } from '../dev/dev-overlays.js';
 
 /** Empty readonly map passed to render() when the spritesheet flag is OFF. */
 const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
@@ -161,6 +162,8 @@ export class GameWorld {
       delete (window as any).__productionTest;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).__devActions;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__overlayToggles;
     }
   }
 
@@ -262,7 +265,7 @@ export class GameWorld {
     const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
       ? this.prevHarvesterPositions
       : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory);
+    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory, this.state.resourceNodes);
     // Snapshot current harvester positions for next frame's direction computation
     // only when the spritesheet flag is ON (no point burning cycles otherwise).
     if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
@@ -436,6 +439,11 @@ export class GameWorld {
         fastForward: (seconds: number) => this.debugFastForward(seconds),
         cameraToHq: () => this.debugCameraToHq(),
         cameraToCenter: () => this.debugCameraToCenter(),
+      };
+      // Overlay toggle access for E2E tests
+      (window as any).__overlayToggles = {
+        get: () => ({ ...getOverlayToggles() }),
+        set: (key: string, value: boolean) => setOverlayToggle(key as keyof OverlayToggles, value),
       };
     }
   }

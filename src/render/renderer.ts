@@ -24,8 +24,9 @@ import { renderResourceNode, renderObstacle, renderDecor } from './environment.j
 import { renderTerrain } from './terrain.js';
 import { renderTerritory } from './territory.js';
 import type { TerritoryState } from '../systems/territory.js';
-import type { HarvesterState } from '../systems/harvesting.js';
+import type { HarvesterState, ResourceNodeState } from '../systems/harvesting.js';
 import { isAssetPreviewEnabled, drawAssetPreview } from '../dev/asset-preview.js';
+import { renderDevOverlays, anyOverlayEnabled } from '../dev/dev-overlays.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -47,6 +48,7 @@ export function render(
   ticks: number,
   prevHarvesterPositions: ReadonlyMap<number, { tx: number; ty: number }>,
   territory: TerritoryState,
+  resourceNodes?: readonly ResourceNodeState[],
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -149,5 +151,10 @@ export function render(
   // ASSET-PREVIEW-01: debug-only candidate preview overlay (zero effect when disabled)
   if (isAssetPreviewEnabled()) {
     drawAssetPreview(ctx, camera, canvasW, canvasH, map.hq.tx, map.hq.ty);
+  }
+
+  // DEV-SANDBOX-ARCH-01 PR2: debug overlays (zero effect when all toggled off)
+  if (anyOverlayEnabled()) {
+    renderDevOverlays(ctx, map, camera, territory, resourceNodes ?? []);
   }
 }

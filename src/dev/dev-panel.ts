@@ -20,6 +20,7 @@ import type { ReadonlyControlState } from '../systems/control.js';
 import type { GameState } from '../game/game-state.js';
 import { getFactionElement, formatDisplayElements, ELEMENT_UNITS_PER_ELEMENT } from '../systems/economy.js';
 import { countClaimedTiles } from '../systems/territory.js';
+import { getOverlayToggles, setOverlayToggle, type OverlayToggles } from './dev-overlays.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -138,6 +139,23 @@ export function createDevPanel(actions: DevPanelActions): {
   camSection.appendChild(makeActionBtn('To Center', () => actions.cameraToCenter()));
   actionsEl.appendChild(camSection);
 
+  // Overlay toggles
+  const overlaySection = makeSection('Overlays');
+  const overlayKeys: Array<keyof OverlayToggles> = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii'];
+  const overlayLabels: Record<keyof OverlayToggles, string> = {
+    grid: 'Grid',
+    footprints: 'Footprints',
+    resourceAmounts: 'Resources',
+    obstacleBlocking: 'Blocking',
+    territoryDebug: 'Territory',
+    hqToCenter: 'HQ-Line',
+    radii: 'Radii',
+  };
+  for (const key of overlayKeys) {
+    overlaySection.appendChild(makeToggleBtn(overlayLabels[key], key));
+  }
+  actionsEl.appendChild(overlaySection);
+
   panelEl.appendChild(actionsEl);
 
   // Install toggle key
@@ -213,6 +231,21 @@ function makeActionBtn(label: string, onClick: () => void): HTMLButtonElement {
   btn.className = 'fe-dev-panel__btn';
   btn.textContent = label;
   btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function makeToggleBtn(label: string, overlayKey: keyof OverlayToggles): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.className = 'fe-dev-panel__btn fe-dev-panel__btn--toggle';
+  btn.dataset.overlayKey = overlayKey;
+  btn.textContent = label;
+  btn.dataset.active = String(getOverlayToggles()[overlayKey]);
+
+  btn.addEventListener('click', () => {
+    const current = getOverlayToggles()[overlayKey];
+    setOverlayToggle(overlayKey, !current);
+    btn.dataset.active = String(!current);
+  });
   return btn;
 }
 
