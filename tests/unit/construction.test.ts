@@ -1251,6 +1251,50 @@ describe('builder movement lifecycle', () => {
       expect(builder.assignedSiteId).toBe(-1);
     }
   });
+
+  it('repath cancellation refund is clamped to matterCap', () => {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    const builder = map.builders[0]!;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      // Set matter very close to cap so the refund would exceed it
+      const costMatter = 80; // separator cost
+      economy.resources.matter = economy.resources.matterCap - 10;
+
+      // Block all paths to force repath failure
+      for (let ty = 0; ty < 20; ty++) {
+        for (let tx = 0; tx < 20; tx++) {
+          if (tx === builder.tx && ty === builder.ty) continue;
+          if (Math.abs(tx - builder.tx) <= 1 && Math.abs(ty - builder.ty) <= 1) continue;
+          map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+        }
+      }
+
+      // Tick should trigger repath failure → cancelSite → refund
+      tickConstruction(map, economy, 0.01);
+
+      // Matter must not exceed matterCap
+      expect(economy.resources.matter).toBe(economy.resources.matterCap);
+      // Verify it's strictly less than the unclamped value
+      expect(economy.resources.matter).toBeLessThan(economy.resources.matterCap - 10 + costMatter);
+    }
+  });
 });
 
 // ── Helper ──────────────────────────────────────────────────────────

@@ -218,7 +218,10 @@ function cancelSite(
   siteIndex: number,
 ): void {
   const definition = BUILDING_DEFINITIONS[site.type];
-  economy.resources.matter += definition.costMatter;
+  economy.resources.matter = Math.min(
+    economy.resources.matter + definition.costMatter,
+    economy.resources.matterCap,
+  );
   resetBuilderToIdle(builder);
   map.constructionSites.splice(siteIndex, 1);
 }
