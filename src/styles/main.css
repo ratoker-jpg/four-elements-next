@@ -514,3 +514,26 @@ html, body {
   background: #5a4416;
   color: #fff6b8;
 }
+
+.fe-dev-panel__btn--toggle {
+  position: relative;
+  padding-left: 22px;
+}
+
+.fe-dev-panel__btn--toggle::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+  border: 1px solid #888;
+}
+
+.fe-dev-panel__btn--toggle[data-active="true"]::before {
+  background: #4cff4c;
+  border-color: #4cff4c;
+}
