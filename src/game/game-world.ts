@@ -363,6 +363,12 @@ export class GameWorld {
         tx: builder.tx,
         ty: builder.ty,
         busy: builder.busy,
+        phase: builder.phase,
+        pathLength: builder.path.length,
+        pathIndex: builder.pathIndex,
+        ftx: builder.ftx,
+        fty: builder.fty,
+        assignedSiteId: builder.assignedSiteId,
       })),
       sites: this.state.map.constructionSites.map((site) => ({
         tx: site.tx,
@@ -370,6 +376,8 @@ export class GameWorld {
         type: site.type,
         progress: site.progress,
         builderIndex: site.builderIndex,
+        id: site.id,
+        pending: site.pending,
       })),
       statusMessage: this.state.constructionStatusMessage,
     };

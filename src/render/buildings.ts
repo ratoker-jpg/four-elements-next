@@ -756,7 +756,10 @@ export function renderBuilder(
   faction: FactionId,
   ticks: number,
 ): void {
-  const scr = tileToScreen(builder.tx + 0.5, builder.ty + 0.5);
+  // Use floating-point position for smooth movement when available
+  const renderTx = (builder.phase === 'moving-to-site') ? builder.ftx : builder.tx + 0.5;
+  const renderTy = (builder.phase === 'moving-to-site') ? builder.fty : builder.ty + 0.5;
+  const scr = tileToScreen(renderTx, renderTy);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
 
@@ -776,6 +779,19 @@ export function renderBuilder(
   // Fallback: exact existing isometric box geometry
   const boxHeight = 8 * z;
 
+  let topColor: string;
+  let label: string;
+  if (builder.phase === 'moving-to-site') {
+    topColor = '#e8c83e';
+    label = 'GO';
+  } else if (builder.phase === 'building') {
+    topColor = '#d68f3e';
+    label = 'WORK';
+  } else {
+    topColor = '#9ad8ff';
+    label = 'IDLE';
+  }
+
   drawIsoBox(
     ctx,
     cv.x,
@@ -783,7 +799,7 @@ export function renderBuilder(
     z * 0.72,
     '#6f7e8c',
     '#4e5b66',
-    builder.busy ? '#d68f3e' : '#9ad8ff',
+    topColor,
     boxHeight,
     'BLD',
     true,
@@ -793,7 +809,7 @@ export function renderBuilder(
   ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(builder.busy ? 'WORK' : 'IDLE', cv.x, cv.y - boxHeight - 10 * z);
+  ctx.fillText(label, cv.x, cv.y - boxHeight - 10 * z);
 }
 
 export function renderConstructionSite(
@@ -847,7 +863,7 @@ export function renderConstructionSite(
   ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('SITE', cv.x, platformY - hh - 21 * z);
+  ctx.fillText(site.pending ? 'WAIT' : 'SITE', cv.x, platformY - hh - 21 * z);
 }
 
 /** Phase label for harvester rendering. */

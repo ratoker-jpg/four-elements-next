@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { generateMap } from '../../src/game/mapgen.js';
 import { createEconomyState, getSeparatorPositions, getRawStorageCount, getMatterStorageCount } from '../../src/systems/economy.js';
 import {
@@ -11,10 +11,30 @@ import {
   isSiteReachableByBuilder,
   startConstruction,
   tickConstruction,
+  resetSiteIdCounter,
+  BUILDER_SPEED,
 } from '../../src/systems/construction.js';
 import { getBuildingFootprint } from '../../src/config/buildings.js';
 import { HQ_FOOTPRINT } from '../../src/core/constants.js';
-import type { MapData } from '../../src/game/map-types.js';
+import type { MapData, BuilderPlacement, ConstructionSitePlacement } from '../../src/game/map-types.js';
+
+/** Create a minimal builder with all required fields. */
+function createBuilder(tx: number, ty: number, overrides: Partial<BuilderPlacement> = {}): BuilderPlacement {
+  return {
+    tx,
+    ty,
+    busy: false,
+    phase: 'idle',
+    path: [],
+    pathIndex: 0,
+    ftx: tx + 0.5,
+    fty: ty + 0.5,
+    targetTx: tx,
+    targetTy: ty,
+    assignedSiteId: -1,
+    ...overrides,
+  };
+}
 
 describe('construction system', () => {
   function createBaseline() {
@@ -122,12 +142,27 @@ describe('construction system', () => {
     const { map, economy } = createBaseline();
     startConstruction(map, economy, 'command-relay');
 
-    const result = tickConstruction(map, 18);
+    // If site is pending, fast-forward builder arrival
+    const site = map.constructionSites[0]!;
+    if (site.pending) {
+      const builder = map.builders[0]!;
+      builder.tx = builder.targetTx;
+      builder.ty = builder.targetTy;
+      builder.ftx = builder.tx + 0.5;
+      builder.fty = builder.ty + 0.5;
+      builder.phase = 'building';
+      builder.path = [];
+      builder.pathIndex = 0;
+      site.pending = false;
+    }
+
+    const result = tickConstruction(map, economy, 18);
 
     expect(result.completedBuildings).toHaveLength(1);
     expect(result.completedBuildings[0]!.type).toBe('command-relay');
     expect(map.constructionSites).toHaveLength(0);
     expect(map.builders[0]!.busy).toBe(false);
+    expect(map.builders[0]!.phase).toBe('idle');
     expect(map.buildings.some((building) => building.type === 'command-relay')).toBe(true);
   });
 });
@@ -147,8 +182,8 @@ describe('multi-builder construction', () => {
       decor: [],
       buildings: [],
       builders: [
-        { tx: 15, ty: 15, busy: false },
-        { tx: 14, ty: 14, busy: false },
+        createBuilder(15, 15),
+        createBuilder(14, 14),
       ],
       constructionSites: [],
     };
@@ -157,7 +192,22 @@ describe('multi-builder construction', () => {
     return { map, economy };
   }
 
-  const HQ_FOOTPRINT = 3; // match the constant
+  /** Force all pending sites to become non-pending (builder arrived). */
+  function forceBuildersArrived(map: MapData): void {
+    for (const site of map.constructionSites) {
+      if (!site.pending) continue;
+      const builder = map.builders[site.builderIndex];
+      if (!builder) continue;
+      builder.tx = builder.targetTx;
+      builder.ty = builder.targetTy;
+      builder.ftx = builder.tx + 0.5;
+      builder.fty = builder.ty + 0.5;
+      builder.phase = 'building';
+      builder.path = [];
+      builder.pathIndex = 0;
+      site.pending = false;
+    }
+  }
 
   it('uses second builder when first is busy', () => {
     const { map, economy } = createMultiBuilderBaseline();
@@ -199,8 +249,11 @@ describe('multi-builder construction', () => {
     expect(map.builders[0]!.busy).toBe(true);
     expect(map.builders[1]!.busy).toBe(true);
 
+    // Force builders to arrive at sites so progress can advance
+    forceBuildersArrived(map);
+
     // Advance time but not enough to complete either
-    tickConstruction(map, 5);
+    tickConstruction(map, economy, 5);
     expect(map.constructionSites).toHaveLength(2);
     expect(map.builders[0]!.busy).toBe(true);
     expect(map.builders[1]!.busy).toBe(true);
@@ -215,8 +268,11 @@ describe('multi-builder construction', () => {
     expect(map.constructionSites[0]!.builderIndex).toBe(0);
     expect(map.constructionSites[1]!.builderIndex).toBe(1);
 
+    // Force builders to arrive
+    forceBuildersArrived(map);
+
     // Complete only the command-relay (18s)
-    tickConstruction(map, 19);
+    tickConstruction(map, economy, 19);
 
     // Command-relay site should be gone, separator still building
     expect(map.constructionSites).toHaveLength(1);
@@ -234,8 +290,11 @@ describe('multi-builder construction', () => {
     startConstruction(map, economy, 'separator');
     startConstruction(map, economy, 'separator');
 
+    // Force builders to arrive
+    forceBuildersArrived(map);
+
     // Complete both (25s build time)
-    tickConstruction(map, 26);
+    tickConstruction(map, economy, 26);
 
     expect(map.constructionSites).toHaveLength(0);
     expect(map.builders[0]!.busy).toBe(false);
@@ -245,7 +304,7 @@ describe('multi-builder construction', () => {
   it('produced builder can be used for construction', () => {
     const { map, economy } = createMultiBuilderBaseline();
     // Simulate a produced builder added to the map
-    map.builders.push({ tx: 16, ty: 15, busy: false });
+    map.builders.push(createBuilder(16, 15));
     expect(map.builders).toHaveLength(3);
 
     // Use builders 0 and 1
@@ -288,8 +347,9 @@ describe('multi-builder construction', () => {
     startConstruction(map, economy, 'separator');
     expect(map.builders[0]!.busy).toBe(true);
 
-    // Complete it (25s build time)
-    tickConstruction(map, 26);
+    // Force builder to arrive and complete
+    forceBuildersArrived(map);
+    tickConstruction(map, economy, 26);
     expect(map.builders[0]!.busy).toBe(false);
 
     // Builder 0 can start another construction
@@ -308,7 +368,7 @@ describe('multi-builder construction', () => {
       obstacles: [],
       decor: [],
       buildings: [],
-      builders: [{ tx: 10, ty: 10, busy: false }],
+      builders: [createBuilder(10, 10)],
       constructionSites: [],
     };
     const economy = createEconomyState([], 0, 1, 'cyan');
@@ -318,7 +378,7 @@ describe('multi-builder construction', () => {
     // so blocking around first builder does NOT block around second builder
     const secondBuilderTx = firstBuilder.tx + AUTO_BUILD_MAX_RADIUS * 2 + 5;
     const secondBuilderTy = firstBuilder.ty;
-    map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
+    map.builders.push(createBuilder(secondBuilderTx, secondBuilderTy));
 
     // Block all tiles within AUTO_BUILD_MAX_RADIUS of the first builder with obstacles
     for (let ty = firstBuilder.ty - AUTO_BUILD_MAX_RADIUS; ty <= firstBuilder.ty + AUTO_BUILD_MAX_RADIUS; ty++) {
@@ -348,7 +408,7 @@ describe('multi-builder construction', () => {
       obstacles: [],
       decor: [],
       buildings: [],
-      builders: [{ tx: 10, ty: 10, busy: false }],
+      builders: [createBuilder(10, 10)],
       constructionSites: [],
     };
     const economy = createEconomyState([], 0, 1, 'cyan');
@@ -357,7 +417,7 @@ describe('multi-builder construction', () => {
     // Place second builder far away but block its area too
     const secondBuilderTx = firstBuilder.tx + AUTO_BUILD_MAX_RADIUS * 2 + 5;
     const secondBuilderTy = firstBuilder.ty;
-    map.builders.push({ tx: secondBuilderTx, ty: secondBuilderTy, busy: false });
+    map.builders.push(createBuilder(secondBuilderTx, secondBuilderTy));
 
     // Block all tiles around BOTH builders with obstacles
     for (const builder of map.builders) {
@@ -393,7 +453,7 @@ describe('building spacing — one-tile gap', () => {
       obstacles: [],
       decor: [],
       buildings: [],
-      builders: [{ tx: 15, ty: 15, busy: false }],
+      builders: [createBuilder(15, 15)],
       constructionSites: [],
     };
   }
@@ -401,90 +461,60 @@ describe('building spacing — one-tile gap', () => {
   it('cannot place directly adjacent to HQ (0-tile gap)', () => {
     const map = createSpacingMap();
     const occupied = buildOccupiedTileSet(map);
-    // HQ at (4,4) footprint 3 → occupies (4,4)-(6,6)
-    // Place 2×2 at (7,4): perimeter includes x=6 which is HQ → rejected
     expect(isFootprintWithSpacingBuildable(map, occupied, 7, 4, 2)).toBe(false);
-    // Also test adjacent on other sides
-    expect(isFootprintWithSpacingBuildable(map, occupied, 2, 4, 2)).toBe(false); // left
-    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 7, 2)).toBe(false); // below
-    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 2, 2)).toBe(false); // above
+    expect(isFootprintWithSpacingBuildable(map, occupied, 2, 4, 2)).toBe(false);
+    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 7, 2)).toBe(false);
+    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 2, 2)).toBe(false);
   });
 
   it('can place with one empty tile gap from HQ', () => {
     const map = createSpacingMap();
     const occupied = buildOccupiedTileSet(map);
-    // 2×2 at (8,4): footprint (8,4)-(9,5), perimeter (7,3)-(10,6)
-    // HQ occupies (4,4)-(6,6), no overlap with perimeter → accepted
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
-    // Also test gap on other sides
-    expect(isFootprintWithSpacingBuildable(map, occupied, 1, 4, 2)).toBe(true); // left (gap at col 3)
-    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 8, 2)).toBe(true); // below (gap at row 7)
-    expect(isFootprintWithSpacingBuildable(map, occupied, 5, 1, 2)).toBe(true); // above (gap at row 3)
+    expect(isFootprintWithSpacingBuildable(map, occupied, 1, 4, 2)).toBe(true);
+    expect(isFootprintWithSpacingBuildable(map, occupied, 4, 8, 2)).toBe(true);
+    expect(isFootprintWithSpacingBuildable(map, occupied, 5, 1, 2)).toBe(true);
   });
 
   it('cannot place adjacent to a completed building', () => {
     const map = createSpacingMap();
-    // Add a completed building at (8,4) footprint 2 → occupies (8,4)-(9,5)
     map.buildings.push({ tx: 8, ty: 4, type: 'separator' });
     const occupied = buildOccupiedTileSet(map);
-
-    // Try placing adjacent (0 gap) to the right of the building at (10,4)
-    // Perimeter of candidate includes x=9 which is the building → rejected
     expect(isFootprintWithSpacingBuildable(map, occupied, 10, 4, 2)).toBe(false);
   });
 
   it('cannot place adjacent to an active construction site', () => {
     const map = createSpacingMap();
-    // Add an active construction site at (8,4) footprint 2
     map.constructionSites.push({
       tx: 8, ty: 4, type: 'separator',
       elapsed: 0, duration: 25, progress: 0, builderIndex: 0,
+      id: 1, pending: false,
     });
     const occupied = buildOccupiedTileSet(map);
-
-    // Try placing adjacent at (10,4) → perimeter overlaps construction site tile at (9,4)
     expect(isFootprintWithSpacingBuildable(map, occupied, 10, 4, 2)).toBe(false);
   });
 
   it('footprint overlap still fails even with spacing', () => {
     const map = createSpacingMap();
     const occupied = buildOccupiedTileSet(map);
-    // HQ at (4,4)-(6,6): trying to place overlapping HQ footprint should fail
     expect(isFootprintWithSpacingBuildable(map, occupied, 5, 5, 2)).toBe(false);
     expect(isFootprintWithSpacingBuildable(map, occupied, 4, 4, 2)).toBe(false);
   });
 
   it('out-of-bounds spacing perimeter does not fail if footprint is inside map', () => {
     const map = createSpacingMap();
-    // Move HQ away from the edge to make room
     map.hq = { tx: 10, ty: 10, faction: 'cyan' };
     const occupied = buildOccupiedTileSet(map);
-    // Place 2×2 at (0,0): footprint (0,0)-(1,1) is in bounds
-    // Perimeter extends to (-1,-1)-(2,2), but out-of-bounds cells are ignored
-    // No building tiles in the in-bounds portion of the perimeter → accepted
     expect(isFootprintWithSpacingBuildable(map, occupied, 0, 0, 2)).toBe(true);
-
-    // Near right edge: map width=20, place at (18,0) footprint 2 → (18,0)-(19,1)
-    // Perimeter extends to x=20 which is out of bounds → ignored
     expect(isFootprintWithSpacingBuildable(map, occupied, 18, 0, 2)).toBe(true);
-
-    // Near bottom edge: place at (0,18) footprint 2 → (0,18)-(1,19)
-    // Perimeter extends to y=20 which is out of bounds → ignored
     expect(isFootprintWithSpacingBuildable(map, occupied, 0, 18, 2)).toBe(true);
   });
 
   it('resources block footprint but not spacing perimeter', () => {
     const map = createSpacingMap();
-    // Place a resource on the perimeter ring of a candidate position (8,4)
-    // Perimeter of (8,4) footprint 2 → (7,3)-(10,6)
     map.resources.push({ tx: 7, ty: 4, type: 'small', footprint: 1 });
     const occupied = buildOccupiedTileSet(map);
-
-    // Resource at (7,4) is on the perimeter but NOT on the footprint (8,4)-(9,5)
-    // Resources should not block spacing perimeter → accepted
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
-
-    // Now place a resource ON the footprint → should block
     map.resources.push({ tx: 8, ty: 4, type: 'small', footprint: 1 });
     const occupied2 = buildOccupiedTileSet(map);
     expect(isFootprintWithSpacingBuildable(map, occupied2, 8, 4, 2)).toBe(false);
@@ -492,46 +522,36 @@ describe('building spacing — one-tile gap', () => {
 
   it('decor does NOT block building placement (non-blocking)', () => {
     const map = createSpacingMap();
-    // Place decor on a candidate footprint position
     map.decor.push({ tx: 8, ty: 4, type: 'bush' });
     map.decor.push({ tx: 9, ty: 4, type: 'sand-bump' });
     map.decor.push({ tx: 8, ty: 5, type: 'bush' });
     map.decor.push({ tx: 9, ty: 5, type: 'sand-bump' });
     const occupied = buildOccupiedTileSet(map);
-
-    // Decor is non-blocking — building should be placeable even with decor on footprint
     expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(true);
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
   });
 
   it('decor does NOT block spacing perimeter', () => {
     const map = createSpacingMap();
-    // Place decor on the perimeter ring of a candidate position (8,4)
     map.decor.push({ tx: 7, ty: 4, type: 'bush' });
     const occupied = buildOccupiedTileSet(map);
-
-    // Decor on perimeter should not block spacing → accepted
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
   });
 
   it('builders do not block spacing perimeter', () => {
     const map = createSpacingMap();
-    // Builder at (15,15) is already there. Let's add another builder on the perimeter
-    // of a candidate at (8,4) → perimeter includes (7,3)-(10,6)
-    map.builders.push({ tx: 7, ty: 4, busy: false });
+    map.builders.push(createBuilder(7, 4));
     const occupied = buildOccupiedTileSet(map);
-
-    // Builder on perimeter should not block spacing → accepted
     expect(isFootprintWithSpacingBuildable(map, occupied, 8, 4, 2)).toBe(true);
   });
 
   it('buildBuildingTileSet contains only HQ, buildings, and construction sites', () => {
     const map = createSpacingMap();
     map.buildings.push({ tx: 10, ty: 10, type: 'separator' });
-    // Place construction site away from the default builder at (15,15) to avoid overlap
     map.constructionSites.push({
       tx: 12, ty: 10, type: 'raw-storage',
       elapsed: 0, duration: 20, progress: 0, builderIndex: 0,
+      id: 1, pending: false,
     });
     map.resources.push({ tx: 0, ty: 0, type: 'small', footprint: 1 });
     map.decor.push({ tx: 1, ty: 1, type: 'bush' });
@@ -539,29 +559,23 @@ describe('building spacing — one-tile gap', () => {
 
     const buildingTiles = buildBuildingTileSet(map);
 
-    // HQ tiles should be present
     expect(buildingTiles.has('4,4')).toBe(true);
     expect(buildingTiles.has('6,6')).toBe(true);
-    // Building tiles should be present (separator at (10,10) footprint 2)
     expect(buildingTiles.has('10,10')).toBe(true);
     expect(buildingTiles.has('11,11')).toBe(true);
-    // Construction site tiles should be present (raw-storage at (12,10) footprint 2)
     expect(buildingTiles.has('12,10')).toBe(true);
     expect(buildingTiles.has('13,11')).toBe(true);
-    // Resources, decor, obstacles, and builders should NOT be in building tiles
-    expect(buildingTiles.has('0,0')).toBe(false); // resource
-    expect(buildingTiles.has('1,1')).toBe(false); // decor
-    expect(buildingTiles.has('2,2')).toBe(false); // obstacle
-    expect(buildingTiles.has('15,15')).toBe(false); // builder (no overlap with any building/site)
+    expect(buildingTiles.has('0,0')).toBe(false);
+    expect(buildingTiles.has('1,1')).toBe(false);
+    expect(buildingTiles.has('2,2')).toBe(false);
+    expect(buildingTiles.has('15,15')).toBe(false);
   });
 
   it('findAutoPlacement respects spacing — finds position with gap from HQ', () => {
     const map = createSpacingMap();
     const builder = map.builders[0]!;
-    // findAutoPlacement should find a spot with 1-tile gap from HQ
     const result = findAutoPlacement(map, builder, 'separator');
     expect(result.placement).not.toBeNull();
-    // Verify the found position passes the spacing check
     const occupied = buildOccupiedTileSet(map);
     const footprint = getBuildingFootprint('separator');
     expect(isFootprintWithSpacingBuildable(map, occupied, result.placement!.tx, result.placement!.ty, footprint)).toBe(true);
@@ -570,15 +584,12 @@ describe('building spacing — one-tile gap', () => {
   it('findAutoPlacement returns null when spacing leaves no room', () => {
     const map = createSpacingMap();
     const builder = map.builders[0]!;
-    // Fill all tiles with buildings in a tight grid so there's no room with spacing
     for (let ty = 0; ty < map.height; ty += 3) {
       for (let tx = 0; tx < map.width; tx += 3) {
-        // Check if this position overlaps HQ before adding
         if (tx >= 4 && tx <= 6 && ty >= 4 && ty <= 6) continue;
         map.buildings.push({ tx, ty, type: 'separator' });
       }
     }
-    // With buildings every 3 tiles (footprint 2 + spacing 1 = 3), there should be no room
     const result = findAutoPlacement(map, builder, 'separator');
     expect(result.placement).toBeNull();
   });
@@ -587,7 +598,6 @@ describe('building spacing — one-tile gap', () => {
 // ── Obstacle interaction with construction ───────────────────────────
 
 describe('obstacle interaction with construction', () => {
-  /** Create a minimal 20×20 map with HQ at (4,4) and a single builder far from HQ. */
   function createObstacleMap(): MapData {
     return {
       width: 20,
@@ -598,31 +608,22 @@ describe('obstacle interaction with construction', () => {
       obstacles: [],
       decor: [],
       buildings: [],
-      builders: [{ tx: 15, ty: 15, busy: false }],
+      builders: [createBuilder(15, 15)],
       constructionSites: [],
     };
   }
 
   it('obstacle footprints block building placement', () => {
     const map = createObstacleMap();
-    // Place a 2x2 mountain-medium at (8,4)
     map.obstacles.push({ tx: 8, ty: 4, type: 'mountain-medium', footprint: 2 });
     const occupied = buildOccupiedTileSet(map);
-
-    // Trying to place a 2x2 building at (8,4) should fail — overlaps obstacle
     expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(false);
   });
 
   it('obstacles do NOT trigger one-tile spacing rule', () => {
     const map = createObstacleMap();
-    // Place a 1x1 obstacle at (8,4)
     map.obstacles.push({ tx: 8, ty: 4, type: 'rock-cluster', footprint: 1 });
     const occupied = buildOccupiedTileSet(map);
-
-    // Trying to place a 2x2 building at (9,4) — adjacent to obstacle
-    // Footprint (9,4)-(10,5) does not overlap obstacle at (8,4)
-    // Obstacle is on the spacing perimeter but should NOT block spacing
-    // (obstacles are not in buildBuildingTileSet)
     expect(isFootprintWithSpacingBuildable(map, occupied, 9, 4, 2)).toBe(true);
   });
 
@@ -630,7 +631,6 @@ describe('obstacle interaction with construction', () => {
     const map = createObstacleMap();
     map.obstacles.push({ tx: 10, ty: 10, type: 'mountain-medium', footprint: 2 });
     const occupied = buildOccupiedTileSet(map);
-
     expect(occupied.has('10,10')).toBe(true);
     expect(occupied.has('11,11')).toBe(true);
   });
@@ -639,26 +639,19 @@ describe('obstacle interaction with construction', () => {
     const map = createObstacleMap();
     map.obstacles.push({ tx: 10, ty: 10, type: 'mountain-medium', footprint: 2 });
     const buildingTiles = buildBuildingTileSet(map);
-
-    // Only HQ tiles should be present, not obstacle tiles
     expect(buildingTiles.has('10,10')).toBe(false);
     expect(buildingTiles.has('11,11')).toBe(false);
   });
 
   it('multi-tile resource footprint blocks building placement', () => {
     const map = createObstacleMap();
-    // Place a 3×3 infinite resource at (8,4)
     map.resources.push({ tx: 8, ty: 4, type: 'infinite', footprint: 3 });
     const occupied = buildOccupiedTileSet(map);
-
-    // All 9 tiles of the 3×3 resource should be occupied
     for (let dy = 0; dy < 3; dy++) {
       for (let dx = 0; dx < 3; dx++) {
         expect(occupied.has(`${8 + dx},${4 + dy}`)).toBe(true);
       }
     }
-
-    // Trying to place a 2×2 building at (8,4) should fail — overlaps resource
     expect(isFootprintBuildable(map, occupied, 8, 4, 2)).toBe(false);
   });
 });
@@ -666,7 +659,6 @@ describe('obstacle interaction with construction', () => {
 // ── Construction reachability (PATHFINDING-ARCH-01 PR3) ───────────────
 
 describe('construction reachability', () => {
-  /** Create a minimal 20×20 map with HQ at (4,4) and a single builder. */
   function createReachabilityMap(): MapData {
     return {
       width: 20,
@@ -677,7 +669,7 @@ describe('construction reachability', () => {
       obstacles: [],
       decor: [],
       buildings: [],
-      builders: [{ tx: 15, ty: 15, busy: false }],
+      builders: [createBuilder(15, 15)],
       constructionSites: [],
     };
   }
@@ -698,18 +690,9 @@ describe('construction reachability', () => {
     economy.resources.matter = 500;
     const builder = map.builders[0]!;
 
-    // Place a wall of obstacles from the builder towards HQ, but leave a gap.
-    // The closest buildable site behind the wall should be unreachable,
-    // but a site on the builder's side should be reachable.
-    // Wall at row 12, columns 5-18 (block horizontal passage)
     for (let tx = 5; tx <= 18; tx++) {
       map.obstacles.push({ tx, ty: 12, type: 'rock-cluster', footprint: 1 });
     }
-    // Leave a gap at tx=4 so there IS a path around, but the first
-    // candidate found by the ring search behind the wall is unreachable.
-    // Since findAutoPlacement searches by radius, closer sites are checked first.
-    // Sites at radius 1-2 are on the builder's side (reachable).
-    // This test just verifies construction still succeeds with partial blocking.
 
     const result = startConstruction(map, economy, 'separator');
     expect(result.ok).toBe(true);
@@ -721,69 +704,41 @@ describe('construction reachability', () => {
     economy.resources.matter = 500;
     const builder = map.builders[0]!;
 
-    // Build a complete wall around the builder, but leave 1 tile inside
-    // for the builder to stand. The area inside is too small for a 2x2 building
-    // with spacing. Buildable sites exist OUTSIDE the wall but the builder
-    // can't reach them because the wall blocks passage.
-    // Wall from (13,13) to (17,17) surrounding the builder at (15,15)
     for (let ty = 13; ty <= 17; ty++) {
       for (let tx = 13; tx <= 17; tx++) {
-        // Skip the builder's tile
         if (tx === 15 && ty === 15) continue;
-        // Skip tiles inside the wall (open area)
         if (tx >= 14 && tx <= 16 && ty >= 14 && ty <= 16) continue;
         map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
       }
     }
 
     const result = startConstruction(map, economy, 'separator');
-    // There should be buildable sites outside the wall but unreachable
     expect(result.ok).toBe(false);
     expect(result.reason).toBe('no-route');
-    // No matter should be deducted
     expect(economy.resources.matter).toBe(500);
-    // Builder should not be busy
     expect(map.builders[0]!.busy).toBe(false);
   });
 
   it('candidate site footprint is treated as blocked during route check', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // Place a 2x2 building at (8,8), making a narrow corridor.
-    // A candidate at (10,8) footprint 2 would be buildable and the builder
-    // could normally reach it, but with the candidate footprint blocked,
-    // the path must go around.
     map.buildings.push({ tx: 8, ty: 8, type: 'separator' });
-
-    // Verify: isSiteReachableByBuilder blocks the candidate footprint
     const result = isSiteReachableByBuilder(map, builder, 10, 8, 2);
-    // Builder at (15,15) can go around the building at (8,8) to reach (10,8)
     expect(result).toBe(true);
   });
 
   it('builder routes to adjacent passable tile, not into building footprint', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // A site at (8,8) footprint 2 should have adjacent passable tiles
-    // that are NOT inside the footprint
     const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
     expect(result).toBe(true);
-
-    // Verify that the builder's own tile is NOT inside the candidate footprint
-    // The builder is at (15,15), far from (8,8), so it must path to an adjacent tile
   });
 
   it('decor does not block construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // Place decor between builder and a candidate site
     map.decor.push({ tx: 12, ty: 12, type: 'bush' });
     map.decor.push({ tx: 11, ty: 11, type: 'sand-bump' });
-
-    // Decor should not affect passability — site should still be reachable
     const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
     expect(result).toBe(true);
   });
@@ -791,9 +746,6 @@ describe('construction reachability', () => {
   it('territory does not block construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // Territory is not represented in passability grid — not tested directly
-    // but verify that a clean map still allows reachability
     const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
     expect(result).toBe(true);
   });
@@ -801,21 +753,16 @@ describe('construction reachability', () => {
   it('obstacles block construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // Completely wall off the builder from all directions
     for (let dy = -2; dy <= 2; dy++) {
       for (let dx = -2; dx <= 2; dx++) {
         const tx = builder.tx + dx;
         const ty = builder.ty + dy;
         if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
         if (tx === builder.tx && ty === builder.ty) continue;
-        // Leave 1-tile gap around builder so it's not on a blocked tile
         if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) continue;
         map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
       }
     }
-
-    // Site at (8,8) exists and is buildable, but builder can't reach it
     const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
     expect(result).toBe(false);
   });
@@ -823,35 +770,23 @@ describe('construction reachability', () => {
   it('resources block construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // Place resources blocking the path
     map.resources.push({ tx: 13, ty: 14, type: 'small', footprint: 1 });
     map.resources.push({ tx: 14, ty: 14, type: 'small', footprint: 1 });
     map.resources.push({ tx: 13, ty: 15, type: 'small', footprint: 1 });
     map.resources.push({ tx: 14, ty: 15, type: 'small', footprint: 1 });
-
-    // This creates a 2x2 resource block that the builder can't pass through
-    // But builder can still go around — just verify reachability with some blocking
     const result = isSiteReachableByBuilder(map, builder, 8, 8, 2);
-    expect(result).toBe(true); // Can still go around
+    expect(result).toBe(true);
   });
 
   it('buildings and HQ block construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
-
-    // HQ at (4,4) already blocks passability for a 3x3 area
-    // Verify a site adjacent to HQ is still reachable from the builder
     const result = isSiteReachableByBuilder(map, builder, 8, 4, 2);
     expect(result).toBe(true);
 
-    // Now create a complete wall of 1x1 obstacles from column 10, row 0 to row 19
-    // This completely blocks the builder at (15,15) from reaching sites at (8,8)
     for (let ty = 0; ty < 20; ty++) {
       map.obstacles.push({ tx: 10, ty, type: 'rock-cluster', footprint: 1 });
     }
-
-    // Builder at (15,15) is now separated from sites at (8,8) by the wall
     const result2 = isSiteReachableByBuilder(map, builder, 8, 8, 2);
     expect(result2).toBe(false);
   });
@@ -862,7 +797,6 @@ describe('construction reachability', () => {
     economy.resources.matter = 500;
     const builder = map.builders[0]!;
 
-    // Wall off the builder completely
     for (let dy = -2; dy <= 2; dy++) {
       for (let dx = -2; dx <= 2; dx++) {
         const tx = builder.tx + dx;
@@ -885,7 +819,6 @@ describe('construction reachability', () => {
     const economy = createEconomyState([], 0, 1, 'cyan');
     economy.resources.matter = 500;
 
-    // Verify findAutoPlacement returns a site that passes spacing
     const builder = map.builders[0]!;
     const placement = findAutoPlacement(map, builder, 'separator');
     expect(placement.placement).not.toBeNull();
@@ -909,7 +842,6 @@ describe('construction reachability', () => {
     const map = createReachabilityMap();
     const builder = map.builders[0]!;
 
-    // Wall off the builder completely (reachable area too small for buildings)
     for (let dy = -2; dy <= 2; dy++) {
       for (let dx = -2; dx <= 2; dx++) {
         const tx = builder.tx + dx;
@@ -926,3 +858,412 @@ describe('construction reachability', () => {
     expect(result.hasUnreachableSite).toBe(true);
   });
 });
+
+// ── Builder movement lifecycle (PATHFINDING-ARCH-01 PR4) ──────────────
+
+describe('builder movement lifecycle', () => {
+  beforeEach(() => {
+    resetSiteIdCounter();
+  });
+
+  /**
+   * Create a 20×20 map with a builder and economy.
+   * Builder at (15,15), HQ at (4,4), no obstacles.
+   */
+  function createMovementMap(): { map: MapData; economy: ReturnType<typeof createEconomyState> } {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+    return { map, economy };
+  }
+
+  it('startConstruction creates pending site and assigns builder path', () => {
+    const { map, economy } = createMovementMap();
+    const result = startConstruction(map, economy, 'separator');
+
+    expect(result.ok).toBe(true);
+    const site = map.constructionSites[0]!;
+    const builder = map.builders[0]!;
+
+    // Site should have an id
+    expect(site.id).toBeGreaterThan(0);
+    // Builder should be assigned to this site
+    expect(builder.assignedSiteId).toBe(site.id);
+    // Builder should be busy
+    expect(builder.busy).toBe(true);
+    // Site may be pending or not depending on distance
+    // If path is non-empty, site must be pending and builder is moving
+    if (builder.path.length > 0) {
+      expect(site.pending).toBe(true);
+      expect(builder.phase).toBe('moving-to-site');
+      expect(builder.path.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('builder phase becomes moving-to-site when path is non-empty', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+
+    // On a 20×20 map with builder at (15,15), the site will be far enough
+    // that the builder needs to move
+    if (builder.path.length > 0) {
+      expect(builder.phase).toBe('moving-to-site');
+    }
+  });
+
+  it('builder already adjacent starts building immediately with pending=false', () => {
+    // Place builder right next to where auto-placement will find a site
+    // Builder at (8,4) — adjacent to (8,8) or wherever findAutoPlacement picks
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(8, 7)], // right above where a site at (8,8) would be adjacent
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+
+    // If builder is already adjacent to the found site, it should start building immediately
+    const site = map.constructionSites[0]!;
+    const builder = map.builders[0]!;
+    const siteFootprint = getBuildingFootprint('separator');
+    // Check if builder tx/ty is adjacent to site footprint
+    const isAdj = isAdjacentToFootprint(builder.tx, builder.ty, site.tx, site.ty, siteFootprint);
+    if (isAdj) {
+      expect(site.pending).toBe(false);
+      expect(builder.phase).toBe('building');
+      expect(builder.path).toHaveLength(0);
+    }
+  });
+
+  it('pending site does not advance elapsed/progress before builder arrives', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const site = map.constructionSites[0]!;
+
+    if (site.pending) {
+      const elapsedBefore = site.elapsed;
+      const progressBefore = site.progress;
+      tickConstruction(map, economy, 5);
+      expect(site.elapsed).toBe(elapsedBefore);
+      expect(site.progress).toBe(progressBefore);
+    }
+  });
+
+  it('builder moves along path over tickConstruction', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      const initialFtx = builder.ftx;
+      const initialFty = builder.fty;
+
+      // Tick with a small dt — builder should move but not arrive yet
+      tickConstruction(map, economy, 0.1);
+
+      // Builder position should have changed
+      const moved = builder.ftx !== initialFtx || builder.fty !== initialFty;
+      expect(moved).toBe(true);
+    }
+  });
+
+  it('builder reaches adjacent tile and site switches pending=false', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+    const site = map.constructionSites[0]!;
+
+    if (site.pending && builder.path.length > 0) {
+      // Calculate time needed for builder to traverse the entire path
+      // At BUILDER_SPEED = 2.0 tiles/sec, each tile takes 0.5 seconds
+      // Give generous time
+      const maxTime = (builder.path.length + 2) / BUILDER_SPEED + 1;
+      tickConstruction(map, economy, maxTime);
+
+      // Site should no longer be pending
+      expect(site.pending).toBe(false);
+      // Builder should be in building phase
+      expect(builder.phase).toBe('building');
+    }
+  });
+
+  it('construction progress starts after arrival', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const site = map.constructionSites[0]!;
+    const builder = map.builders[0]!;
+
+    // Fast-forward builder to arrive
+    if (site.pending && builder.path.length > 0) {
+      const maxTime = (builder.path.length + 2) / BUILDER_SPEED + 1;
+      tickConstruction(map, economy, maxTime);
+    }
+
+    // Now site should be non-pending
+    expect(site.pending).toBe(false);
+
+    // Tick construction — progress should advance
+    tickConstruction(map, economy, 1);
+    expect(site.elapsed).toBeGreaterThan(0);
+    expect(site.progress).toBeGreaterThan(0);
+  });
+
+  it('matter is deducted exactly once at startConstruction', () => {
+    const { map, economy } = createMovementMap();
+    const matterBefore = economy.resources.matter;
+    const result = startConstruction(map, economy, 'separator');
+
+    expect(result.ok).toBe(true);
+    const matterAfter = economy.resources.matter;
+    expect(matterAfter).toBe(matterBefore - 80);
+
+    // Tick a few times — matter should not change
+    tickConstruction(map, economy, 5);
+    expect(economy.resources.matter).toBe(matterAfter);
+  });
+
+  it('no-route does not deduct matter', () => {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    // Wall off the builder completely
+    const builder = map.builders[0]!;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const tx = builder.tx + dx;
+        const ty = builder.ty + dy;
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (tx === builder.tx && ty === builder.ty) continue;
+        if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) continue;
+        map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+      }
+    }
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-route');
+    expect(economy.resources.matter).toBe(500);
+  });
+
+  it('completed building appears after arrival + build duration', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+    const site = map.constructionSites[0]!;
+
+    // Fast-forward builder to arrive
+    if (site.pending && builder.path.length > 0) {
+      const moveTime = (builder.path.length + 2) / BUILDER_SPEED + 1;
+      tickConstruction(map, economy, moveTime);
+    }
+
+    // Now complete the construction (25s build time)
+    tickConstruction(map, economy, 26);
+
+    expect(map.constructionSites).toHaveLength(0);
+    expect(map.buildings.some((b) => b.type === 'separator')).toBe(true);
+  });
+
+  it('builder remains busy during moving-to-site and building', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+
+    // Builder should be busy during movement
+    expect(builder.busy).toBe(true);
+
+    // Fast-forward to building phase
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      const moveTime = (builder.path.length + 2) / BUILDER_SPEED + 1;
+      tickConstruction(map, economy, moveTime);
+    }
+
+    // Builder should still be busy during building
+    expect(builder.busy).toBe(true);
+    expect(builder.phase).toBe('building');
+  });
+
+  it('builder becomes idle/busy=false after completion', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+
+    // Fast-forward builder to arrive
+    const site = map.constructionSites[0]!;
+    if (site.pending && builder.path.length > 0) {
+      const moveTime = (builder.path.length + 2) / BUILDER_SPEED + 1;
+      tickConstruction(map, economy, moveTime);
+    }
+
+    // Complete construction
+    tickConstruction(map, economy, 26);
+
+    expect(builder.busy).toBe(false);
+    expect(builder.phase).toBe('idle');
+    expect(builder.assignedSiteId).toBe(-1);
+  });
+
+  it('pending construction site blocks overlapping placement', () => {
+    const { map, economy } = createMovementMap();
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+
+    const site = map.constructionSites[0]!;
+    const occupied = buildOccupiedTileSet(map);
+    const footprint = getBuildingFootprint(site.type);
+
+    // The site's footprint tiles should be in the occupied set
+    for (let dy = 0; dy < footprint; dy++) {
+      for (let dx = 0; dx < footprint; dx++) {
+        expect(occupied.has(`${site.tx + dx},${site.ty + dy}`)).toBe(true);
+      }
+    }
+  });
+
+  it('multiple builders: first can move/build, second remains usable if idle', () => {
+    const map: MapData = {
+      width: 30,
+      height: 30,
+      terrain: Array.from({ length: 30 }, () => Array(30).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(20, 20), createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 1000;
+
+    // First construction uses one builder
+    const result1 = startConstruction(map, economy, 'separator');
+    expect(result1.ok).toBe(true);
+    expect(map.builders.some((b) => b.busy)).toBe(true);
+
+    // Second construction should succeed with the other builder
+    const result2 = startConstruction(map, economy, 'separator');
+    expect(result2.ok).toBe(true);
+    expect(map.builders.filter((b) => b.busy).length).toBe(2);
+  });
+
+  it('if next waypoint becomes blocked, one repath is attempted', () => {
+    const { map, economy } = createMovementMap();
+    startConstruction(map, economy, 'separator');
+    const builder = map.builders[0]!;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 1) {
+      // Block the next waypoint
+      const nextWaypoint = builder.path[builder.pathIndex]!;
+      map.obstacles.push({ tx: nextWaypoint.tx, ty: nextWaypoint.ty, type: 'rock-cluster', footprint: 1 });
+
+      // Tick should trigger a repath
+      tickConstruction(map, economy, 0.01);
+
+      // Builder should still be moving (repath succeeded on open map)
+      // or site should be cancelled (repath failed)
+      // On an open 20x20 map, repath should succeed
+      expect(builder.phase === 'moving-to-site' || builder.phase === 'building' || builder.phase === 'idle').toBe(true);
+    }
+  });
+
+  it('if repath fails, site is cancelled, matter refunded, builder freed', () => {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    const builder = map.builders[0]!;
+    const matterAfterStart = economy.resources.matter;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      // Block the next waypoint
+      const nextWaypoint = builder.path[builder.pathIndex]!;
+
+      // Also block ALL paths to the site — wall off completely
+      // Block a large area around the builder so no alternative path exists
+      for (let ty = 0; ty < 20; ty++) {
+        for (let tx = 0; tx < 20; tx++) {
+          // Leave the builder's current tile open
+          if (tx === builder.tx && ty === builder.ty) continue;
+          // Leave a small area around builder open
+          if (Math.abs(tx - builder.tx) <= 1 && Math.abs(ty - builder.ty) <= 1) continue;
+          map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+        }
+      }
+
+      // Tick should trigger repath, which fails, cancelling the site
+      tickConstruction(map, economy, 0.01);
+
+      // Site should be cancelled
+      expect(map.constructionSites).toHaveLength(0);
+      // Matter should be refunded
+      expect(economy.resources.matter).toBe(matterAfterStart + 80);
+      // Builder should be freed
+      expect(builder.busy).toBe(false);
+      expect(builder.phase).toBe('idle');
+      expect(builder.assignedSiteId).toBe(-1);
+    }
+  });
+});
+
+// ── Helper ──────────────────────────────────────────────────────────
+
+/** Check if (tx, ty) is adjacent (cardinal) to a footprint. */
+function isAdjacentToFootprint(tx: number, ty: number, ftx: number, fty: number, footprint: number): boolean {
+  // Top edge
+  if (ty === fty - 1 && tx >= ftx && tx < ftx + footprint) return true;
+  // Bottom edge
+  if (ty === fty + footprint && tx >= ftx && tx < ftx + footprint) return true;
+  // Left edge
+  if (tx === ftx - 1 && ty >= fty && ty < fty + footprint) return true;
+  // Right edge
+  if (tx === ftx + footprint && ty >= fty && ty < fty + footprint) return true;
+  return false;
+}

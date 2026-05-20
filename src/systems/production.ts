@@ -227,7 +227,19 @@ function trySpawnUnit(
   if (!tile) return false;
 
   if (item.unitType === 'builder') {
-    state.map.builders.push({ tx: tile.tx, ty: tile.ty, busy: false });
+    state.map.builders.push({
+      tx: tile.tx,
+      ty: tile.ty,
+      busy: false,
+      phase: 'idle',
+      path: [],
+      pathIndex: 0,
+      ftx: tile.tx + 0.5,
+      fty: tile.ty + 0.5,
+      targetTx: tile.tx,
+      targetTy: tile.ty,
+      assignedSiteId: -1,
+    });
   } else {
     state.harvesters.push({
       tx: tile.tx + 0.5,

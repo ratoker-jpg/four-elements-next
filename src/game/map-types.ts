@@ -57,10 +57,27 @@ export interface BuildingPlacement {
   type: BuildingType;
 }
 
+/** Builder phase in the construction lifecycle. */
+export type BuilderPhase = 'idle' | 'moving-to-site' | 'building';
+
 export interface BuilderPlacement {
   tx: number;
   ty: number;
   busy: boolean;
+  /** Current lifecycle phase. */
+  phase: BuilderPhase;
+  /** Computed path waypoints (tile-integer positions). Empty when idle/building. */
+  path: Array<{ tx: number; ty: number }>;
+  /** Current waypoint index in path. */
+  pathIndex: number;
+  /** Floating-point tile position for smooth movement rendering. */
+  ftx: number;
+  fty: number;
+  /** Final adjacent tile the builder is moving to (or standing on). */
+  targetTx: number;
+  targetTy: number;
+  /** Stable reference to the assigned construction site. */
+  assignedSiteId: number;
 }
 
 export interface ConstructionSitePlacement {
@@ -72,6 +89,10 @@ export interface ConstructionSitePlacement {
   progress: number;
   /** Index into MapData.builders for the builder assigned to this site. */
   builderIndex: number;
+  /** Stable unique identifier for site reference. */
+  id: number;
+  /** When true, builder has not yet arrived; elapsed/progress must NOT advance. */
+  pending: boolean;
 }
 
 export interface MapData {
