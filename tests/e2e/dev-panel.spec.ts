@@ -466,6 +466,33 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
     expect(critical).toEqual([]);
   });
 
+  test('Grid overlay toggle renders without crash (DEV-SANDBOX-FIX-01)', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+
+    await navigateToGameScreen(page);
+
+    // Toggle grid on via dev panel button
+    await page.keyboard.press('Backquote');
+    const gridBtn = page.locator('#fe-dev-panel .fe-dev-panel__btn--toggle[data-overlay-key="grid"]');
+    await gridBtn.click();
+    await expect(gridBtn).toHaveAttribute('data-active', 'true');
+
+    // Wait several frames for rendering
+    await page.waitForTimeout(500);
+
+    // Verify game is still running (no crash)
+    const economyAfter = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as { raw: number } | null;
+    });
+    expect(economyAfter).not.toBeNull();
+
+    const critical = errors.filter((e) => !e.includes('favicon'));
+    expect(critical).toEqual([]);
+  });
+
   test('existing dev actions still work with overlay code present', async ({ page }) => {
     await navigateToGameScreen(page);
 

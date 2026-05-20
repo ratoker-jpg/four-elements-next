@@ -88,16 +88,18 @@ function drawGridOverlay(ctx: CanvasRenderingContext2D, map: MapData, camera: Ca
   ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
 
-  for (let ty = 0; ty <= map.height; ty++) {
-    for (let tx = 0; tx <= map.width; tx++) {
-      const scr = tileToScreen(tx, ty);
+  // Draw one diamond per terrain tile, using the same tile-center convention
+  // as terrain rendering: tileToScreen(tx + 0.5, ty + 0.5)
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      const scr = tileToScreen(tx + 0.5, ty + 0.5);
       const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
 
       // Only draw if on screen (with margin)
       if (cv.x < -hw * 2 || cv.x > canvasW + hw * 2) continue;
       if (cv.y < -hh * 2 || cv.y > canvasH + hh * 2) continue;
 
-      // Draw diamond outline for this tile corner
+      // Draw diamond outline matching terrain tile geometry
       ctx.beginPath();
       ctx.moveTo(cv.x, cv.y - hh);
       ctx.lineTo(cv.x + hw, cv.y);
@@ -158,31 +160,24 @@ function drawFootprintRect(
   camera: Camera, canvasW: number, canvasH: number,
   color: string, label: string,
 ): void {
-  // Draw footprint as a filled polygon covering footprint×footprint tiles
-  // For isometric, we draw the four corner diamonds of the footprint area
-  const corners = [
-    tileToScreen(tx, ty),
-    tileToScreen(tx + footprint, ty),
-    tileToScreen(tx, ty + footprint),
-    tileToScreen(tx + footprint, ty + footprint),
-  ];
-
-  const cvCorners = corners.map(c => camera.toCanvas(c.x, c.y, canvasW, canvasH));
+  // Draw footprint as a filled isometric diamond covering footprint×footprint tiles.
+  // Use the same tile-center convention as terrain rendering so the overlay
+  // aligns with visible tile boundaries.
+  const fpHalf = footprint / 2;
+  const top = camera.toCanvas(tileToScreen(tx + fpHalf, ty).x, tileToScreen(tx + fpHalf, ty).y, canvasW, canvasH);
+  const right = camera.toCanvas(tileToScreen(tx + footprint, ty + fpHalf).x, tileToScreen(tx + footprint, ty + fpHalf).y, canvasW, canvasH);
+  const bottom = camera.toCanvas(tileToScreen(tx + fpHalf, ty + footprint).x, tileToScreen(tx + fpHalf, ty + footprint).y, canvasW, canvasH);
+  const left = camera.toCanvas(tileToScreen(tx, ty + fpHalf).x, tileToScreen(tx, ty + fpHalf).y, canvasW, canvasH);
 
   // Quick culling: skip if all corners are far off screen
-  const allLeft = cvCorners.every(c => c.x < -200);
-  const allRight = cvCorners.every(c => c.x > canvasW + 200);
-  const allTop = cvCorners.every(c => c.y < -200);
-  const allBottom = cvCorners.every(c => c.y > canvasH + 200);
+  const allLeft = [top, right, bottom, left].every(c => c.x < -200);
+  const allRight = [top, right, bottom, left].every(c => c.x > canvasW + 200);
+  const allTop = [top, right, bottom, left].every(c => c.y < -200);
+  const allBottom = [top, right, bottom, left].every(c => c.y > canvasH + 200);
   if (allLeft || allRight || allTop || allBottom) return;
 
   ctx.fillStyle = color;
   ctx.beginPath();
-  // Top corner of the footprint diamond
-  const top = cvCorners[0]!;
-  const right = cvCorners[1]!;
-  const bottom = cvCorners[3]!;
-  const left = cvCorners[2]!;
   ctx.moveTo(top.x, top.y);
   ctx.lineTo(right.x, right.y);
   ctx.lineTo(bottom.x, bottom.y);
@@ -192,7 +187,7 @@ function drawFootprintRect(
 
   // Label at center
   if (label) {
-    const centerScr = tileToScreen(tx + footprint / 2, ty + footprint / 2);
+    const centerScr = tileToScreen(tx + fpHalf, ty + fpHalf);
     const cv = camera.toCanvas(centerScr.x, centerScr.y, canvasW, canvasH);
     ctx.font = `${Math.max(9, 10 * camera.zoom)}px monospace`;
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -287,28 +282,23 @@ function drawFootprintBorder(
   camera: Camera, canvasW: number, canvasH: number,
   color: string, lineWidth: number,
 ): void {
-  const corners = [
-    tileToScreen(tx, ty),
-    tileToScreen(tx + footprint, ty),
-    tileToScreen(tx, ty + footprint),
-    tileToScreen(tx + footprint, ty + footprint),
-  ];
+  // Use the same tile-center convention as terrain rendering so the border
+  // aligns with visible tile boundaries.
+  const fpHalf = footprint / 2;
+  const top = camera.toCanvas(tileToScreen(tx + fpHalf, ty).x, tileToScreen(tx + fpHalf, ty).y, canvasW, canvasH);
+  const right = camera.toCanvas(tileToScreen(tx + footprint, ty + fpHalf).x, tileToScreen(tx + footprint, ty + fpHalf).y, canvasW, canvasH);
+  const bottom = camera.toCanvas(tileToScreen(tx + fpHalf, ty + footprint).x, tileToScreen(tx + fpHalf, ty + footprint).y, canvasW, canvasH);
+  const left = camera.toCanvas(tileToScreen(tx, ty + fpHalf).x, tileToScreen(tx, ty + fpHalf).y, canvasW, canvasH);
 
-  const cvCorners = corners.map(c => camera.toCanvas(c.x, c.y, canvasW, canvasH));
-
-  const allLeft = cvCorners.every(c => c.x < -200);
-  const allRight = cvCorners.every(c => c.x > canvasW + 200);
-  const allTop = cvCorners.every(c => c.y < -200);
-  const allBottom = cvCorners.every(c => c.y > canvasH + 200);
+  const allLeft = [top, right, bottom, left].every(c => c.x < -200);
+  const allRight = [top, right, bottom, left].every(c => c.x > canvasW + 200);
+  const allTop = [top, right, bottom, left].every(c => c.y < -200);
+  const allBottom = [top, right, bottom, left].every(c => c.y > canvasH + 200);
   if (allLeft || allRight || allTop || allBottom) return;
 
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.beginPath();
-  const top = cvCorners[0]!;
-  const right = cvCorners[1]!;
-  const bottom = cvCorners[3]!;
-  const left = cvCorners[2]!;
   ctx.moveTo(top.x, top.y);
   ctx.lineTo(right.x, right.y);
   ctx.lineTo(bottom.x, bottom.y);
