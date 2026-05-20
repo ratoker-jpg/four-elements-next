@@ -8,11 +8,13 @@ import type {
   MapData,
 } from '../game/map-types.js';
 import type { EconomyState } from './economy.js';
+import { buildPassabilityGrid, findAdjacentPassableTiles, type PassabilityGrid } from './passability.js';
+import { findPathToAdjacent } from './pathfinding.js';
 
 export const BUILDER_CONTROL_COST = 1;
 export const AUTO_BUILD_MAX_RADIUS = 15;
 
-export type ConstructionFailureReason = 'busy' | 'insufficient-matter' | 'no-placement';
+export type ConstructionFailureReason = 'busy' | 'insufficient-matter' | 'no-placement' | 'no-route';
 
 export interface ConstructionCommandResult {
   ok: boolean;
@@ -54,16 +56,18 @@ export function startConstruction(
   }
 
   // Try each idle builder for auto-placement; use the first that succeeds
+  let anyUnreachableSite = false;
   for (const builderIndex of idleIndices) {
     const builder = map.builders[builderIndex]!;
-    const placement = findAutoPlacement(map, builder, buildingType);
-    if (placement) {
+    const result = findAutoPlacement(map, builder, buildingType);
+    if (result.hasUnreachableSite) anyUnreachableSite = true;
+    if (result.placement) {
       economy.resources.matter -= definition.costMatter;
       builder.busy = true;
 
       const site: ConstructionSitePlacement = {
-        tx: placement.tx,
-        ty: placement.ty,
+        tx: result.placement.tx,
+        ty: result.placement.ty,
         type: buildingType,
         elapsed: 0,
         duration: definition.buildTimeSeconds,
@@ -77,6 +81,11 @@ export function startConstruction(
   }
 
   // Idle builders exist but none can place the building
+  // Distinguish: buildable sites exist but unreachable → no-route
+  //              no buildable sites at all → no-placement
+  if (anyUnreachableSite) {
+    return { ok: false, reason: 'no-route', buildingType };
+  }
   return { ok: false, reason: 'no-placement', buildingType };
 }
 
@@ -114,14 +123,23 @@ export function canAffordBuilding(economy: EconomyState, buildingType: BuildingT
   return economy.resources.matter >= BUILDING_DEFINITIONS[buildingType].costMatter;
 }
 
+/** Result of auto-placement search for a single builder. */
+export interface AutoPlacementResult {
+  /** A reachable buildable site was found. */
+  placement: { tx: number; ty: number } | null;
+  /** At least one buildable site exists but none are reachable by this builder. */
+  hasUnreachableSite: boolean;
+}
+
 export function findAutoPlacement(
   map: MapData,
   builder: BuilderPlacement,
   buildingType: BuildingType,
   maxRadius: number = AUTO_BUILD_MAX_RADIUS,
-): { tx: number; ty: number } | null {
+): AutoPlacementResult {
   const occupied = buildOccupiedTileSet(map);
   const footprint = getBuildingFootprint(buildingType);
+  let hasUnreachableSite = false;
 
   for (let radius = 1; radius <= maxRadius; radius++) {
     for (let ty = builder.ty - radius; ty <= builder.ty + radius; ty++) {
@@ -129,12 +147,69 @@ export function findAutoPlacement(
         const onRing = Math.max(Math.abs(tx - builder.tx), Math.abs(ty - builder.ty)) === radius;
         if (!onRing) continue;
         if (!isFootprintWithSpacingBuildable(map, occupied, tx, ty, footprint)) continue;
-        return { tx, ty };
+        // Reachability check: builder must be able to reach an adjacent passable tile
+        // with the candidate footprint treated as blocked.
+        if (!isSiteReachableByBuilder(map, builder, tx, ty, footprint)) {
+          hasUnreachableSite = true;
+          continue;
+        }
+        return { placement: { tx, ty }, hasUnreachableSite: false };
       }
     }
   }
 
-  return null;
+  return { placement: null, hasUnreachableSite };
+}
+
+/**
+ * Check whether a builder can reach at least one passable tile adjacent to
+ * a candidate construction site footprint, treating the candidate footprint
+ * as blocked for the route query.
+ *
+ * Uses the existing passability grid and pathfinding: builds a grid from
+ * current map state, temporarily marks the candidate footprint as blocked,
+ * then checks whether any adjacent passable tile is reachable from the
+ * builder's position.
+ */
+export function isSiteReachableByBuilder(
+  map: MapData,
+  builder: BuilderPlacement,
+  siteTx: number,
+  siteTy: number,
+  siteFootprint: number,
+): boolean {
+  const grid = buildPassabilityGrid(map);
+  // Temporarily block the candidate footprint on the grid
+  markGridBlocked(grid, siteTx, siteTy, siteFootprint);
+
+  // Find adjacent passable tiles (after blocking the candidate)
+  const adjacentTiles = findAdjacentPassableTiles(grid, siteTx, siteTy, siteFootprint);
+  if (adjacentTiles.length === 0) return false;
+
+  // Check if builder is already on an adjacent tile
+  for (const adj of adjacentTiles) {
+    if (builder.tx === adj.tx && builder.ty === adj.ty) return true;
+  }
+
+  // Use BFS to check reachability from builder to any adjacent tile
+  const pathResult = findPathToAdjacent(grid, builder.tx, builder.ty, siteTx, siteTy, siteFootprint);
+  return pathResult.found;
+}
+
+/**
+ * Mark a footprint rectangle as blocked on a mutable passability grid.
+ * Clamps to grid bounds. Mutates grid.cells in place.
+ */
+function markGridBlocked(grid: PassabilityGrid, tx: number, ty: number, footprint: number): void {
+  for (let dy = 0; dy < footprint; dy++) {
+    for (let dx = 0; dx < footprint; dx++) {
+      const x = tx + dx;
+      const y = ty + dy;
+      if (x >= 0 && x < grid.width && y >= 0 && y < grid.height) {
+        grid.cells[y * grid.width + x] = 1;
+      }
+    }
+  }
 }
 
 export function buildOccupiedTileSet(map: MapData): Set<string> {

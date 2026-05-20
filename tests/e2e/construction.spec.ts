@@ -27,25 +27,53 @@ test.describe('NEXT-05 construction', () => {
 
   test('starts construction from the menu, spends matter, and completes into a building', async ({ page }) => {
     await navigateToGameScreen(page);
+
+    // Give plenty of matter so cost is not an issue
+    await page.evaluate(() => {
+      const dev = (window as Record<string, unknown>).__devActions as {
+        addMatter: (n: number) => void;
+      };
+      dev.addMatter(500);
+    });
+
     await page.getByRole('button', { name: 'Строительство (B)' }).click();
     await page.getByRole('button', { name: /Сепаратор/ }).click();
 
-    const started = await page.evaluate(() => {
-      return {
-        construction: (window as Record<string, unknown>).__constructionState as {
+    // Wait for construction to start — the test hook (__constructionState) is
+    // only updated per animation frame, so we poll until the builder becomes busy.
+    // On a standard generated map, construction MUST succeed (builder can always
+    // reach a buildable site near HQ). No-route is never acceptable here.
+    await expect.poll(async () => {
+      const cs = await page.evaluate(() => {
+        return (window as Record<string, unknown>).__constructionState as {
           builderBusy: boolean;
-          sites: Array<{ type: string; progress: number }>;
-        },
-        economy: (window as Record<string, unknown>).__economyState as {
-          matter: number;
-        },
+          statusMessage: string;
+        };
+      });
+      return cs.builderBusy;
+    }, { timeout: 3000 }).toBe(true);
+
+    // Now read the full construction state (guaranteed fresh after poll succeeded)
+    const started = await page.evaluate(() => {
+      const cs = (window as Record<string, unknown>).__constructionState as {
+        builderBusy: boolean;
+        sites: Array<{ type: string; progress: number }>;
+        statusMessage: string;
+      };
+      const es = (window as Record<string, unknown>).__economyState as { matter: number };
+      return {
+        builderBusy: cs.builderBusy,
+        sites: cs.sites,
+        statusMessage: cs.statusMessage,
+        matter: es.matter,
       };
     });
 
-    expect(started.construction.builderBusy).toBe(true);
-    expect(started.construction.sites).toHaveLength(1);
-    expect(started.construction.sites[0]!.type).toBe('separator');
-    expect(started.economy.matter).toBe(20);
+    expect(started.builderBusy).toBe(true);
+    expect(started.sites).toHaveLength(1);
+    expect(started.sites[0]!.type).toBe('separator');
+    // Verify matter was spent: addMatter(500) capped at matterCap (200), minus separator cost (80) = 120
+    expect(started.matter).toBe(120);
 
     await page.evaluate(() => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
