@@ -350,10 +350,10 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
 
     // Check that overlay toggle buttons exist
     const toggleBtns = panel.locator('.fe-dev-panel__btn--toggle');
-    await expect(toggleBtns).toHaveCount(7);
+    await expect(toggleBtns).toHaveCount(8);
 
     // Verify all expected overlay keys
-    const keys = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii'];
+    const keys = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii', 'spriteDebug'];
     for (const key of keys) {
       await expect(panel.locator(`.fe-dev-panel__btn--toggle[data-overlay-key="${key}"]`)).toHaveCount(1);
     }
@@ -377,6 +377,7 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
     expect(toggles!.territoryDebug).toBe(false);
     expect(toggles!.hqToCenter).toBe(false);
     expect(toggles!.radii).toBe(false);
+    expect(toggles!.spriteDebug).toBe(false);
   });
 
   test('clicking Grid toggle activates it', async ({ page }) => {
@@ -447,7 +448,7 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
       const ot = (window as Record<string, unknown>).__overlayToggles as {
         set: (key: string, value: boolean) => void;
       } | null;
-      const keys = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii'];
+      const keys = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii', 'spriteDebug'];
       for (const key of keys) {
         ot?.set(key, true);
       }
@@ -502,6 +503,127 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
         set: (key: string, value: boolean) => void;
       } | null;
       ot?.set('grid', true);
+    });
+
+    // Verify __devActions still works
+    await page.evaluate(() => {
+      const dev = (window as Record<string, unknown>).__devActions as {
+        addRaw: (n: number) => void;
+      } | null;
+      dev?.addRaw(50);
+    });
+
+    await expect.poll(async () => {
+      return (await page.evaluate(() => {
+        return (window as Record<string, unknown>).__economyState as { raw: number } | null;
+      }))?.raw;
+    }).toBe(50);
+  });
+});
+
+test.describe('VISUAL-QA-ARCH-01 PR1 — Sprite Debug overlay', () => {
+  async function navigateToGameScreen(page: import('@playwright/test').Page) {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Новая игра' }).click();
+    await page.getByRole('button', { name: /Стандартная/ }).click();
+    await page.getByRole('button', { name: 'Голубые' }).click();
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
+  }
+
+  test('Sprite Debug toggle exists in dev panel', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await page.keyboard.press('Backquote');
+    const panel = page.locator('#fe-dev-panel');
+    await expect(panel).toBeVisible();
+
+    const spriteDebugBtn = panel.locator('.fe-dev-panel__btn--toggle[data-overlay-key="spriteDebug"]');
+    await expect(spriteDebugBtn).toHaveCount(1);
+    await expect(spriteDebugBtn).toHaveText('Sprite Debug');
+  });
+
+  test('Sprite Debug toggle is off by default', async ({ page }) => {
+    await navigateToGameScreen(page);
+
+    const toggles = await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        get: () => Record<string, boolean>;
+      } | null;
+      return ot?.get() ?? null;
+    });
+
+    expect(toggles!.spriteDebug).toBe(false);
+  });
+
+  test('Sprite Debug toggle can be switched on and off', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await page.keyboard.press('Backquote');
+
+    const spriteDebugBtn = page.locator('#fe-dev-panel .fe-dev-panel__btn--toggle[data-overlay-key="spriteDebug"]');
+    await expect(spriteDebugBtn).toHaveAttribute('data-active', 'false');
+    await spriteDebugBtn.click();
+    await expect(spriteDebugBtn).toHaveAttribute('data-active', 'true');
+
+    // Verify via test hook
+    let toggles = await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        get: () => Record<string, boolean>;
+      } | null;
+      return ot?.get() ?? null;
+    });
+    expect(toggles!.spriteDebug).toBe(true);
+
+    // Toggle off
+    await spriteDebugBtn.click();
+    await expect(spriteDebugBtn).toHaveAttribute('data-active', 'false');
+
+    toggles = await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        get: () => Record<string, boolean>;
+      } | null;
+      return ot?.get() ?? null;
+    });
+    expect(toggles!.spriteDebug).toBe(false);
+  });
+
+  test('enabling Sprite Debug does not crash', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+
+    await navigateToGameScreen(page);
+
+    // Enable Sprite Debug overlay via test hook
+    await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        set: (key: string, value: boolean) => void;
+      } | null;
+      ot?.set('spriteDebug', true);
+    });
+
+    // Wait several frames for rendering
+    await page.waitForTimeout(500);
+
+    // Verify game is still running (no crash)
+    const economyAfter = await page.evaluate(() => {
+      return (window as Record<string, unknown>).__economyState as { raw: number } | null;
+    });
+    expect(economyAfter).not.toBeNull();
+
+    const critical = errors.filter((e) => !e.includes('favicon'));
+    expect(critical).toEqual([]);
+  });
+
+  test('existing dev actions still work with Sprite Debug enabled', async ({ page }) => {
+    await navigateToGameScreen(page);
+
+    // Enable Sprite Debug overlay
+    await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        set: (key: string, value: boolean) => void;
+      } | null;
+      ot?.set('spriteDebug', true);
     });
 
     // Verify __devActions still works

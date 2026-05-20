@@ -141,7 +141,7 @@ export function createDevPanel(actions: DevPanelActions): {
 
   // Overlay toggles
   const overlaySection = makeSection('Overlays');
-  const overlayKeys: Array<keyof OverlayToggles> = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii'];
+  const overlayKeys: Array<keyof OverlayToggles> = ['grid', 'footprints', 'resourceAmounts', 'obstacleBlocking', 'territoryDebug', 'hqToCenter', 'radii', 'spriteDebug'];
   const overlayLabels: Record<keyof OverlayToggles, string> = {
     grid: 'Grid',
     footprints: 'Footprints',
@@ -150,6 +150,7 @@ export function createDevPanel(actions: DevPanelActions): {
     territoryDebug: 'Territory',
     hqToCenter: 'HQ-Line',
     radii: 'Radii',
+    spriteDebug: 'Sprite Debug',
   };
   for (const key of overlayKeys) {
     overlaySection.appendChild(makeToggleBtn(overlayLabels[key], key));

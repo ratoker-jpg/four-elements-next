@@ -26,7 +26,7 @@ import { renderTerritory } from './territory.js';
 import type { TerritoryState } from '../systems/territory.js';
 import type { HarvesterState, ResourceNodeState } from '../systems/harvesting.js';
 import { isAssetPreviewEnabled, drawAssetPreview } from '../dev/asset-preview.js';
-import { renderDevOverlays, anyOverlayEnabled } from '../dev/dev-overlays.js';
+import { renderDevOverlays, anyOverlayEnabled, type SpriteDebugData } from '../dev/dev-overlays.js';
 
 interface SortedEntity {
   sortKey: number;
@@ -155,6 +155,15 @@ export function render(
 
   // DEV-SANDBOX-ARCH-01 PR2: debug overlays (zero effect when all toggled off)
   if (anyOverlayEnabled()) {
-    renderDevOverlays(ctx, map, camera, territory, resourceNodes ?? []);
+    const spriteDebugData: SpriteDebugData = {
+      harvesters: harvesters.map((h, i) => ({
+        state: h,
+        prevTx: prevHarvesterPositions.get(i)?.tx ?? h.tx,
+        prevTy: prevHarvesterPositions.get(i)?.ty ?? h.ty,
+      })),
+      assets,
+      faction,
+    };
+    renderDevOverlays(ctx, map, camera, territory, resourceNodes ?? [], spriteDebugData);
   }
 }
