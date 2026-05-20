@@ -18,13 +18,15 @@ Do not use assumptions from `ratoker-jpg/glm-game-sandbox` unless explicitly pro
 ## 2. Files to read first
 
 ```text
+agent-ctx/state.md
+agent-ctx/workflow.md
+agent-ctx/prompt-templates.md
 README.md
 docs/AI_WORKFLOW_CONTRACT.md
-docs/project/ROADMAP_CURRENT.md
-docs/project/NEXT_STATUS_CHECKPOINT_20260519.md
-docs/project/NEXT_REMAINING_WORK_20260519.md
-docs/visual/VISUAL_ASSET_PIPELINE.md
 ```
+
+For workflow mode selection and E2E policy, `agent-ctx/workflow.md` is the source of truth.
+For prompt templates, `agent-ctx/prompt-templates.md` is the source of truth.
 
 For runtime implementation, inspect relevant source files under:
 
@@ -43,10 +45,9 @@ Base branch: main
 Mode: <audit-only | docs-only | implementation>
 
 Read first:
-- docs/AI_WORKFLOW_CONTRACT.md
-- docs/project/ROADMAP_CURRENT.md
-- docs/project/NEXT_STATUS_CHECKPOINT_20260519.md
-- docs/project/NEXT_REMAINING_WORK_20260519.md
+- agent-ctx/state.md
+- agent-ctx/workflow.md
+- agent-ctx/prompt-templates.md
 - any task-specific docs listed below
 
 Goal:
@@ -80,10 +81,9 @@ Do not commit.
 Do not open PR.
 
 Read first:
-- docs/AI_WORKFLOW_CONTRACT.md
-- docs/project/ROADMAP_CURRENT.md
-- docs/project/NEXT_STATUS_CHECKPOINT_20260519.md
-- docs/project/NEXT_REMAINING_WORK_20260519.md
+- agent-ctx/state.md
+- agent-ctx/workflow.md
+- agent-ctx/prompt-templates.md
 
 Audit target:
 <system or feature area>

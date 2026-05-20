@@ -24,6 +24,9 @@ First classify the task:
 4. Unclear or changed assumptions — stop and re-audit.
 5. Asset/tooling experiment — keep output as candidate-stage until it passes the asset gates in `docs/ASSET_POLICY.md`.
 
+**Workflow modes and E2E policy are defined in `agent-ctx/workflow.md`.**
+When this document conflicts with `agent-ctx/workflow.md` on mode selection or E2E policy, `agent-ctx/workflow.md` takes priority.
+
 ## Roles
 
 ### ChatGPT
@@ -284,7 +287,12 @@ Before recommending merge:
 
 ## Prompt templates
 
-### New risky architecture area
+Prompt templates have moved to `agent-ctx/prompt-templates.md`.
+
+The following legacy templates are kept for reference only.
+For current templates, use `agent-ctx/prompt-templates.md`.
+
+### New risky architecture area (legacy)
 
 ```text
 Task: <NAME> — Phase 1 Audit Only.

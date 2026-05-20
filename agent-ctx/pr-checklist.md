@@ -1,6 +1,16 @@
 # PR Checklist
 
 Review before asking user/GPT to merge.
+For workflow modes, see `agent-ctx/workflow.md`.
+
+## Prompt Mode Check
+
+- [ ] Prompt mode was appropriate:
+  - FAST FIX — small constants, labels, tests, docs, tiny bugfix
+  - STAGE PR — part of approved architecture, compact prompt
+  - STAGE PR PREFLIGHT — non-trivial stage, mini-audit (max 5 sections)
+  - FULL AUDIT — new/risky system, full audit
+  - HOTFIX AFTER REVIEW — small fix after review, no new audit
 
 ## Scope Check
 
@@ -26,11 +36,22 @@ Review before asking user/GPT to merge.
 | Risky system change | Full E2E preferred, or honest timeout/spec-by-spec report |
 | Docs-only | No code tests needed |
 
+- [ ] Targeted E2E used for gameplay/UI changes
+- [ ] Full E2E status documented:
+  - [ ] Full run passed, OR
+  - [ ] Spec-by-spec fallback with results, OR
+  - [ ] CI fallback (explain why)
+- [ ] No tests were weakened to accept broken gameplay
+
 **Never weaken tests to accept broken gameplay.**
 
 If E2E fails with infrastructure issue:
 1. Rerun targeted spec file only.
 2. Document exact failure and rerun result.
+
+## Architecture Tracker Check
+
+- [ ] `agent-ctx/current-arch.md` updated if a major ARCH stage was merged in this PR
 
 ## Core Loop Smoke Test
 
