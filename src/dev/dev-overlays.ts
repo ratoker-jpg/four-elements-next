@@ -8,13 +8,15 @@
  * No gameplay state mutation from overlays. Additive rendering only.
  */
 
-import { TILE_W, TILE_H, HQ_FOOTPRINT, START_CORE_RADIUS, START_ECONOMY_RADIUS, START_TRANSITION_RADIUS } from '../core/constants.js';
+import { TILE_W, TILE_H, HQ_FOOTPRINT, SPRITE_PROFILES, START_CORE_RADIUS, START_ECONOMY_RADIUS, START_TRANSITION_RADIUS } from '../core/constants.js';
+import type { SpriteProfile } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { Camera } from '../render/camera.js';
 import type { MapData } from '../game/map-types.js';
 import type { TerritoryState } from '../systems/territory.js';
-import type { ResourceNodeState } from '../systems/harvesting.js';
+import type { HarvesterState, ResourceNodeState } from '../systems/harvesting.js';
 import { getBuildingFootprint } from '../config/buildings.js';
+import { RESOURCE_ASSET_KEYS, OBSTACLE_ASSET_KEYS } from '../game/map-types.js';
 import { isDevPanelAllowed } from './dev-panel.js';
 
 // ── Overlay toggle state ──────────────────────────────────────────
@@ -27,6 +29,7 @@ export interface OverlayToggles {
   territoryDebug: boolean;
   hqToCenter: boolean;
   radii: boolean;
+  spriteDebug: boolean;
 }
 
 const toggles: OverlayToggles = {
@@ -37,6 +40,7 @@ const toggles: OverlayToggles = {
   territoryDebug: false,
   hqToCenter: false,
   radii: false,
+  spriteDebug: false,
 };
 
 /** Get current overlay toggle state (for dev panel wiring). */
@@ -52,7 +56,8 @@ export function setOverlayToggle(key: keyof OverlayToggles, value: boolean): voi
 /** Check whether any overlay is enabled (to skip render pass entirely). */
 export function anyOverlayEnabled(): boolean {
   return toggles.grid || toggles.footprints || toggles.resourceAmounts ||
-         toggles.obstacleBlocking || toggles.territoryDebug || toggles.hqToCenter || toggles.radii;
+         toggles.obstacleBlocking || toggles.territoryDebug || toggles.hqToCenter || toggles.radii ||
+         toggles.spriteDebug;
 }
 
 // ── Main render entry ─────────────────────────────────────────────
@@ -64,6 +69,7 @@ export function renderDevOverlays(
   camera: Camera,
   territory: TerritoryState,
   resourceNodes: readonly ResourceNodeState[],
+  spriteDebugData?: SpriteDebugData,
 ): void {
   if (!isDevPanelAllowed() || !anyOverlayEnabled()) return;
 
@@ -74,6 +80,7 @@ export function renderDevOverlays(
   if (toggles.territoryDebug) drawTerritoryDebugOverlay(ctx, territory, camera);
   if (toggles.hqToCenter) drawHqToCenterLine(ctx, map, camera);
   if (toggles.radii) drawRadiiOverlay(ctx, map, camera);
+  if (toggles.spriteDebug && spriteDebugData) drawSpriteDebugOverlay(ctx, map, camera, spriteDebugData);
 }
 
 // ── 1. Grid overlay ───────────────────────────────────────────────
@@ -460,6 +467,285 @@ function drawRadiiOverlay(ctx: CanvasRenderingContext2D, map: MapData, camera: C
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.textAlign = 'center';
     ctx.fillText(label, cvTop.x, cvTop.y - 6);
+  }
+
+  ctx.restore();
+}
+
+// ── 8. Sprite debug overlay (VISUAL-QA-ARCH-01 PR1) ────────────────
+
+/** Data needed for the sprite debug overlay, passed from the renderer. */
+export interface SpriteDebugData {
+  /** Harvesters with their current and previous tile positions. */
+  harvesters: ReadonlyArray<{
+    state: HarvesterState;
+    prevTx: number;
+    prevTy: number;
+  }>;
+}
+
+/**
+ * Compute the destination rect for a spritesheet-rendered entity (builder/harvester).
+ * Mirrors drawSpritesheetFrame math: containFit(FRAME_SIZE, FRAME_SIZE, ...) centered at (cx, cy)
+ * with groundOffset applied.
+ */
+function computeSpritesheetDestRect(
+  cx: number,
+  cy: number,
+  zoom: number,
+  profile: SpriteProfile,
+): { x: number; y: number; w: number; h: number } {
+  const maxW = profile.size[0] * zoom;
+  const maxH = profile.size[1] * zoom;
+  const offY = profile.groundOffset * zoom;
+  // Spritesheet frames are 256x256 (square), so containFit yields a square
+  // inside the profile.size bounding box.
+  const canvasAspect = 1; // FRAME_SIZE / FRAME_SIZE = 1
+  const boxAspect = maxW / maxH;
+  let w: number, h: number;
+  if (canvasAspect > boxAspect) {
+    w = maxW;
+    h = maxW / canvasAspect;
+  } else {
+    h = maxH;
+    w = maxH * canvasAspect;
+  }
+  return {
+    x: cx - w / 2,
+    y: cy - h / 2 - offY,
+    w,
+    h,
+  };
+}
+
+/**
+ * Compute the destination rect for a building sprite rendered via drawBuildingSprite.
+ * Mirrors getFullCanvasDestinationRect: containFit(naturalW, naturalH, ...)
+ * centered at cx with baseY as the south vertex of the footprint diamond.
+ */
+function computeBuildingDestRect(
+  cx: number,
+  cy: number,
+  zoom: number,
+  profileKey: string,
+  footprint: number,
+  naturalW: number,
+  naturalH: number,
+): { x: number; y: number; w: number; h: number } {
+  const profile = SPRITE_PROFILES[profileKey as keyof typeof SPRITE_PROFILES];
+  if (!profile) return { x: cx, y: cy, w: 0, h: 0 };
+
+  const baseY = cy + (TILE_H / 2) * footprint * zoom;
+  const maxW = profile.size[0] * zoom;
+  const maxH = profile.size[1] * zoom;
+  const offY = profile.groundOffset * zoom;
+  const screenOffsetX = (profile as SpriteProfile).screenOffsetX ?? 0;
+  const screenOffsetY = (profile as SpriteProfile).screenOffsetY ?? 0;
+
+  const canvasAspect = naturalW / naturalH;
+  const boxAspect = maxW / maxH;
+  let w: number, h: number;
+  if (canvasAspect > boxAspect) {
+    w = maxW;
+    h = maxW / canvasAspect;
+  } else {
+    h = maxH;
+    w = maxH * canvasAspect;
+  }
+  return {
+    x: cx - w / 2 + screenOffsetX,
+    y: baseY - h - offY + screenOffsetY,
+    w,
+    h,
+  };
+}
+
+/**
+ * Compute the destination rect for an environment entity rendered via containFit
+ * centered at (cx, cy) with groundOffset.
+ */
+function computeEnvDestRect(
+  cx: number,
+  cy: number,
+  zoom: number,
+  profile: SpriteProfile,
+  naturalW: number,
+  naturalH: number,
+): { x: number; y: number; w: number; h: number } {
+  const maxW = profile.size[0] * zoom;
+  const maxH = profile.size[1] * zoom;
+  const offY = profile.groundOffset * zoom;
+  const canvasAspect = naturalW / naturalH;
+  const boxAspect = maxW / maxH;
+  let w: number, h: number;
+  if (canvasAspect > boxAspect) {
+    w = maxW;
+    h = maxW / canvasAspect;
+  } else {
+    h = maxH;
+    w = maxH * canvasAspect;
+  }
+  return {
+    x: cx - w / 2,
+    y: cy - h / 2 - offY,
+    w,
+    h,
+  };
+}
+
+/** Draw a single sprite debug annotation (footprint + bbox + anchor + label). */
+function drawSpriteAnnotation(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  zoom: number,
+  footprint: number,
+  destRect: { x: number; y: number; w: number; h: number },
+  label: string,
+  profileLabel: string,
+): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+
+  // Culling: skip if way off screen
+  const margin = 300;
+  if (cx < -margin || cx > canvasW + margin || cy < -margin || cy > canvasH + margin) return;
+
+  // Footprint diamond — magenta/pink
+  const hw = (TILE_W / 2) * footprint * zoom;
+  const hh = (TILE_H / 2) * footprint * zoom;
+  ctx.strokeStyle = 'rgba(255, 0, 255, 0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - hh);
+  ctx.lineTo(cx + hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx - hw, cy);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Sprite bbox — yellow rectangle
+  if (destRect.w > 0 && destRect.h > 0) {
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(destRect.x, destRect.y, destRect.w, destRect.h);
+  }
+
+  // Anchor / ground point — red dot
+  ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(3, 3 * zoom), 0, Math.PI * 2);
+  ctx.fill();
+
+  // Label — small white/yellow text
+  const fontSize = Math.max(8, 9 * zoom);
+  ctx.font = `${fontSize}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'rgba(255, 255, 200, 0.9)';
+  ctx.fillText(label, cx, destRect.y - 2);
+  ctx.fillStyle = 'rgba(255, 200, 255, 0.85)';
+  ctx.fillText(profileLabel, cx, destRect.y - 2 - fontSize - 1);
+}
+
+function drawSpriteDebugOverlay(
+  ctx: CanvasRenderingContext2D,
+  map: MapData,
+  camera: Camera,
+  data: SpriteDebugData,
+): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+  const z = camera.zoom;
+
+  ctx.save();
+
+  // ── HQ ─────────────────────────────────────────────────────────
+  {
+    const centerTx = map.hq.tx + HQ_FOOTPRINT / 2;
+    const centerTy = map.hq.ty + HQ_FOOTPRINT / 2;
+    const scr = tileToScreen(centerTx, centerTy);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const profileKey = 'hq_base';
+    const profile = SPRITE_PROFILES[profileKey];
+    // HQ uses drawBuildingSprite math — approximate with square sprite
+    const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, HQ_FOOTPRINT, 200, 200);
+    drawSpriteAnnotation(ctx, cv.x, cv.y, z, HQ_FOOTPRINT, destRect, 'HQ', `${profileKey} [${profile.size}] off=${profile.groundOffset}`);
+  }
+
+  // ── Completed buildings ────────────────────────────────────────
+  const BUILDING_SPRITE_PROFILE_KEYS: Record<string, string> = {
+    separator: 'building_separator',
+    'raw-storage': 'building_raw_storage',
+    'matter-storage': 'building_matter_storage',
+    'power-plant': 'building_power_plant',
+    'command-relay': 'building_command_relay',
+    'units-factory': 'building_units_factory',
+  };
+  for (const b of map.buildings) {
+    const footprint = getBuildingFootprint(b.type);
+    const centerTx = b.tx + footprint / 2;
+    const centerTy = b.ty + footprint / 2;
+    const scr = tileToScreen(centerTx, centerTy);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const profileKey = BUILDING_SPRITE_PROFILE_KEYS[b.type] ?? '';
+    const profile = SPRITE_PROFILES[profileKey as keyof typeof SPRITE_PROFILES];
+    if (profile) {
+      const destRect = computeBuildingDestRect(cv.x, cv.y, z, profileKey, footprint, 128, 128);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, destRect, b.type, `${profileKey} [${profile.size}] off=${profile.groundOffset}`);
+    } else {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, b.type, '(fallback)');
+    }
+  }
+
+  // ── Builder ────────────────────────────────────────────────────
+  for (const builder of map.builders) {
+    const scr = tileToScreen(builder.tx + 0.5, builder.ty + 0.5);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const profile = SPRITE_PROFILES.builder_base;
+    const destRect = computeSpritesheetDestRect(cv.x, cv.y, z, profile);
+    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `builder (${builder.tx},${builder.ty})`, `builder_base [${profile.size}] off=${profile.groundOffset}`);
+  }
+
+  // ── Harvester ──────────────────────────────────────────────────
+  for (const { state: harvester, prevTx, prevTy } of data.harvesters) {
+    const scr = tileToScreen(harvester.tx, harvester.ty);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const profile = SPRITE_PROFILES.harvester_base;
+    const destRect = computeSpritesheetDestRect(cv.x, cv.y, z, profile);
+    const dirLabel = (harvester.tx !== prevTx || harvester.ty !== prevTy) ? ` dir=(${(harvester.tx - prevTx).toFixed(1)},${(harvester.ty - prevTy).toFixed(1)})` : '';
+    drawSpriteAnnotation(ctx, cv.x, cv.y, z, 1, destRect, `harvester (${harvester.tx.toFixed(1)},${harvester.ty.toFixed(1)})${dirLabel}`, `harvester_base [${profile.size}] off=${profile.groundOffset}`);
+  }
+
+  // ── Resources ──────────────────────────────────────────────────
+  for (const r of map.resources) {
+    const halfFp = r.footprint / 2;
+    const scr = tileToScreen(r.tx + halfFp, r.ty + halfFp);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const assetKey = RESOURCE_ASSET_KEYS[r.type];
+    const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+    if (profile) {
+      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, 64, 64);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, destRect, r.type, `${assetKey} [${profile.size}] off=${profile.groundOffset}`);
+    } else {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, r.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, r.type, '(no profile)');
+    }
+  }
+
+  // ── Obstacles ──────────────────────────────────────────────────
+  for (const o of map.obstacles) {
+    const halfFp = o.footprint / 2;
+    const scr = tileToScreen(o.tx + halfFp, o.ty + halfFp);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    const assetKey = OBSTACLE_ASSET_KEYS[o.type];
+    const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+    if (profile) {
+      const destRect = computeEnvDestRect(cv.x, cv.y, z, profile, 64, 64);
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, destRect, o.type, `${assetKey} [${profile.size}] off=${profile.groundOffset}`);
+    } else {
+      drawSpriteAnnotation(ctx, cv.x, cv.y, z, o.footprint, { x: cv.x, y: cv.y, w: 0, h: 0 }, o.type, '(no profile)');
+    }
   }
 
   ctx.restore();
