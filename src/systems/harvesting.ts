@@ -1,9 +1,19 @@
-/** Harvesting system: harvester state machine, resource node runtime state, raw delivery. Pure logic, no DOM. */
+/**
+ * Harvesting system: harvester state machine, resource node runtime state, raw delivery.
+ * Pure logic, no DOM.
+ *
+ * PR2 integration: harvesters now use runtime pathfinding instead of straight-line
+ * movement. They path to passable tiles adjacent to resource/dropoff footprints,
+ * avoiding HQ, buildings, construction sites, obstacles, and resources.
+ */
 
 import type { ResourceType, MapData } from '../game/map-types.js';
+import { RESOURCE_FOOTPRINTS } from '../game/map-types.js';
 import type { GameState } from '../game/game-state.js';
 import { HQ_FOOTPRINT } from '../core/constants.js';
 import { getBuildingFootprint } from '../config/buildings.js';
+import { buildPassabilityGrid, type PassabilityGrid } from './passability.js';
+import { findPathToAdjacent } from './pathfinding.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -54,10 +64,14 @@ export interface HarvesterState {
   gatherProgress: number;
   /** Amount of raw currently being carried. */
   carry: number;
-  /** Stored dropoff target X (tile-center). Computed once at gathering→moving-to-dropoff transition. */
+  /** Stored dropoff target X (tile-center of adjacent passable tile). */
   targetDropoffTx: number;
-  /** Stored dropoff target Y (tile-center). Computed once at gathering→moving-to-dropoff transition. */
+  /** Stored dropoff target Y (tile-center of adjacent passable tile). */
   targetDropoffTy: number;
+  /** Computed path waypoints (tile-integer positions). Empty when no active path. */
+  path: Array<{ tx: number; ty: number }>;
+  /** Current waypoint index in path. Points to the next waypoint to move toward. */
+  pathIndex: number;
 }
 
 /** Runtime state for a resource node on the map. */
@@ -122,6 +136,8 @@ export function createInitialHarvesters(
       carry: 0,
       targetDropoffTx: 0,
       targetDropoffTy: 0,
+      path: [],
+      pathIndex: 0,
     });
   }
 
@@ -136,6 +152,8 @@ export function createInitialHarvesters(
       carry: 0,
       targetDropoffTx: 0,
       targetDropoffTy: 0,
+      path: [],
+      pathIndex: 0,
     });
   }
 
@@ -151,21 +169,26 @@ export function createInitialHarvesters(
  *   delivering may transition to waiting-full-storage if raw cap is full.
  *   waiting-full-storage transitions back to delivering when cap frees up.
  *
- * - idle: find nearest non-depleted resource node
- * - moving-to-resource: move toward target node center
+ * - idle: find nearest reachable resource node via pathfinding
+ * - moving-to-resource: follow computed path to adjacent tile of resource
  * - gathering: wait for HARVESTER_GATHER_TIME, then extract raw from node
- * - moving-to-dropoff: move toward nearest raw-storage center (fallback HQ)
+ * - moving-to-dropoff: follow computed path to adjacent tile of dropoff
  * - delivering: deposit carry into economy.resources.raw (no raw loss)
  * - waiting-full-storage: wait at dropoff until raw cap has free space
  */
 export function tickHarvesting(state: GameState, dt: number): void {
+  // Build passability grid once per tick for all harvesters.
+  // This ensures consistent blocking state within a single tick.
+  const grid = buildPassabilityGrid(state.map);
 
   for (const harvester of state.harvesters) {
     switch (harvester.phase) {
       case 'idle': {
-        const nodeIndex = findNearestNode(harvester, state.resourceNodes);
-        if (nodeIndex >= 0) {
-          harvester.targetNodeIndex = nodeIndex;
+        const result = findNearestReachableResource(grid, harvester, state.resourceNodes);
+        if (result) {
+          harvester.targetNodeIndex = result.nodeIndex;
+          harvester.path = result.path;
+          harvester.pathIndex = 0;
           harvester.phase = 'moving-to-resource';
         }
         break;
@@ -174,16 +197,27 @@ export function tickHarvesting(state: GameState, dt: number): void {
       case 'moving-to-resource': {
         const node = state.resourceNodes[harvester.targetNodeIndex];
         if (!node || node.remaining <= 0) {
-          // Target depleted or invalid — go idle to re-select
-          harvester.phase = 'idle';
-          harvester.targetNodeIndex = -1;
+          // Target depleted or invalid — try another reachable resource
+          const result = findNearestReachableResource(grid, harvester, state.resourceNodes);
+          if (result) {
+            harvester.targetNodeIndex = result.nodeIndex;
+            harvester.path = result.path;
+            harvester.pathIndex = 0;
+            // Stay in moving-to-resource with new target
+          } else {
+            harvester.phase = 'idle';
+            harvester.targetNodeIndex = -1;
+            harvester.path = [];
+            harvester.pathIndex = 0;
+          }
           break;
         }
-        const targetTx = node.tx + 0.5;
-        const targetTy = node.ty + 0.5;
-        if (moveToward(harvester, targetTx, targetTy, dt)) {
+        if (followPath(harvester, dt)) {
+          // Arrived at adjacent tile of resource
           harvester.phase = 'gathering';
           harvester.gatherProgress = 0;
+          harvester.path = [];
+          harvester.pathIndex = 0;
         }
         break;
       }
@@ -206,18 +240,29 @@ export function tickHarvesting(state: GameState, dt: number): void {
           }
           harvester.carry = extract;
           harvester.gatherProgress = 0;
-          // Compute and store dropoff target (nearest raw-storage, fallback HQ)
-          const dropoff = findNearestDropoff(harvester, state.map);
-          harvester.targetDropoffTx = dropoff.tx;
-          harvester.targetDropoffTy = dropoff.ty;
-          harvester.phase = 'moving-to-dropoff';
+          // Compute dropoff path
+          const dropoffResult = findReachableDropoff(grid, harvester, state.map);
+          if (dropoffResult) {
+            harvester.path = dropoffResult.path;
+            harvester.pathIndex = 0;
+            harvester.targetDropoffTx = dropoffResult.targetTx + 0.5;
+            harvester.targetDropoffTy = dropoffResult.targetTy + 0.5;
+            harvester.phase = 'moving-to-dropoff';
+          } else {
+            // No reachable dropoff — go idle with carry preserved.
+            // The harvester will try again on next idle tick.
+            harvester.phase = 'idle';
+            harvester.targetNodeIndex = -1;
+          }
         }
         break;
       }
 
       case 'moving-to-dropoff': {
-        if (moveToward(harvester, harvester.targetDropoffTx, harvester.targetDropoffTy, dt)) {
+        if (followPath(harvester, dt)) {
           harvester.phase = 'delivering';
+          harvester.path = [];
+          harvester.pathIndex = 0;
         }
         break;
       }
@@ -252,13 +297,140 @@ export function tickHarvesting(state: GameState, dt: number): void {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── Path-following ───────────────────────────────────────────────────
+
+/**
+ * Follow the current path by moving toward waypoints.
+ * Returns true when the path is complete (all waypoints visited).
+ * Processes one waypoint per call; the next waypoint starts on the next tick.
+ */
+function followPath(harvester: HarvesterState, dt: number): boolean {
+  if (harvester.pathIndex >= harvester.path.length) {
+    return true; // already at destination or empty path
+  }
+
+  const waypoint = harvester.path[harvester.pathIndex]!;
+  const targetTx = waypoint.tx + 0.5; // tile center
+  const targetTy = waypoint.ty + 0.5;
+
+  if (moveToward(harvester, targetTx, targetTy, dt)) {
+    // Arrived at this waypoint — advance to next
+    harvester.pathIndex++;
+    // If no more waypoints, path is complete
+    return harvester.pathIndex >= harvester.path.length;
+  }
+
+  return false;
+}
+
+// ── Reachable target selection ───────────────────────────────────────
+
+/** Result of searching for a reachable resource node. */
+interface ReachableResourceResult {
+  nodeIndex: number;
+  path: Array<{ tx: number; ty: number }>;
+}
+
+/**
+ * Find the nearest reachable resource node by pathfinding cost.
+ * Skips depleted and unreachable nodes.
+ * Returns null if no reachable resource exists.
+ */
+function findNearestReachableResource(
+  grid: PassabilityGrid,
+  harvester: HarvesterState,
+  nodes: ReadonlyArray<ResourceNodeState>,
+): ReachableResourceResult | null {
+  const fromTx = Math.floor(harvester.tx);
+  const fromTy = Math.floor(harvester.ty);
+
+  let bestIndex = -1;
+  let bestPath: Array<{ tx: number; ty: number }> = [];
+  let bestCost = Infinity;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]!;
+    if (node.remaining <= 0) continue;
+
+    const footprint = RESOURCE_FOOTPRINTS[node.type];
+    const result = findPathToAdjacent(grid, fromTx, fromTy, node.tx, node.ty, footprint);
+
+    if (result.found && result.cost < bestCost) {
+      bestCost = result.cost;
+      bestPath = result.path;
+      bestIndex = i;
+    }
+  }
+
+  if (bestIndex < 0) return null;
+  return { nodeIndex: bestIndex, path: bestPath };
+}
+
+/** Result of searching for a reachable dropoff target. */
+interface ReachableDropoffResult {
+  path: Array<{ tx: number; ty: number }>;
+  targetTx: number;
+  targetTy: number;
+}
+
+/**
+ * Find the nearest reachable dropoff by pathfinding cost.
+ * Prefers raw-storage over HQ (tries raw-storages first, then HQ fallback).
+ * Returns null if no reachable dropoff exists.
+ */
+function findReachableDropoff(
+  grid: PassabilityGrid,
+  harvester: HarvesterState,
+  map: MapData,
+): ReachableDropoffResult | null {
+  const fromTx = Math.floor(harvester.tx);
+  const fromTy = Math.floor(harvester.ty);
+
+  let bestPath: Array<{ tx: number; ty: number }> | null = null;
+  let bestCost = Infinity;
+  let bestTargetTx = 0;
+  let bestTargetTy = 0;
+
+  // Try raw-storage buildings first
+  for (const building of map.buildings) {
+    if (building.type !== 'raw-storage') continue;
+    const footprint = getBuildingFootprint(building.type);
+    const result = findPathToAdjacent(grid, fromTx, fromTy, building.tx, building.ty, footprint);
+    if (result.found && result.cost < bestCost) {
+      bestCost = result.cost;
+      bestPath = result.path;
+      const last = result.path.length > 0 ? result.path[result.path.length - 1]! : { tx: fromTx, ty: fromTy };
+      bestTargetTx = last.tx;
+      bestTargetTy = last.ty;
+    }
+  }
+
+  // If a raw-storage was found, use it (preserve raw-storage preference)
+  if (bestPath !== null) {
+    return { path: bestPath, targetTx: bestTargetTx, targetTy: bestTargetTy };
+  }
+
+  // HQ fallback
+  const hqResult = findPathToAdjacent(grid, fromTx, fromTy, map.hq.tx, map.hq.ty, HQ_FOOTPRINT);
+  if (hqResult.found) {
+    const last = hqResult.path.length > 0 ? hqResult.path[hqResult.path.length - 1]! : { tx: fromTx, ty: fromTy };
+    return { path: hqResult.path, targetTx: last.tx, targetTy: last.ty };
+  }
+
+  return null;
+}
+
+// ── Helpers (legacy, kept for backward compatibility) ────────────────
 
 /**
  * Find the nearest valid dropoff target for a harvester carrying Raw.
  * Prefers nearest completed raw-storage center; falls back to HQ center.
  * Offline raw-storage still counts as valid physical storage.
  * Construction sites are not valid dropoff targets.
+ *
+ * NOTE: This function returns building-center positions (legacy behavior).
+ * The actual harvester movement now uses pathfinding to adjacent tiles.
+ * Kept for backward compatibility with tests and reference.
  */
 export function findNearestDropoff(
   harvester: HarvesterState,
@@ -288,26 +460,7 @@ export function findNearestDropoff(
   };
 }
 
-/** Find the nearest non-depleted resource node. Returns -1 if none available. */
-function findNearestNode(
-  harvester: HarvesterState,
-  nodes: ReadonlyArray<ResourceNodeState>,
-): number {
-  let bestIndex = -1;
-  let bestDist = Infinity;
-
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]!;
-    if (node.remaining <= 0) continue;
-    const dist = Math.hypot(node.tx + 0.5 - harvester.tx, node.ty + 0.5 - harvester.ty);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestIndex = i;
-    }
-  }
-
-  return bestIndex;
-}
+// ── Movement ─────────────────────────────────────────────────────────
 
 /**
  * Move harvester toward target by HARVESTER_SPEED * dt.
