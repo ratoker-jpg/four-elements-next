@@ -21,6 +21,14 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - PR2: Civil unit scale tuning
 **Status:** In progress (more PRs expected).
 
+### WORKFLOW-SPEED-01
+Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
+**Status:** Done.
+
+### WORKFLOW-SPEED-02
+Consolidation of workflow docs, prompt templates, conflict resolution with docs/AI_WORKFLOW_CONTRACT.md.
+**Status:** In progress.
+
 ## Likely Next Candidates
 
 | ID | Description | Priority |

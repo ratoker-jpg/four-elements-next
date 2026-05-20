@@ -55,6 +55,15 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - **Building spacing:** one-tile gap required between buildings/HQ/construction-sites
 - **E2E timing:** `__constructionState` hook updates per animation frame; use `expect.poll()` for state changes after UI clicks
 
+## Workflow Docs
+
+- **Workflow modes + E2E policy:** `agent-ctx/workflow.md` (canonical)
+- **Prompt templates:** `agent-ctx/prompt-templates.md`
+- **PR checklist:** `agent-ctx/pr-checklist.md`
+- **Architecture tracker:** `agent-ctx/current-arch.md`
+- **Broader process:** `docs/AI_WORKFLOW_CONTRACT.md` (roles, re-audit triggers, branch discipline)
+- On conflict between `agent-ctx/workflow.md` and `docs/AI_WORKFLOW_CONTRACT.md` on mode selection or E2E policy, **agent-ctx takes priority**.
+
 ## Key Constants (DO NOT CHANGE)
 
 - `src/core/constants.ts` — forbidden without explicit approval
