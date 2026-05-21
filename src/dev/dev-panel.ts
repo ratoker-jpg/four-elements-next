@@ -75,6 +75,10 @@ export interface DevPanelActions {
   addResource: () => void;
   /** Clear all construction sites, refund matter (clamped to cap), reset builders to idle. */
   clearConstruction: () => void;
+  /** Scenario: max resources, spawn builder, camera to HQ. */
+  prepareBuilderTest: () => void;
+  /** Scenario: max resources, ensure 3+ harvesters, build separator via real flow, fast-forward. */
+  prepareEconomyTest: () => void;
 }
 
 // ── Environment guard ──────────────────────────────────────────────
@@ -159,6 +163,12 @@ export function createDevPanel(actions: DevPanelActions): {
   const constSection = makeSection('Construction');
   constSection.appendChild(makeActionBtn('Clear Sites', () => actions.clearConstruction()));
   actionsEl.appendChild(constSection);
+
+  // Scenario buttons
+  const scenarioSection = makeSection('Scenarios');
+  scenarioSection.appendChild(makeActionBtn('Builder Test', () => actions.prepareBuilderTest()));
+  scenarioSection.appendChild(makeActionBtn('Economy Test', () => actions.prepareEconomyTest()));
+  actionsEl.appendChild(scenarioSection);
 
   // Fast-forward buttons
   const ffSection = makeSection('Fast-Forward');
