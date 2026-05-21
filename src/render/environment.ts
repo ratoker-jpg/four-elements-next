@@ -32,7 +32,7 @@ export function renderResourceNode(
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
   } else {
     renderResourceFallback(ctx, node.type, cv.x, cv.y, z);
   }
@@ -62,7 +62,7 @@ export function renderObstacle(
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
   } else {
     renderObstacleFallback(ctx, obstacle.type, cv.x, cv.y, z);
   }
@@ -91,7 +91,7 @@ export function renderDecor(
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h / 2 - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
   } else {
     renderDecorFallback(ctx, cv.x, cv.y, z);
   }
