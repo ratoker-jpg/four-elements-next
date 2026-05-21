@@ -324,10 +324,10 @@ describe('mapgen', () => {
 
   // ── Sprite profile tests ────────────────────────────────────────────────
 
-  it('mineral_infinite sprite profile has size [170, 170] and groundOffset 3', () => {
+  it('mineral_infinite sprite profile has size [170, 170] and groundOffset -24', () => {
     const profile = SPRITE_PROFILES.mineral_infinite;
     expect(profile.size).toEqual([170, 170]);
-    expect(profile.groundOffset).toBe(3);
+    expect(profile.groundOffset).toBe(-24);
   });
 
   // ── Stage B: Center resource field tests ──────────────────────────────
@@ -684,10 +684,10 @@ describe('mapgen', () => {
 
   // ── Profile metadata stability ────────────────────────────────────────
 
-  it('mineral_infinite profile remains [170, 170] / groundOffset 3', () => {
+  it('mineral_infinite profile remains [170, 170] / groundOffset -24', () => {
     const profile = SPRITE_PROFILES.mineral_infinite;
     expect(profile.size).toEqual([170, 170]);
-    expect(profile.groundOffset).toBe(3);
+    expect(profile.groundOffset).toBe(-24);
   });
 
   it('all sprite profiles have valid size and groundOffset', () => {
