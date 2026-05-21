@@ -4,8 +4,20 @@ Update this file after every major ARCH stage PR.
 
 ## Completed
 
+### CIVIL-UX-01
+- PR1: Construction cancellation feedback, toast near build toggle, WAIT/active construction labels, `cancelledSitesCount` hook.
+**Status:** Done.
+
 ### DEV-SANDBOX-ARCH-01
 Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug overlay.
+**Status:** Done.
+
+### DEV-SANDBOX-TOOLS-01
+- PR1: Max All / Zero All, +Builder, +Harvester, +Obstacle, +Resource, Clear Sites. Restored dev-panel regression E2E, added `dev-panel-tools.spec.ts`.
+**Status:** Done.
+
+### DEV-SANDBOX-TOOLS-02
+- PR1: Builder Test and Economy Test scenario buttons.
 **Status:** Done.
 
 ### PATHFINDING-ARCH-01
@@ -19,7 +31,12 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 ### VISUAL-QA-ARCH-01
 - PR1: Sprite Debug overlay
 - PR2: Civil unit scale tuning
-**Status:** In progress (more PRs expected).
+- PR3: Canvas-only shadow pass for units/buildings/HQ/resources/obstacles/construction sites
+**Status:** Done for current visual pass (possible future tuning).
+
+### VISUAL-QA-FIX-01
+- Tuned shadows smaller/directional, fixed builder movement facing, fixed/stabilized harvester runtime animation/flicker via waypoint-derived facing and guarded animation windows.
+**Status:** Done.
 
 ### WORKFLOW-SPEED-01
 Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
@@ -33,10 +50,12 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 
 | ID | Description | Priority |
 |---|---|---|
-| CIVIL-UX-01 | Statuses, indicators, clearer construction/harvester feedback | High |
-| VISUAL-QA-ARCH-01 next | Shadows/grounding pass | Medium |
-| DEV-SANDBOX next | Spawn/test tools for dev panel | Medium |
+| DOCS-SYNC-20260521 | Agent context sync after PRs 83–87 (done/current) | Done |
+| HARVESTER-VIDEO-MOVE-01 | Harvester movement video/visual polish | Medium |
+| HARVESTER-ANIMATION-PIPELINE-01 | Harvester animation pipeline improvements | Medium |
 | UI-SHELL-01 | Esc menu / save / continue shell | Medium |
+| SAVE-LOAD-01 | Save/load system | Medium |
+| COMBAT-ARCH-01 | Combat system architecture | Low |
 | MAP-EDITOR-ARCH-01 | Map editor (later) | Low |
 
 ## Rule

@@ -30,8 +30,17 @@ TypeScript strict + Vite + Canvas 2D + HTML overlay UI + Vitest + Playwright.
 
 ## Completed Architecture
 
+### CIVIL-UX-01
+- **PR1:** Construction cancellation feedback, toast near build toggle, WAIT/active construction labels, `cancelledSitesCount` hook
+
 ### DEV-SANDBOX-ARCH-01
 Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug overlay.
+
+### DEV-SANDBOX-TOOLS-01
+- **PR1:** Max All / Zero All, +Builder, +Harvester, +Obstacle, +Resource, Clear Sites
+
+### DEV-SANDBOX-TOOLS-02
+- **PR1:** Builder Test and Economy Test scenario buttons
 
 ### PATHFINDING-ARCH-01
 - **PR1:** Passability grid + BFS pathfinder (`src/systems/passability.ts`, `src/systems/pathfinding.ts`)
@@ -43,6 +52,10 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 ### VISUAL-QA-ARCH-01
 - **PR1:** Sprite Debug overlay (dev-only, visual QA tool)
 - **PR2:** Civil unit scale tuning
+- **PR3:** Canvas-only shadow pass for units/buildings/HQ/resources/obstacles/construction sites
+
+### VISUAL-QA-FIX-01
+- Shadow tuning (smaller/directional), builder movement facing fix, harvester runtime animation/flicker fix via waypoint-derived facing and guarded animation windows
 
 ## Important Gameplay Facts
 
@@ -54,6 +67,29 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - **Matter refund:** on repath-failure cancel, `economy.resources.matter = Math.min(matter + costMatter, matterCap)`
 - **Building spacing:** one-tile gap required between buildings/HQ/construction-sites
 - **E2E timing:** `__constructionState` hook updates per animation frame; use `expect.poll()` for state changes after UI clicks
+
+## Dev Panel Capabilities
+
+- **Access:** `?devtools=1` with overlays, Sprite Debug, spawn tools, and scenario buttons
+- **Spawn tools:** +Builder, +Harvester, +Obstacle, +Resource, Max All, Zero All, Clear Sites
+- **Scenario buttons:**
+  - **Builder Test:** spawns a builder near HQ and positions camera
+  - **Economy Test:** maxes resources, spawns 3 harvesters, starts separator construction, fast-forwards 35 ticks, camera to HQ
+- **Overlays:** grid, footprint, blocking (all toggle from dev panel)
+
+## Construction UX
+
+- **Toast/status feedback:** visual feedback near build toggle on construction events
+- **WAIT/active site labels:** construction sites show WAIT (pending) or active progress label
+- **cancelledSitesCount hook:** tracks cancelled site count for UI feedback
+
+## Visual QA
+
+- **Canvas-only directional shadows:** rendered for units, buildings, HQ, resources, obstacles, construction sites
+- **Builder faces movement direction:** uses isometric row correction (tile-space vector to screen-space row with +1 offset)
+- **Harvester movement facing:** uses active waypoint to determine direction, avoiding runtime flicker
+- **Civil sprite direction correction:** tile-space vector to screen-space row uses +1 offset for correct isometric facing
+- **Guarded animation windows:** harvester animation windows are bounded to prevent flicker
 
 ## Workflow Docs
 
