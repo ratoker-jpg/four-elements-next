@@ -37,8 +37,15 @@ export interface ConstructionCommandResult {
   site?: ConstructionSitePlacement;
 }
 
+/** Info about a construction site that was cancelled during a tick. */
+export interface CancelledSiteInfo {
+  type: BuildingType;
+  reason: string;
+}
+
 export interface ConstructionTickResult {
   completedBuildings: BuildingPlacement[];
+  cancelledSites: CancelledSiteInfo[];
 }
 
 export function startConstruction(
@@ -139,6 +146,7 @@ export function startConstruction(
 
 export function tickConstruction(map: MapData, economy: EconomyState, dt: number): ConstructionTickResult {
   const completedBuildings: BuildingPlacement[] = [];
+  const cancelledSites: CancelledSiteInfo[] = [];
 
   for (let index = map.constructionSites.length - 1; index >= 0; index--) {
     const site = map.constructionSites[index]!;
@@ -156,6 +164,7 @@ export function tickConstruction(map: MapData, economy: EconomyState, dt: number
             const repathResult = tryRepath(map, builder, site);
             if (!repathResult) {
               // Repath failed — cancel site, refund matter, free builder
+              cancelledSites.push({ type: site.type, reason: 'path-blocked' });
               cancelSite(map, economy, site, builder, index);
               continue;
             }
@@ -204,7 +213,7 @@ export function tickConstruction(map: MapData, economy: EconomyState, dt: number
     map.constructionSites.splice(index, 1);
   }
 
-  return { completedBuildings };
+  return { completedBuildings, cancelledSites };
 }
 
 /**

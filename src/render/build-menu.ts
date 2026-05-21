@@ -16,6 +16,12 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
   root.className = 'build-menu';
   root.dataset.open = 'false';
 
+  // Toast: visible status near toggle when panel is closed
+  const toast = document.createElement('div');
+  toast.className = 'build-menu__toast';
+  toast.dataset.tone = 'neutral';
+  root.appendChild(toast);
+
   const toggleButton = document.createElement('button');
   toggleButton.className = 'btn build-menu__toggle';
   toggleButton.type = 'button';
@@ -56,6 +62,10 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
 
   root.appendChild(panel);
 
+  // Toast auto-hide timer + message dedup
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastToastMessage = '';
+
   const update = (state: BuildMenuState) => {
     for (const [buildingType, button] of buttons) {
       const definition = BUILDING_DEFINITIONS[buildingType];
@@ -68,9 +78,31 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
           : 'Недостаточно материи';
     }
 
-    status.textContent = state.statusMessage;
-    const isError = state.statusMessage.startsWith('Не') || state.statusMessage.includes('занят');
-    status.dataset.tone = isError ? 'error' : 'neutral';
+    const msg = state.statusMessage;
+    const isError = msg.startsWith('Не') || msg.includes('занят') || msg.includes('заблокирован');
+    const tone = isError ? 'error' : 'neutral';
+
+    // Panel-internal status
+    status.textContent = msg;
+    status.dataset.tone = tone;
+
+    // Toast: only trigger on message change to avoid restarting timer every tick
+    if (msg && msg !== lastToastMessage) {
+      lastToastMessage = msg;
+      toast.textContent = msg;
+      toast.dataset.tone = tone;
+      toast.dataset.visible = 'true';
+      // Auto-hide toast after 5s (visual only — state message is NOT cleared)
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.dataset.visible = 'false';
+        toastTimer = null;
+      }, 5000);
+    } else if (!msg) {
+      toast.dataset.visible = 'false';
+      lastToastMessage = '';
+      if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    }
   };
 
   const toggle = () => {

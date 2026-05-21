@@ -32,6 +32,12 @@ export function runSystems(state: GameState, dt: number): void {
     state.constructionStatusMessage = `${definition.label} построен. Строитель свободен.`;
   }
 
+  // 2b. Cancellation feedback: set status message for cancelled sites
+  for (const _cancelled of constructionResult.cancelledSites) {
+    state.constructionStatusMessage = `Путь к стройплощадке заблокирован. Материя возвращена.`;
+    state.constructionCancelledCount++;
+  }
+
   // 3. Power tick
   tickPower(state.power);
 

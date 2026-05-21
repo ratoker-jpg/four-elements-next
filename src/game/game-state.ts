@@ -49,6 +49,8 @@ export interface GameState {
   power: PowerState;
   control: ControlState;
   constructionStatusMessage: string;
+  /** Cumulative count of construction sites cancelled during gameplay. */
+  constructionCancelledCount: number;
   /** Runtime harvester units. Managed by tickHarvesting. */
   harvesters: HarvesterState[];
   /** Runtime resource node states (depletion tracking). Managed by tickHarvesting. */
@@ -150,6 +152,7 @@ export function createGameState(mapSize: string, faction: FactionId | 'random'):
     power,
     control,
     constructionStatusMessage: 'Строитель готов к строительству.',
+    constructionCancelledCount: 0,
     harvesters,
     resourceNodes,
     production,
