@@ -41,17 +41,18 @@ interface ShadowProfile {
   readonly widthTiles: number;
   readonly heightTiles: number;
   readonly yOffsetTiles: number;
+  readonly xOffsetTiles: number;
   readonly alpha: number;
 }
 
 const SHADOW_PROFILES: Record<ShadowKind, ShadowProfile> = {
-  builder: { widthTiles: 0.6, heightTiles: 0.18, yOffsetTiles: 0.62, alpha: 0.16 },
-  harvester: { widthTiles: 0.52, heightTiles: 0.16, yOffsetTiles: 0.52, alpha: 0.15 },
-  hq: { widthTiles: 0.88, heightTiles: 0.48, yOffsetTiles: 0.18, alpha: 0.14 },
-  building: { widthTiles: 0.82, heightTiles: 0.44, yOffsetTiles: 0.16, alpha: 0.13 },
-  construction: { widthTiles: 0.72, heightTiles: 0.34, yOffsetTiles: 0.05, alpha: 0.12 },
-  resource: { widthTiles: 0.62, heightTiles: 0.3, yOffsetTiles: 0.1, alpha: 0.12 },
-  obstacle: { widthTiles: 0.7, heightTiles: 0.34, yOffsetTiles: 0.12, alpha: 0.13 },
+  builder: { widthTiles: 0.32, heightTiles: 0.1, xOffsetTiles: -0.08, yOffsetTiles: -0.08, alpha: 0.11 },
+  harvester: { widthTiles: 0.28, heightTiles: 0.09, xOffsetTiles: -0.07, yOffsetTiles: -0.07, alpha: 0.1 },
+  hq: { widthTiles: 0.58, heightTiles: 0.3, xOffsetTiles: -0.08, yOffsetTiles: -0.05, alpha: 0.09 },
+  building: { widthTiles: 0.5, heightTiles: 0.26, xOffsetTiles: -0.07, yOffsetTiles: -0.04, alpha: 0.08 },
+  construction: { widthTiles: 0.5, heightTiles: 0.23, xOffsetTiles: -0.06, yOffsetTiles: -0.03, alpha: 0.08 },
+  resource: { widthTiles: 0.3, heightTiles: 0.14, xOffsetTiles: -0.04, yOffsetTiles: -0.025, alpha: 0.045 },
+  obstacle: { widthTiles: 0.46, heightTiles: 0.22, xOffsetTiles: -0.06, yOffsetTiles: -0.035, alpha: 0.075 },
 };
 
 function getFootprintSortKey(tx: number, ty: number, footprint: number): number {
@@ -69,12 +70,13 @@ function renderGroundShadow(
   const profile = SHADOW_PROFILES[kind];
   const radiusX = (TILE_W / 2) * profile.widthTiles * footprint * zoom;
   const radiusY = (TILE_H / 2) * profile.heightTiles * footprint * zoom;
+  const x = cx + (TILE_W / 2) * profile.xOffsetTiles * footprint * zoom;
   const y = cy + (TILE_H / 2) * profile.yOffsetTiles * footprint * zoom;
 
   ctx.save();
   ctx.fillStyle = `rgba(18, 16, 14, ${profile.alpha})`;
   ctx.beginPath();
-  ctx.ellipse(cx, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y, radiusX, radiusY, -0.08, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
