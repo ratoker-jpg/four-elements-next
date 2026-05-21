@@ -40,6 +40,38 @@ test.describe('NEXT-02 map visual baseline', () => {
     expect(critical.length).toBeLessThanOrEqual(0);
   });
 
+  test('ground shadow render pass does not crash', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(msg.text());
+    });
+
+    await navigateToGameScreen(page);
+
+    await page.evaluate(() => {
+      const dev = (window as Record<string, unknown>).__devActions as {
+        prepareBuilderTest: () => void;
+      } | null;
+      dev?.prepareBuilderTest();
+    });
+
+    await page.waitForTimeout(500);
+
+    const state = await page.evaluate(() => {
+      return {
+        economy: (window as Record<string, unknown>).__economyState,
+        construction: (window as Record<string, unknown>).__constructionState,
+        harvesters: (window as Record<string, unknown>).__harvesterState,
+      };
+    });
+    expect(state.economy).toBeTruthy();
+    expect(state.construction).toBeTruthy();
+    expect(state.harvesters).toBeTruthy();
+
+    const critical = errors.filter((e) => !e.includes('favicon'));
+    expect(critical).toEqual([]);
+  });
+
   test('camera responds to keyboard pan (WASD)', async ({ page }) => {
     await navigateToGameScreen(page);
 

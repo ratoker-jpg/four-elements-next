@@ -417,6 +417,29 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
     expect(toggles!.grid).toBe(true);
   });
 
+  test('Grid, Footprints, and Blocking toggles still switch on', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await page.keyboard.press('Backquote');
+
+    const keys = ['grid', 'footprints', 'obstacleBlocking'];
+    for (const key of keys) {
+      const btn = page.locator(`#fe-dev-panel .fe-dev-panel__btn--toggle[data-overlay-key="${key}"]`);
+      await expect(btn).toHaveAttribute('data-active', 'false');
+      await btn.click();
+      await expect(btn).toHaveAttribute('data-active', 'true');
+    }
+
+    const toggles = await page.evaluate(() => {
+      const ot = (window as Record<string, unknown>).__overlayToggles as {
+        get: () => Record<string, boolean>;
+      } | null;
+      return ot?.get() ?? null;
+    });
+    expect(toggles!.grid).toBe(true);
+    expect(toggles!.footprints).toBe(true);
+    expect(toggles!.obstacleBlocking).toBe(true);
+  });
+
   test('toggling overlay on then off returns to false', async ({ page }) => {
     await navigateToGameScreen(page);
 
