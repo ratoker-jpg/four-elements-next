@@ -161,6 +161,9 @@ function animColumnWithinSheet(
 
 function movementVectorToSpriteRow(dx: number, dy: number, fallbackRow = DEFAULT_CIVIL_ROW): number {
   if (Math.hypot(dx, dy) < 0.01) return fallbackRow;
+  // directionToRow returns the tile-space row. Civil sprite rows are authored
+  // in screen-space, so isometric projection rotates tile vectors by +1 row:
+  // tile east -> screen SE, tile south -> screen SW, tile NE -> screen east.
   return (directionToRow(dx, dy) + 1) % 8;
 }
 
