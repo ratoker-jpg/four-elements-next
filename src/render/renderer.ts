@@ -1,7 +1,8 @@
 /** Render orchestrator. Delegates to terrain, environment, buildings. */
 
 import { getBuildingFootprint } from '../config/buildings.js';
-import { BG_COLOR, HQ_FOOTPRINT } from '../core/constants.js';
+import { BG_COLOR, HQ_FOOTPRINT, TILE_H, TILE_W } from '../core/constants.js';
+import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
 import type { MapData } from '../game/map-types.js';
 import type { ReadonlyEconomyState } from '../systems/economy.js';
@@ -30,11 +31,77 @@ import { renderDevOverlays, anyOverlayEnabled, type SpriteDebugData } from '../d
 
 interface SortedEntity {
   sortKey: number;
+  shadow?: () => void;
   render: () => void;
 }
 
+type ShadowKind = 'builder' | 'harvester' | 'hq' | 'building' | 'construction' | 'resource' | 'obstacle';
+
+interface ShadowProfile {
+  readonly widthTiles: number;
+  readonly heightTiles: number;
+  readonly yOffsetTiles: number;
+  readonly alpha: number;
+}
+
+const SHADOW_PROFILES: Record<ShadowKind, ShadowProfile> = {
+  builder: { widthTiles: 0.6, heightTiles: 0.18, yOffsetTiles: 0.62, alpha: 0.16 },
+  harvester: { widthTiles: 0.52, heightTiles: 0.16, yOffsetTiles: 0.52, alpha: 0.15 },
+  hq: { widthTiles: 0.88, heightTiles: 0.48, yOffsetTiles: 0.18, alpha: 0.14 },
+  building: { widthTiles: 0.82, heightTiles: 0.44, yOffsetTiles: 0.16, alpha: 0.13 },
+  construction: { widthTiles: 0.72, heightTiles: 0.34, yOffsetTiles: 0.05, alpha: 0.12 },
+  resource: { widthTiles: 0.62, heightTiles: 0.3, yOffsetTiles: 0.1, alpha: 0.12 },
+  obstacle: { widthTiles: 0.7, heightTiles: 0.34, yOffsetTiles: 0.12, alpha: 0.13 },
+};
+
 function getFootprintSortKey(tx: number, ty: number, footprint: number): number {
   return tx + ty + (footprint - 1) * 2;
+}
+
+function renderGroundShadow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  zoom: number,
+  footprint: number,
+  kind: ShadowKind,
+): void {
+  const profile = SHADOW_PROFILES[kind];
+  const radiusX = (TILE_W / 2) * profile.widthTiles * footprint * zoom;
+  const radiusY = (TILE_H / 2) * profile.heightTiles * footprint * zoom;
+  const y = cy + (TILE_H / 2) * profile.yOffsetTiles * footprint * zoom;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(18, 16, 14, ${profile.alpha})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function renderTileShadow(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  tx: number,
+  ty: number,
+  footprint: number,
+  kind: ShadowKind,
+): void {
+  const scr = tileToScreen(tx + footprint / 2, ty + footprint / 2);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  renderGroundShadow(ctx, cv.x, cv.y, camera.zoom, footprint, kind);
+}
+
+function renderUnitShadow(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  tx: number,
+  ty: number,
+  kind: 'builder' | 'harvester',
+): void {
+  const scr = tileToScreen(tx, ty);
+  const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
+  renderGroundShadow(ctx, cv.x, cv.y, camera.zoom, 1, kind);
 }
 
 export function render(
@@ -65,6 +132,7 @@ export function render(
   const entities: SortedEntity[] = [];
   entities.push({
     sortKey: getFootprintSortKey(map.hq.tx, map.hq.ty, HQ_FOOTPRINT),
+    shadow: () => renderTileShadow(ctx, camera, map.hq.tx, map.hq.ty, HQ_FOOTPRINT, 'hq'),
     render: () => renderHq(ctx, map.hq, camera, assets),
   });
 
@@ -79,46 +147,57 @@ export function render(
       const progress = sepState?.progress ?? 0;
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderSeparator(ctx, b.tx, b.ty, camera, active, progress, online, assets, faction),
       });
     } else if (b.type === 'raw-storage') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderRawStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'matter-storage') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderMatterStorage(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'power-plant') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderPowerPlant(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'command-relay') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderCommandRelay(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     } else if (b.type === 'units-factory') {
       entities.push({
         sortKey: getFootprintSortKey(b.tx, b.ty, footprint),
+        shadow: () => renderTileShadow(ctx, camera, b.tx, b.ty, footprint, 'building'),
         render: () => renderUnitsFactory(ctx, b.tx, b.ty, camera, online, assets, faction),
       });
     }
   }
 
   for (const site of map.constructionSites) {
+    const footprint = getBuildingFootprint(site.type);
     entities.push({
-      sortKey: getFootprintSortKey(site.tx, site.ty, getBuildingFootprint(site.type)),
+      sortKey: getFootprintSortKey(site.tx, site.ty, footprint),
+      shadow: () => renderTileShadow(ctx, camera, site.tx, site.ty, footprint, 'construction'),
       render: () => renderConstructionSite(ctx, site, camera),
     });
   }
 
   for (const builder of map.builders) {
+    const renderTx = (builder.phase === 'moving-to-site') ? builder.ftx : builder.tx + 0.5;
+    const renderTy = (builder.phase === 'moving-to-site') ? builder.fty : builder.ty + 0.5;
     entities.push({
       sortKey: builder.tx + builder.ty,
+      shadow: () => renderUnitShadow(ctx, camera, renderTx, renderTy, 'builder'),
       render: () => renderBuilder(ctx, builder, camera, assets, faction, ticks),
     });
   }
@@ -128,21 +207,34 @@ export function render(
     const prev = prevHarvesterPositions.get(i) ?? { tx: harvester.tx, ty: harvester.ty };
     entities.push({
       sortKey: harvester.tx + harvester.ty,
+      shadow: () => renderUnitShadow(ctx, camera, harvester.tx, harvester.ty, 'harvester'),
       render: () => renderHarvester(ctx, harvester, camera, assets, faction, ticks, prev.tx, prev.ty),
     });
   }
 
   for (const r of map.resources) {
-    entities.push({ sortKey: r.tx + r.ty + (r.footprint - 1) * 2, render: () => renderResourceNode(ctx, r, camera, assets) });
+    entities.push({
+      sortKey: r.tx + r.ty + (r.footprint - 1) * 2,
+      shadow: () => renderTileShadow(ctx, camera, r.tx, r.ty, r.footprint, 'resource'),
+      render: () => renderResourceNode(ctx, r, camera, assets),
+    });
   }
   for (const o of map.obstacles) {
-    entities.push({ sortKey: o.tx + o.ty + (o.footprint - 1) * 2, render: () => renderObstacle(ctx, o, camera, assets) });
+    entities.push({
+      sortKey: o.tx + o.ty + (o.footprint - 1) * 2,
+      shadow: () => renderTileShadow(ctx, camera, o.tx, o.ty, o.footprint, 'obstacle'),
+      render: () => renderObstacle(ctx, o, camera, assets),
+    });
   }
   for (const d of map.decor) {
     entities.push({ sortKey: d.tx + d.ty, render: () => renderDecor(ctx, d, camera, assets) });
   }
 
   entities.sort((a, b) => a.sortKey - b.sortKey);
+
+  for (const e of entities) {
+    e.shadow?.();
+  }
 
   for (const e of entities) {
     e.render();

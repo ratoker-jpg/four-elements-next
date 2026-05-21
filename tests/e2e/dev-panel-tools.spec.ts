@@ -306,6 +306,16 @@ test.describe('DEV-SANDBOX-TOOLS-02 scenario buttons', () => {
     await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
   }
 
+  test('scenario buttons exist in the dev panel', async ({ page }) => {
+    await navigateToGameScreen(page);
+    await page.keyboard.press('Backquote');
+
+    const panel = page.locator('#fe-dev-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Builder Test' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Economy Test' })).toBeVisible();
+  });
+
   test('Prepare Builder Test sets resources to caps and adds a builder', async ({ page }) => {
     await navigateToGameScreen(page);
 
