@@ -367,6 +367,11 @@ export class GameWorld {
     const map = this.state.map;
     const hq = map.hq;
     const occupied = buildOccupiedTileSet(map);
+    // Also mark runtime harvester positions as occupied so spawned units
+    // don't land on the same tile as an existing harvester.
+    for (const h of this.state.harvesters) {
+      occupied.add(`${Math.floor(h.tx)},${Math.floor(h.ty)}`);
+    }
     for (let ty = hq.ty - 1; ty <= hq.ty + HQ_FOOTPRINT; ty++) {
       for (let tx = hq.tx - 1; tx <= hq.tx + HQ_FOOTPRINT; tx++) {
         // Skip tiles inside HQ footprint
