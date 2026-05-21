@@ -5,6 +5,7 @@ import { createMapSizeScreen } from './screens/map-size.js';
 import { createFactionSelectScreen } from './screens/faction-select.js';
 import { createSettingsScreen } from './screens/settings.js';
 import { createGameScreen } from './screens/game-screen.js';
+import { createEditorScreen } from './screens/editor-screen.js';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app element not found');
@@ -17,5 +18,6 @@ manager.addScreen(createMapSizeScreen(navigate));
 manager.addScreen(createFactionSelectScreen(navigate));
 manager.addScreen(createSettingsScreen(navigate));
 manager.addScreen(createGameScreen(navigate));
+manager.addScreen(createEditorScreen(navigate));
 
 manager.start('main-menu');
