@@ -1,9 +1,10 @@
 /** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED, BUILDING_ASSET_MANIFEST, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
-import { tileToScreen } from '../core/coordinates.js';
+import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED, BUILDING_ASSET_MANIFEST, FE_BUILDING_SPRITES_ENABLED, HQ_FOOTPRINT } from '../core/constants.js';
+import { tileToScreen, screenToTile } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
-import type { FactionId, BuildingType, ConstructionSitePlacement } from './map-types.js';
+import type { FactionId, BuildingType, ConstructionSitePlacement, ResourceType, ObstacleType } from './map-types.js';
+import { RESOURCE_FOOTPRINTS, OBSTACLE_FOOTPRINTS } from './map-types.js';
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
 import type { GameState } from './game-state.js';
 import { createGameState } from './game-state.js';
@@ -15,12 +16,14 @@ import {
   getFactionElement,
   type ReadonlyEconomyState,
 } from '../systems/economy.js';
+import { RESOURCE_AMOUNTS } from '../systems/harvesting.js';
 import type { ReadonlyPowerState } from '../systems/power.js';
 import type { ReadonlyControlState } from '../systems/control.js';
 import { BUILDING_DEFINITIONS } from '../config/buildings.js';
 import {
   startConstruction as startConstructionSystem,
   type ConstructionCommandResult as ConstructionCommandResultType,
+  buildOccupiedTileSet,
 } from '../systems/construction.js';
 import {
   startProduction as startProductionSystem,
@@ -243,6 +246,154 @@ export class GameWorld {
     this.camera.y = centerScreen.y;
   }
 
+  /** Dev panel: set all resources to their caps. */
+  debugMaxAll(): void {
+    const r = this.state.economy.resources;
+    r.raw = r.rawCap;
+    r.matter = r.matterCap;
+    r.elements[this.state.economy.faction] = r.elementCap;
+    this.publishUiState();
+  }
+
+  /** Dev panel: set all resources to zero. */
+  debugZeroAll(): void {
+    const r = this.state.economy.resources;
+    r.raw = 0;
+    r.matter = 0;
+    r.elements[this.state.economy.faction] = 0;
+    this.publishUiState();
+  }
+
+  /** Dev panel: spawn a builder near HQ if a free tile exists. Dev-only — ignores economy/control costs. */
+  debugSpawnBuilder(): void {
+    const tile = this.findFreeTileNearHq();
+    if (!tile) return;
+    this.state.map.builders.push({
+      tx: tile.tx,
+      ty: tile.ty,
+      busy: false,
+      phase: 'idle',
+      path: [],
+      pathIndex: 0,
+      ftx: tile.tx + 0.5,
+      fty: tile.ty + 0.5,
+      targetTx: tile.tx,
+      targetTy: tile.ty,
+      assignedSiteId: -1,
+    });
+    this.publishUiState();
+  }
+
+  /** Dev panel: spawn a harvester near HQ if a free tile exists. Dev-only — ignores economy/control costs. */
+  debugSpawnHarvester(): void {
+    const tile = this.findFreeTileNearHq();
+    if (!tile) return;
+    this.state.harvesters.push({
+      tx: tile.tx + 0.5,
+      ty: tile.ty + 0.5,
+      phase: 'idle',
+      targetNodeIndex: -1,
+      gatherProgress: 0,
+      carry: 0,
+      targetDropoffTx: 0,
+      targetDropoffTy: 0,
+      path: [],
+      pathIndex: 0,
+    });
+    this.publishUiState();
+  }
+
+  /** Dev panel: add a 1×1 obstacle at camera center tile. No-op if tile is occupied. */
+  debugAddObstacle(): void {
+    const tile = this.cameraCenterTile();
+    if (!tile) return;
+    const occupied = buildOccupiedTileSet(this.state.map);
+    if (occupied.has(`${tile.tx},${tile.ty}`)) return;
+    this.state.map.obstacles.push({
+      tx: tile.tx,
+      ty: tile.ty,
+      type: 'rock-cluster' as ObstacleType,
+      footprint: OBSTACLE_FOOTPRINTS['rock-cluster'],
+    });
+    this.publishUiState();
+  }
+
+  /** Dev panel: add a 1×1 resource at camera center tile. Also creates matching ResourceNodeState. No-op if tile is occupied. */
+  debugAddResource(): void {
+    const tile = this.cameraCenterTile();
+    if (!tile) return;
+    const occupied = buildOccupiedTileSet(this.state.map);
+    if (occupied.has(`${tile.tx},${tile.ty}`)) return;
+    const rType: ResourceType = 'small';
+    this.state.map.resources.push({
+      tx: tile.tx,
+      ty: tile.ty,
+      type: rType,
+      footprint: RESOURCE_FOOTPRINTS[rType],
+    });
+    this.state.resourceNodes.push({
+      tx: tile.tx,
+      ty: tile.ty,
+      type: rType,
+      infinite: false,
+      remaining: RESOURCE_AMOUNTS[rType],
+    });
+    this.publishUiState();
+  }
+
+  /** Dev panel: clear all construction sites, refund matter (clamped to cap), reset builders to idle. */
+  debugClearConstruction(): void {
+    const map = this.state.map;
+    const r = this.state.economy.resources;
+    // Refund matter for each cancelled site
+    for (const site of map.constructionSites) {
+      const costMatter = BUILDING_DEFINITIONS[site.type].costMatter;
+      r.matter = Math.min(r.matter + costMatter, r.matterCap);
+    }
+    map.constructionSites.length = 0;
+    // Reset all builders to idle
+    for (const builder of map.builders) {
+      builder.busy = false;
+      builder.phase = 'idle';
+      builder.path = [];
+      builder.pathIndex = 0;
+      builder.assignedSiteId = -1;
+    }
+    this.publishUiState();
+  }
+
+  /** Find a free tile in the ring around HQ using the occupied-tile set. */
+  private findFreeTileNearHq(): { tx: number; ty: number } | null {
+    const map = this.state.map;
+    const hq = map.hq;
+    const occupied = buildOccupiedTileSet(map);
+    for (let ty = hq.ty - 1; ty <= hq.ty + HQ_FOOTPRINT; ty++) {
+      for (let tx = hq.tx - 1; tx <= hq.tx + HQ_FOOTPRINT; tx++) {
+        // Skip tiles inside HQ footprint
+        if (tx >= hq.tx && tx < hq.tx + HQ_FOOTPRINT && ty >= hq.ty && ty < hq.ty + HQ_FOOTPRINT) continue;
+        if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+        if (!occupied.has(`${tx},${ty}`)) return { tx, ty };
+      }
+    }
+    return null;
+  }
+
+  /** Get the tile coordinate at camera center, clamped to map bounds. */
+  private cameraCenterTile(): { tx: number; ty: number } | null {
+    const t = screenToTile(this.camera.x, this.camera.y);
+    const tx = Math.floor(t.x);
+    const ty = Math.floor(t.y);
+    if (tx < 0 || ty < 0 || tx >= this.state.map.width || ty >= this.state.map.height) return null;
+    return { tx, ty };
+  }
+
+  /** Dev panel: move camera to a specific tile coordinate. */
+  debugMoveCameraToTile(tx: number, ty: number): void {
+    const screen = tileToScreen(tx + 0.5, ty + 0.5);
+    this.camera.x = screen.x;
+    this.camera.y = screen.y;
+  }
+
   /** Get dev panel actions object (for wiring to the panel UI). */
   getDevPanelActions(): DevPanelActions {
     return {
@@ -252,6 +403,13 @@ export class GameWorld {
       fastForward: (seconds: number) => this.debugFastForward(seconds),
       cameraToHq: () => this.debugCameraToHq(),
       cameraToCenter: () => this.debugCameraToCenter(),
+      maxAll: () => this.debugMaxAll(),
+      zeroAll: () => this.debugZeroAll(),
+      spawnBuilder: () => this.debugSpawnBuilder(),
+      spawnHarvester: () => this.debugSpawnHarvester(),
+      addObstacle: () => this.debugAddObstacle(),
+      addResource: () => this.debugAddResource(),
+      clearConstruction: () => this.debugClearConstruction(),
     };
   }
 
@@ -450,6 +608,14 @@ export class GameWorld {
         fastForward: (seconds: number) => this.debugFastForward(seconds),
         cameraToHq: () => this.debugCameraToHq(),
         cameraToCenter: () => this.debugCameraToCenter(),
+        maxAll: () => this.debugMaxAll(),
+        zeroAll: () => this.debugZeroAll(),
+        spawnBuilder: () => this.debugSpawnBuilder(),
+        spawnHarvester: () => this.debugSpawnHarvester(),
+        addObstacle: () => this.debugAddObstacle(),
+        addResource: () => this.debugAddResource(),
+        clearConstruction: () => this.debugClearConstruction(),
+        moveCameraToTile: (tx: number, ty: number) => this.debugMoveCameraToTile(tx, ty),
       };
       // Overlay toggle access for E2E tests
       (window as any).__overlayToggles = {
