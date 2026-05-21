@@ -62,8 +62,9 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
 
   root.appendChild(panel);
 
-  // Toast auto-hide timer
+  // Toast auto-hide timer + message dedup
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastToastMessage = '';
 
   const update = (state: BuildMenuState) => {
     for (const [buildingType, button] of buttons) {
@@ -85,8 +86,9 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
     status.textContent = msg;
     status.dataset.tone = tone;
 
-    // Toast: show when panel is closed and message is non-empty
-    if (msg) {
+    // Toast: only trigger on message change to avoid restarting timer every tick
+    if (msg && msg !== lastToastMessage) {
+      lastToastMessage = msg;
       toast.textContent = msg;
       toast.dataset.tone = tone;
       toast.dataset.visible = 'true';
@@ -96,8 +98,10 @@ export function createBuildMenu(onBuild: (buildingType: BuildingType) => void): 
         toast.dataset.visible = 'false';
         toastTimer = null;
       }, 5000);
-    } else {
+    } else if (!msg) {
       toast.dataset.visible = 'false';
+      lastToastMessage = '';
+      if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
     }
   };
 

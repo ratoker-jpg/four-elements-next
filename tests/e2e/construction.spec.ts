@@ -203,7 +203,7 @@ test.describe('NEXT-05 construction', () => {
     await expect(toast).toBeVisible();
   });
 
-  test('cancelledSitesCount increments when path is blocked', async ({ page }) => {
+  test('cancelledSitesCount hook is exposed and starts at 0', async ({ page }) => {
     await navigateToGameScreen(page);
 
     // Give plenty of matter
