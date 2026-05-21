@@ -410,9 +410,15 @@ export class GameWorld {
   /** Scenario: max resources, ensure ≥3 harvesters, build separator via real flow, fast-forward. */
   debugPrepareEconomyTest(): void {
     this.debugMaxAll();
-    // Ensure at least 3 harvesters
-    while (this.state.harvesters.length < 3) {
+    // Ensure at least 3 harvesters (bounded loop — spawnHarvester is a no-op
+    // when no free tile exists, so we must guard against infinite looping)
+    const targetHarvesters = 3;
+    let attempts = 0;
+    while (this.state.harvesters.length < targetHarvesters && attempts < targetHarvesters) {
+      const before = this.state.harvesters.length;
       this.debugSpawnHarvester();
+      attempts++;
+      if (this.state.harvesters.length === before) break; // no free tile
     }
     // Start separator through the real construction flow
     const result = this.startConstruction('separator');
