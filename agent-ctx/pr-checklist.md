@@ -63,3 +63,16 @@ Before merge, verify the normal core loop still works:
 - [ ] No `no-route` on normal generated map
 
 This can be verified via E2E or manual QA at https://ratoker-jpg.github.io/four-elements-next/?devtools=1
+
+## Visual QA Smoke Test
+
+For PRs that change rendering, sprites, shadows, unit animation, or visual overlays:
+
+- [ ] Run `?devtools=1` smoke — open dev panel, verify it loads
+- [ ] Check **Builder Test** scenario — builder spawns, camera moves to HQ
+- [ ] Check **Economy Test** scenario — harvesters spawn, separator builds, camera moves to HQ
+- [ ] Verify overlays still toggle (grid, footprint, blocking)
+- [ ] For sprite/runtime changes, verify **Sprite Viewer** contract if assets are involved
+- [ ] Verify directional shadows render on units/buildings/HQ/resources
+- [ ] Verify builder faces movement direction during walk
+- [ ] Verify harvester movement facing is stable (no flicker)
