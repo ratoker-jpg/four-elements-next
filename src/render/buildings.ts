@@ -1,6 +1,6 @@
 /** Building rendering: faction HQ, civil buildings, builder, and construction sites. */
 
-import { getBuildingFootprint } from '../config/buildings.js';
+import { getBuildingFootprint, BUILDING_DEFINITIONS } from '../config/buildings.js';
 import { TILE_W, TILE_H, SPRITE_PROFILES, HQ_FOOTPRINT, HQ_COLOR, GRID_COLOR, FE_CIVIL_8X8_256_SHEETS_ENABLED, FE_BUILDING_SPRITES_ENABLED } from '../core/constants.js';
 import type { SpriteProfile } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
@@ -859,11 +859,12 @@ export function renderConstructionSite(
   ctx.lineWidth = 1;
   ctx.strokeRect(barX, barY, barW, barH);
 
+  const shortCode = BUILDING_DEFINITIONS[site.type]?.shortCode ?? 'SITE';
   ctx.fillStyle = '#fff3d7';
   ctx.font = `bold ${6 * z}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(site.pending ? 'WAIT' : 'SITE', cv.x, platformY - hh - 21 * z);
+  ctx.fillText(site.pending ? `WAIT \u00B7 ${shortCode}` : shortCode, cv.x, platformY - hh - 21 * z);
 }
 
 /** Phase label for harvester rendering. */

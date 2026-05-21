@@ -1295,6 +1295,99 @@ describe('builder movement lifecycle', () => {
       expect(economy.resources.matter).toBeLessThan(economy.resources.matterCap - 10 + costMatter);
     }
   });
+
+  it('cancelledSites is empty on normal tick', () => {
+    const { map, economy } = createMovementMap();
+    const result = startConstruction(map, economy, 'separator');
+    if (!result.ok) return;
+
+    // Tick construction normally — no cancellations should occur
+    const tickResult = tickConstruction(map, economy, 0.01);
+    expect(tickResult.cancelledSites).toHaveLength(0);
+    expect(tickResult.completedBuildings).toHaveLength(0);
+  });
+
+  it('cancelledSites contains cancellation info on repath failure', () => {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    const builder = map.builders[0]!;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      // Block all paths to force repath failure
+      for (let ty = 0; ty < 20; ty++) {
+        for (let tx = 0; tx < 20; tx++) {
+          if (tx === builder.tx && ty === builder.ty) continue;
+          if (Math.abs(tx - builder.tx) <= 1 && Math.abs(ty - builder.ty) <= 1) continue;
+          map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+        }
+      }
+
+      const tickResult = tickConstruction(map, economy, 0.01);
+
+      // Should report cancellation info
+      expect(tickResult.cancelledSites).toHaveLength(1);
+      expect(tickResult.cancelledSites[0]!.type).toBe('separator');
+      expect(tickResult.cancelledSites[0]!.reason).toBe('path-blocked');
+    }
+  });
+
+  it('cancellation still refunds matter clamped to matterCap', () => {
+    const map: MapData = {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+    const economy = createEconomyState([], 0, 1, 'cyan');
+    economy.resources.matter = 500;
+
+    const result = startConstruction(map, economy, 'separator');
+    expect(result.ok).toBe(true);
+    const builder = map.builders[0]!;
+
+    if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
+      // Set matter close to cap so refund would exceed it
+      economy.resources.matter = economy.resources.matterCap - 10;
+
+      // Block all paths to force repath failure
+      for (let ty = 0; ty < 20; ty++) {
+        for (let tx = 0; tx < 20; tx++) {
+          if (tx === builder.tx && ty === builder.ty) continue;
+          if (Math.abs(tx - builder.tx) <= 1 && Math.abs(ty - builder.ty) <= 1) continue;
+          map.obstacles.push({ tx, ty, type: 'rock-cluster', footprint: 1 });
+        }
+      }
+
+      tickConstruction(map, economy, 0.01);
+
+      // Cancellation should refund matter but clamp to matterCap
+      expect(economy.resources.matter).toBe(economy.resources.matterCap);
+      // Builder should be freed
+      expect(builder.busy).toBe(false);
+      expect(builder.phase).toBe('idle');
+    }
+  });
 });
 
 // ── Helper ──────────────────────────────────────────────────────────

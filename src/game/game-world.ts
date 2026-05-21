@@ -380,6 +380,7 @@ export class GameWorld {
         pending: site.pending,
       })),
       statusMessage: this.state.constructionStatusMessage,
+      cancelledSitesCount: this.state.constructionCancelledCount,
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__harvesterState = {

@@ -270,6 +270,32 @@ html, body {
   color: #ffb39d;
 }
 
+.build-menu__toast {
+  max-width: min(calc(360px * var(--ui-scale)), 88vw);
+  padding: calc(0.45rem * var(--ui-scale)) calc(0.7rem * var(--ui-scale));
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(64, 41, 17, 0.92), rgba(28, 18, 8, 0.95));
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-size: calc(0.78rem * var(--ui-scale));
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  visibility: hidden;
+}
+
+.build-menu__toast[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.build-menu__toast[data-tone="error"] {
+  color: #ffb39d;
+  border-color: rgba(255, 120, 80, 0.35);
+}
+
 .economy-hud {
   position: absolute;
   top: 0;
