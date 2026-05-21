@@ -63,7 +63,7 @@ export const SPRITE_PROFILES = {
   mineral_small: { size: [42, 42], groundOffset: -8 },
   mineral_medium: { size: [58, 58], groundOffset: -12 },
   mineral_large: { size: [74, 74], groundOffset: -16 },
-  mineral_infinite: { size: [170, 170], groundOffset: -24 },
+  mineral_infinite: { size: [170, 170], groundOffset: -52 },
   mountain_small_01: { size: [80, 72], groundOffset: 0 },
   mountain_medium_01: { size: [120, 96], groundOffset: 12 },
   mountain_large_01: { size: [160, 142], groundOffset: 28 },
