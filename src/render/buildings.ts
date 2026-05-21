@@ -9,7 +9,7 @@ import type { AssetMeta } from '../core/assets.js';
 import type { BuilderPlacement, ConstructionSitePlacement, HqPlacement, FactionId, BuildingType } from '../game/map-types.js';
 import type { HarvesterState } from '../systems/harvesting.js';
 import type { Camera } from './camera.js';
-import { drawSpritesheetFrame, directionToRow, builderAnimColumn, harvesterAnimColumn } from './spritesheet.js';
+import { drawSpritesheetFrame, directionToRow } from './spritesheet.js';
 import { containFit } from './contain-fit.js';
 import { isDebugOverlayEnabled, drawBuildingDebugOverlay } from './debug-overlay.js';
 
@@ -137,6 +137,91 @@ function getVisibleDestinationRect(
 
 function isUsableMeta(meta: AssetMeta | null | undefined): meta is AssetMeta {
   return Boolean(meta && meta.visibleW > 0 && meta.visibleH > 0 && meta.naturalW > 0 && meta.naturalH > 0);
+}
+
+const CIVIL_FRAME_SIZE = 256;
+const DEFAULT_CIVIL_ROW = 2;
+
+function civilSheetColumns(sprite: HTMLImageElement): number {
+  return Math.max(1, Math.floor(sprite.naturalWidth / CIVIL_FRAME_SIZE));
+}
+
+function animColumnWithinSheet(
+  sprite: HTMLImageElement,
+  startCol: number,
+  frames: number,
+  ticks: number,
+  ticksPerFrame: number,
+): number {
+  const cols = civilSheetColumns(sprite);
+  const safeStart = Math.min(Math.max(0, startCol), cols - 1);
+  const safeFrames = Math.max(1, Math.min(frames, cols - safeStart));
+  return safeStart + (Math.floor(ticks / ticksPerFrame) % safeFrames);
+}
+
+function movementVectorToSpriteRow(dx: number, dy: number, fallbackRow = DEFAULT_CIVIL_ROW): number {
+  if (Math.hypot(dx, dy) < 0.01) return fallbackRow;
+  return (directionToRow(dx, dy) + 1) % 8;
+}
+
+function builderMovementVector(builder: BuilderPlacement): { dx: number; dy: number } {
+  if (builder.phase !== 'moving-to-site') return { dx: 0, dy: 0 };
+  const waypoint = builder.path[builder.pathIndex];
+  const targetTx = waypoint ? waypoint.tx + 0.5 : builder.targetTx + 0.5;
+  const targetTy = waypoint ? waypoint.ty + 0.5 : builder.targetTy + 0.5;
+  return { dx: targetTx - builder.ftx, dy: targetTy - builder.fty };
+}
+
+function builderAnimColumnForSheet(
+  builder: BuilderPlacement,
+  sprite: HTMLImageElement,
+  ticks: number,
+): number {
+  if (builder.phase === 'moving-to-site') return animColumnWithinSheet(sprite, 1, 4, ticks, 10);
+  if (builder.phase === 'building') {
+    const buildFrames = civilSheetColumns(sprite) >= 11 ? 6 : 3;
+    return animColumnWithinSheet(sprite, 5, buildFrames, ticks, 15);
+  }
+  return 0;
+}
+
+function isHarvesterMovingPhase(phase: HarvesterState['phase']): boolean {
+  return phase === 'moving-to-resource' || phase === 'moving-to-dropoff';
+}
+
+function harvesterMovementVector(
+  harvester: HarvesterState,
+  prevTx: number,
+  prevTy: number,
+): { dx: number; dy: number } {
+  if (isHarvesterMovingPhase(harvester.phase)) {
+    const waypoint = harvester.path[harvester.pathIndex];
+    if (waypoint) {
+      return { dx: waypoint.tx + 0.5 - harvester.tx, dy: waypoint.ty + 0.5 - harvester.ty };
+    }
+  }
+  return { dx: harvester.tx - prevTx, dy: harvester.ty - prevTy };
+}
+
+function harvesterAnimColumnForSheet(
+  harvester: HarvesterState,
+  sprite: HTMLImageElement,
+  ticks: number,
+): number {
+  const cols = civilSheetColumns(sprite);
+  switch (harvester.phase) {
+    case 'moving-to-resource':
+    case 'moving-to-dropoff':
+      return animColumnWithinSheet(sprite, 1, 4, ticks, 10);
+    case 'gathering':
+      return cols >= 11 ? animColumnWithinSheet(sprite, 5, 6, ticks, 12) : 0;
+    case 'delivering':
+      if (cols >= 17) return animColumnWithinSheet(sprite, 11, 6, ticks, 12);
+      return cols >= 8 ? animColumnWithinSheet(sprite, 5, 3, ticks, 12) : 0;
+    case 'idle':
+    case 'waiting-full-storage':
+      return 0;
+  }
 }
 
 /** Compute the top Y of the actually visible sprite area for overlay placement. */
@@ -769,8 +854,9 @@ export function renderBuilder(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profile = SPRITE_PROFILES.builder_base;
-      const row = 2; // default direction: south
-      const col = builderAnimColumn(builder.busy, ticks);
+      const move = builderMovementVector(builder);
+      const row = movementVectorToSpriteRow(move.dx, move.dy);
+      const col = builderAnimColumnForSheet(builder, sprite, ticks);
       drawSpritesheetFrame(ctx, sprite, row, col, cv.x, cv.y, z, profile);
       return;
     }
@@ -912,15 +998,9 @@ export function renderHarvester(
     const sprite = assets.get(assetKey);
     if (sprite) {
       const profile = SPRITE_PROFILES.harvester_base;
-      const dx = harvester.tx - prevTx;
-      const dy = harvester.ty - prevTy;
-      // directionToRow returns tile-space row indices, but spritesheet art
-      // follows screen-space direction convention (row 0 = screen-east).
-      // In isometric: tile-east appears as screen-SE, tile-south as screen-SW, etc.
-      // Mapping: screenRow = (tileRow + 1) % 8 rotates tile-space to screen-space.
-      const tileRow = directionToRow(dx, dy);
-      const row = (tileRow + 1) % 8;
-      const col = harvesterAnimColumn(harvester.phase, ticks);
+      const move = harvesterMovementVector(harvester, prevTx, prevTy);
+      const row = movementVectorToSpriteRow(move.dx, move.dy);
+      const col = harvesterAnimColumnForSheet(harvester, sprite, ticks);
       drawSpritesheetFrame(ctx, sprite, row, col, cv.x, cv.y, z, profile);
       return;
     }
