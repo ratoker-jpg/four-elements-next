@@ -35,7 +35,7 @@ interface SortedEntity {
   render: () => void;
 }
 
-type ShadowKind = 'builder' | 'harvester' | 'hq' | 'building' | 'construction' | 'resource' | 'obstacle';
+type ShadowKind = 'builder' | 'harvester' | 'hq' | 'building' | 'construction' | 'resource' | 'obstacle' | 'decor';
 
 interface ShadowProfile {
   readonly widthTiles: number;
@@ -51,8 +51,9 @@ const SHADOW_PROFILES: Record<ShadowKind, ShadowProfile> = {
   hq: { widthTiles: 0.58, heightTiles: 0.3, xOffsetTiles: -0.08, yOffsetTiles: -0.05, alpha: 0.09 },
   building: { widthTiles: 0.5, heightTiles: 0.26, xOffsetTiles: -0.07, yOffsetTiles: -0.04, alpha: 0.08 },
   construction: { widthTiles: 0.5, heightTiles: 0.23, xOffsetTiles: -0.06, yOffsetTiles: -0.03, alpha: 0.08 },
-  resource: { widthTiles: 0.3, heightTiles: 0.14, xOffsetTiles: -0.04, yOffsetTiles: -0.025, alpha: 0.045 },
-  obstacle: { widthTiles: 0.46, heightTiles: 0.22, xOffsetTiles: -0.06, yOffsetTiles: -0.035, alpha: 0.075 },
+  resource: { widthTiles: 0.38, heightTiles: 0.18, xOffsetTiles: -0.04, yOffsetTiles: -0.025, alpha: 0.09 },
+  obstacle: { widthTiles: 0.46, heightTiles: 0.22, xOffsetTiles: -0.06, yOffsetTiles: -0.035, alpha: 0.09 },
+  decor: { widthTiles: 0.18, heightTiles: 0.08, xOffsetTiles: -0.02, yOffsetTiles: -0.015, alpha: 0.04 },
 };
 
 function getFootprintSortKey(tx: number, ty: number, footprint: number): number {
@@ -214,7 +215,13 @@ export function render(
     });
   }
 
-  for (const r of map.resources) {
+  for (let i = 0; i < map.resources.length; i++) {
+    const r = map.resources[i]!;
+    // Skip depleted finite resources — they are no longer rendered
+    if (resourceNodes) {
+      const node = resourceNodes[i];
+      if (node && !node.infinite && node.remaining <= 0) continue;
+    }
     entities.push({
       sortKey: r.tx + r.ty + (r.footprint - 1) * 2,
       shadow: () => renderTileShadow(ctx, camera, r.tx, r.ty, r.footprint, 'resource'),
@@ -229,7 +236,11 @@ export function render(
     });
   }
   for (const d of map.decor) {
-    entities.push({ sortKey: d.tx + d.ty, render: () => renderDecor(ctx, d, camera, assets) });
+    entities.push({
+      sortKey: d.tx + d.ty,
+      shadow: () => renderTileShadow(ctx, camera, d.tx, d.ty, 1, 'decor'),
+      render: () => renderDecor(ctx, d, camera, assets),
+    });
   }
 
   entities.sort((a, b) => a.sortKey - b.sortKey);

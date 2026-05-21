@@ -10,6 +10,7 @@ import type {
 import type { EconomyState } from './economy.js';
 import { buildPassabilityGrid, findAdjacentPassableTiles, isTileBlocked, type PassabilityGrid } from './passability.js';
 import { findPathToAdjacent } from './pathfinding.js';
+import type { ResourceNodeState } from './harvesting.js';
 
 export const BUILDER_CONTROL_COST = 1;
 export const AUTO_BUILD_MAX_RADIUS = 15;
@@ -52,6 +53,7 @@ export function startConstruction(
   map: MapData,
   economy: EconomyState,
   buildingType: BuildingType,
+  resourceNodes?: readonly ResourceNodeState[],
 ): ConstructionCommandResult {
   // No builders at all → no-placement
   if (map.builders.length === 0) {
@@ -80,14 +82,14 @@ export function startConstruction(
   let anyUnreachableSite = false;
   for (const builderIndex of idleIndices) {
     const builder = map.builders[builderIndex]!;
-    const result = findAutoPlacement(map, builder, buildingType);
+    const result = findAutoPlacement(map, builder, buildingType, resourceNodes);
     if (result.hasUnreachableSite) anyUnreachableSite = true;
     if (result.placement) {
       economy.resources.matter -= definition.costMatter;
       builder.busy = true;
 
       // Get path to the site (reuse reachability computation)
-      const pathResult = findPathToSite(map, builder, result.placement.tx, result.placement.ty, buildingType);
+      const pathResult = findPathToSite(map, builder, result.placement.tx, result.placement.ty, buildingType, resourceNodes);
 
       // Determine the final adjacent tile (last waypoint or current position)
       const isAdjacent = pathResult.path.length === 0 && pathResult.found;
@@ -144,7 +146,7 @@ export function startConstruction(
   return { ok: false, reason: 'no-placement', buildingType };
 }
 
-export function tickConstruction(map: MapData, economy: EconomyState, dt: number): ConstructionTickResult {
+export function tickConstruction(map: MapData, economy: EconomyState, dt: number, resourceNodes?: readonly ResourceNodeState[]): ConstructionTickResult {
   const completedBuildings: BuildingPlacement[] = [];
   const cancelledSites: CancelledSiteInfo[] = [];
 
@@ -157,11 +159,11 @@ export function tickConstruction(map: MapData, economy: EconomyState, dt: number
       if (builder && builder.phase === 'moving-to-site' && builder.assignedSiteId === site.id) {
         // Check if next waypoint is still passable
         if (builder.pathIndex < builder.path.length) {
-          const grid = buildPassabilityGrid(map);
+          const grid = buildPassabilityGrid(map, resourceNodes);
           const waypoint = builder.path[builder.pathIndex]!;
           if (isTileBlocked(grid, waypoint.tx, waypoint.ty)) {
             // Try one immediate repath
-            const repathResult = tryRepath(map, builder, site);
+            const repathResult = tryRepath(map, builder, site, resourceNodes);
             if (!repathResult) {
               // Repath failed — cancel site, refund matter, free builder
               cancelledSites.push({ type: site.type, reason: 'path-blocked' });
@@ -257,9 +259,10 @@ function tryRepath(
   map: MapData,
   builder: BuilderPlacement,
   site: ConstructionSitePlacement,
+  resourceNodes?: readonly ResourceNodeState[],
 ): boolean {
   const footprint = getBuildingFootprint(site.type);
-  const grid = buildPassabilityGrid(map);
+  const grid = buildPassabilityGrid(map, resourceNodes);
   // Temporarily block the site footprint on the grid
   markGridBlocked(grid, site.tx, site.ty, footprint);
 
@@ -358,9 +361,10 @@ export function findAutoPlacement(
   map: MapData,
   builder: BuilderPlacement,
   buildingType: BuildingType,
+  resourceNodes?: readonly ResourceNodeState[],
   maxRadius: number = AUTO_BUILD_MAX_RADIUS,
 ): AutoPlacementResult {
-  const occupied = buildOccupiedTileSet(map);
+  const occupied = buildOccupiedTileSet(map, resourceNodes);
   const footprint = getBuildingFootprint(buildingType);
   let hasUnreachableSite = false;
 
@@ -372,7 +376,7 @@ export function findAutoPlacement(
         if (!isFootprintWithSpacingBuildable(map, occupied, tx, ty, footprint)) continue;
         // Reachability check: builder must be able to reach an adjacent passable tile
         // with the candidate footprint treated as blocked.
-        if (!isSiteReachableByBuilder(map, builder, tx, ty, footprint)) {
+        if (!isSiteReachableByBuilder(map, builder, tx, ty, footprint, resourceNodes)) {
           hasUnreachableSite = true;
           continue;
         }
@@ -406,9 +410,10 @@ export function findPathToSite(
   siteTx: number,
   siteTy: number,
   buildingType: BuildingType,
+  resourceNodes?: readonly ResourceNodeState[],
 ): PathToSiteResult {
   const footprint = getBuildingFootprint(buildingType);
-  const grid = buildPassabilityGrid(map);
+  const grid = buildPassabilityGrid(map, resourceNodes);
   // Temporarily block the candidate footprint on the grid
   markGridBlocked(grid, siteTx, siteTy, footprint);
 
@@ -460,8 +465,9 @@ export function isSiteReachableByBuilder(
   siteTx: number,
   siteTy: number,
   siteFootprint: number,
+  resourceNodes?: readonly ResourceNodeState[],
 ): boolean {
-  const grid = buildPassabilityGrid(map);
+  const grid = buildPassabilityGrid(map, resourceNodes);
   // Temporarily block the candidate footprint on the grid
   markGridBlocked(grid, siteTx, siteTy, siteFootprint);
 
@@ -495,7 +501,7 @@ function markGridBlocked(grid: PassabilityGrid, tx: number, ty: number, footprin
   }
 }
 
-export function buildOccupiedTileSet(map: MapData): Set<string> {
+export function buildOccupiedTileSet(map: MapData, resourceNodes?: readonly ResourceNodeState[]): Set<string> {
   const occupied = new Set<string>();
 
   for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
@@ -510,7 +516,13 @@ export function buildOccupiedTileSet(map: MapData): Set<string> {
   for (const site of map.constructionSites) {
     markFootprintOccupied(occupied, site.tx, site.ty, getBuildingFootprint(site.type));
   }
-  for (const resource of map.resources) {
+  for (let i = 0; i < map.resources.length; i++) {
+    const resource = map.resources[i]!;
+    // Depleted finite resources no longer block construction placement
+    if (resourceNodes) {
+      const node = resourceNodes[i];
+      if (node && !node.infinite && node.remaining <= 0) continue;
+    }
     markFootprintOccupied(occupied, resource.tx, resource.ty, resource.footprint);
   }
   // Obstacle footprints block building placement

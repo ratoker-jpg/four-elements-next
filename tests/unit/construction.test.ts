@@ -17,6 +17,7 @@ import {
 import { getBuildingFootprint } from '../../src/config/buildings.js';
 import { HQ_FOOTPRINT } from '../../src/core/constants.js';
 import type { MapData, BuilderPlacement, ConstructionSitePlacement } from '../../src/game/map-types.js';
+import type { ResourceNodeState } from '../../src/systems/harvesting.js';
 
 /** Create a minimal builder with all required fields. */
 function createBuilder(tx: number, ty: number, overrides: Partial<BuilderPlacement> = {}): BuilderPlacement {
@@ -1404,3 +1405,78 @@ function isAdjacentToFootprint(tx: number, ty: number, ftx: number, fty: number,
   if (tx === ftx + footprint && ty >= fty && ty < fty + footprint) return true;
   return false;
 }
+
+// ── Resource depletion filtering (ENVIRONMENT-QA-FIX-01) ─────────────
+
+describe('buildOccupiedTileSet — resource depletion', () => {
+  function createDepletionMap(): MapData {
+    return {
+      width: 20,
+      height: 20,
+      terrain: Array.from({ length: 20 }, () => Array(20).fill('sand') as string[]),
+      hq: { tx: 4, ty: 4, faction: 'cyan' },
+      resources: [
+        { tx: 8, ty: 3, type: 'small', footprint: 1 },
+        { tx: 12, ty: 5, type: 'medium', footprint: 1 },
+        { tx: 15, ty: 10, type: 'infinite', footprint: 3 },
+      ],
+      obstacles: [],
+      decor: [],
+      buildings: [],
+      builders: [createBuilder(15, 15)],
+      constructionSites: [],
+    };
+  }
+
+  it('depleted finite resource NOT in occupied set when resourceNodes provided', () => {
+    const map = createDepletionMap();
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 0 },
+      { tx: 12, ty: 5, type: 'medium', infinite: false, remaining: 100 },
+      { tx: 15, ty: 10, type: 'infinite', infinite: true, remaining: Infinity },
+    ];
+    const occupied = buildOccupiedTileSet(map, resourceNodes);
+    // Depleted finite → NOT in occupied set
+    expect(occupied.has('8,3')).toBe(false);
+    // Active finite → still in occupied set
+    expect(occupied.has('12,5')).toBe(true);
+    // Infinite → still in occupied set
+    expect(occupied.has('15,10')).toBe(true);
+  });
+
+  it('without resourceNodes, all resources occupy (backward compatible)', () => {
+    const map = createDepletionMap();
+    const occupied = buildOccupiedTileSet(map);
+    expect(occupied.has('8,3')).toBe(true);
+    expect(occupied.has('12,5')).toBe(true);
+    expect(occupied.has('15,10')).toBe(true);
+  });
+
+  it('building placement allowed on depleted resource tile', () => {
+    const map = createDepletionMap();
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 0 },
+      { tx: 12, ty: 5, type: 'medium', infinite: false, remaining: 100 },
+      { tx: 15, ty: 10, type: 'infinite', infinite: true, remaining: Infinity },
+    ];
+    const occupied = buildOccupiedTileSet(map, resourceNodes);
+    // Can build where depleted resource was
+    expect(isFootprintBuildable(map, occupied, 8, 3, 1)).toBe(true);
+    // Cannot build where active resource is
+    expect(isFootprintBuildable(map, occupied, 12, 5, 1)).toBe(false);
+  });
+
+  it('findAutoPlacement skips depleted resource tiles', () => {
+    const map = createDepletionMap();
+    // Place builder near the depleted resource
+    map.builders = [createBuilder(8, 5)];
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 0 },
+      { tx: 12, ty: 5, type: 'medium', infinite: false, remaining: 100 },
+      { tx: 15, ty: 10, type: 'infinite', infinite: true, remaining: Infinity },
+    ];
+    const result = findAutoPlacement(map, map.builders[0]!, 'separator', resourceNodes);
+    // Should find a placement (depleted resource doesn't block)
+    expect(result.placement).not.toBeNull();
+  });
+});

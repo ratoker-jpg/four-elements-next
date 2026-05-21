@@ -7,6 +7,7 @@ import {
   type PassabilityGrid,
 } from '../../src/systems/passability.js';
 import type { MapData } from '../../src/game/map-types.js';
+import type { ResourceNodeState } from '../../src/systems/harvesting.js';
 import { HQ_FOOTPRINT } from '../../src/core/constants.js';
 
 // ── Test helpers ──────────────────────────────────────────────────────
@@ -311,5 +312,96 @@ describe('findAdjacentPassableTiles', () => {
     const result1 = findAdjacentPassableTiles(grid, 3, 3, 3);
     const result2 = findAdjacentPassableTiles(grid, 3, 3, 3);
     expect(result1).toEqual(result2);
+  });
+});
+
+// ── Resource depletion filtering ────────────────────────────────────
+
+describe('buildPassabilityGrid — resource depletion', () => {
+  it('depleted finite resource does NOT block passability when resourceNodes provided', () => {
+    const map = createMinimalMap({
+      resources: [{ tx: 8, ty: 3, type: 'small', footprint: 1 }],
+    });
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 0 },
+    ];
+    const grid = buildPassabilityGrid(map, resourceNodes);
+    // Depleted finite resource tile should be passable
+    expect(isTilePassable(grid, 8, 3)).toBe(true);
+  });
+
+  it('active finite resource still blocks passability when resourceNodes provided', () => {
+    const map = createMinimalMap({
+      resources: [{ tx: 8, ty: 3, type: 'small', footprint: 1 }],
+    });
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 50 },
+    ];
+    const grid = buildPassabilityGrid(map, resourceNodes);
+    // Active finite resource should still block
+    expect(isTileBlocked(grid, 8, 3)).toBe(true);
+  });
+
+  it('infinite resource always blocks passability regardless of remaining', () => {
+    const map = createMinimalMap({
+      resources: [{ tx: 10, ty: 10, type: 'infinite', footprint: 3 }],
+    });
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 10, ty: 10, type: 'infinite', infinite: true, remaining: Infinity },
+    ];
+    const grid = buildPassabilityGrid(map, resourceNodes);
+    // All 9 tiles of 3x3 infinite should still be blocked
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        expect(isTileBlocked(grid, 10 + dx, 10 + dy)).toBe(true);
+      }
+    }
+  });
+
+  it('without resourceNodes, all resources block (backward compatible)', () => {
+    const map = createMinimalMap({
+      resources: [{ tx: 8, ty: 3, type: 'small', footprint: 1 }],
+    });
+    // No resourceNodes → all resources block regardless of depletion
+    const grid = buildPassabilityGrid(map);
+    expect(isTileBlocked(grid, 8, 3)).toBe(true);
+  });
+
+  it('depleted finite 3x3 infinite-type footprint does not block', () => {
+    // Edge case: a finite resource with a large footprint (if such ever existed)
+    const map = createMinimalMap({
+      resources: [{ tx: 10, ty: 10, type: 'small', footprint: 1 }],
+    });
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 10, ty: 10, type: 'small', infinite: false, remaining: 0 },
+    ];
+    const grid = buildPassabilityGrid(map, resourceNodes);
+    expect(isTilePassable(grid, 10, 10)).toBe(true);
+  });
+
+  it('mixed: depleted finite passable, active finite blocked, infinite blocked', () => {
+    const map = createMinimalMap({
+      resources: [
+        { tx: 8, ty: 3, type: 'small', footprint: 1 },     // depleted
+        { tx: 12, ty: 5, type: 'medium', footprint: 1 },   // active
+        { tx: 15, ty: 10, type: 'infinite', footprint: 3 }, // infinite
+      ],
+    });
+    const resourceNodes: ResourceNodeState[] = [
+      { tx: 8, ty: 3, type: 'small', infinite: false, remaining: 0 },
+      { tx: 12, ty: 5, type: 'medium', infinite: false, remaining: 100 },
+      { tx: 15, ty: 10, type: 'infinite', infinite: true, remaining: Infinity },
+    ];
+    const grid = buildPassabilityGrid(map, resourceNodes);
+    // Depleted finite → passable
+    expect(isTilePassable(grid, 8, 3)).toBe(true);
+    // Active finite → blocked
+    expect(isTileBlocked(grid, 12, 5)).toBe(true);
+    // Infinite → blocked
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        expect(isTileBlocked(grid, 15 + dx, 10 + dy)).toBe(true);
+      }
+    }
   });
 });

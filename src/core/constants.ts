@@ -60,7 +60,7 @@ export interface SpriteProfile {
 // Sprite rendering profiles (from Sandbox sprite_profiles.js, adapted)
 export const SPRITE_PROFILES = {
   hq_base: { size: [200, 200], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
-  mineral_small: { size: [42, 42], groundOffset: -12 },
+  mineral_small: { size: [42, 42], groundOffset: 2 },
   mineral_medium: { size: [58, 58], groundOffset: 0 },
   mineral_large: { size: [74, 74], groundOffset: 0 },
   mineral_infinite: { size: [170, 170], groundOffset: 3 },
@@ -70,8 +70,8 @@ export const SPRITE_PROFILES = {
   volcano_small_01: { size: [95, 90], groundOffset: 0 },
   volcano_medium_01: { size: [130, 120], groundOffset: 12 },
   rock_cluster_small_01: { size: [58, 46], groundOffset: 0 },
-  dry_bush_01: { size: [34, 28], groundOffset: -12 },
-  sand_bump_01: { size: [50, 28], groundOffset: -8 },
+  dry_bush_01: { size: [34, 28], groundOffset: 0 },
+  sand_bump_01: { size: [50, 28], groundOffset: 0 },
   builder_base: { size: [57, 57], groundOffset: 15 },
   harvester_base: { size: [41, 41], groundOffset: 8 },
   building_separator: { size: [128, 128], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
