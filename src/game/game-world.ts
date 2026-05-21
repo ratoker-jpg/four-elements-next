@@ -399,6 +399,31 @@ export class GameWorld {
     this.camera.y = screen.y;
   }
 
+  /** Scenario: max resources, spawn one builder near HQ, camera to HQ. */
+  debugPrepareBuilderTest(): void {
+    this.debugMaxAll();
+    this.debugSpawnBuilder();
+    this.debugCameraToHq();
+    this.publishUiState();
+  }
+
+  /** Scenario: max resources, ensure ≥3 harvesters, build separator via real flow, fast-forward. */
+  debugPrepareEconomyTest(): void {
+    this.debugMaxAll();
+    // Ensure at least 3 harvesters
+    while (this.state.harvesters.length < 3) {
+      this.debugSpawnHarvester();
+    }
+    // Start separator through the real construction flow
+    const result = this.startConstruction('separator');
+    if (result.ok) {
+      // Advance enough for builder movement + build time + margin
+      this.debugFastForward(35);
+    }
+    this.debugCameraToHq();
+    this.publishUiState();
+  }
+
   /** Get dev panel actions object (for wiring to the panel UI). */
   getDevPanelActions(): DevPanelActions {
     return {
@@ -415,6 +440,8 @@ export class GameWorld {
       addObstacle: () => this.debugAddObstacle(),
       addResource: () => this.debugAddResource(),
       clearConstruction: () => this.debugClearConstruction(),
+      prepareBuilderTest: () => this.debugPrepareBuilderTest(),
+      prepareEconomyTest: () => this.debugPrepareEconomyTest(),
     };
   }
 
@@ -620,6 +647,8 @@ export class GameWorld {
         addObstacle: () => this.debugAddObstacle(),
         addResource: () => this.debugAddResource(),
         clearConstruction: () => this.debugClearConstruction(),
+        prepareBuilderTest: () => this.debugPrepareBuilderTest(),
+        prepareEconomyTest: () => this.debugPrepareEconomyTest(),
         moveCameraToTile: (tx: number, ty: number) => this.debugMoveCameraToTile(tx, ty),
       };
       // Overlay toggle access for E2E tests

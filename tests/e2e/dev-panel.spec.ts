@@ -285,6 +285,8 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
         addObstacle: typeof dev.addObstacle,
         addResource: typeof dev.addResource,
         clearConstruction: typeof dev.clearConstruction,
+        prepareBuilderTest: typeof dev.prepareBuilderTest,
+        prepareEconomyTest: typeof dev.prepareEconomyTest,
       };
     });
     expect(methods).not.toBeNull();
@@ -301,6 +303,8 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
     expect(methods!.addObstacle).toBe('function');
     expect(methods!.addResource).toBe('function');
     expect(methods!.clearConstruction).toBe('function');
+    expect(methods!.prepareBuilderTest).toBe('function');
+    expect(methods!.prepareEconomyTest).toBe('function');
   });
 
   test('no critical console errors when dev panel is used', async ({ page }) => {
