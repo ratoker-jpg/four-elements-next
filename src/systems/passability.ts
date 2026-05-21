@@ -19,6 +19,7 @@
 import type { MapData } from '../game/map-types.js';
 import { HQ_FOOTPRINT } from '../core/constants.js';
 import { getBuildingFootprint } from '../config/buildings.js';
+import type { ResourceNodeState } from './harvesting.js';
 
 // ── PassabilityGrid type ─────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export interface PassabilityGrid {
  * Decor and territory are intentionally NOT represented as blocking.
  * Units are NOT blocking in this MVP to avoid dynamic rebuilds every tick.
  */
-export function buildPassabilityGrid(map: MapData): PassabilityGrid {
+export function buildPassabilityGrid(map: MapData, resourceNodes?: readonly ResourceNodeState[]): PassabilityGrid {
   const { width, height } = map;
   const cells = new Uint8Array(width * height);
 
@@ -80,7 +81,13 @@ export function buildPassabilityGrid(map: MapData): PassabilityGrid {
   }
 
   // Resources block by footprint (including mineral_infinite 3x3)
-  for (const resource of map.resources) {
+  // Depleted finite resources no longer block passability
+  for (let i = 0; i < map.resources.length; i++) {
+    const resource = map.resources[i]!;
+    if (resourceNodes) {
+      const node = resourceNodes[i];
+      if (node && !node.infinite && node.remaining <= 0) continue;
+    }
     markBlocked(resource.tx, resource.ty, resource.footprint);
   }
 

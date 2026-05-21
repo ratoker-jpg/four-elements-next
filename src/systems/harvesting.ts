@@ -179,7 +179,8 @@ export function createInitialHarvesters(
 export function tickHarvesting(state: GameState, dt: number): void {
   // Build passability grid once per tick for all harvesters.
   // This ensures consistent blocking state within a single tick.
-  const grid = buildPassabilityGrid(state.map);
+  // Pass resourceNodes so depleted finite resources don't block pathfinding.
+  const grid = buildPassabilityGrid(state.map, state.resourceNodes);
 
   for (const harvester of state.harvesters) {
     switch (harvester.phase) {

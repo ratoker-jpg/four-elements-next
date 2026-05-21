@@ -175,7 +175,7 @@ export class GameWorld {
   getControlState(): ReadonlyControlState { return this.state.control; }
 
   startConstruction(buildingType: BuildingType): ConstructionCommandResultType {
-    const result = startConstructionSystem(this.state.map, this.state.economy, buildingType);
+    const result = startConstructionSystem(this.state.map, this.state.economy, buildingType, this.state.resourceNodes);
     this.state.constructionStatusMessage = this.resolveConstructionMessage(result);
     this.publishUiState();
     return result;
@@ -307,7 +307,7 @@ export class GameWorld {
   debugAddObstacle(): void {
     const tile = this.cameraCenterTile();
     if (!tile) return;
-    const occupied = buildOccupiedTileSet(this.state.map);
+    const occupied = buildOccupiedTileSet(this.state.map, this.state.resourceNodes);
     if (occupied.has(`${tile.tx},${tile.ty}`)) return;
     this.state.map.obstacles.push({
       tx: tile.tx,
@@ -322,7 +322,7 @@ export class GameWorld {
   debugAddResource(): void {
     const tile = this.cameraCenterTile();
     if (!tile) return;
-    const occupied = buildOccupiedTileSet(this.state.map);
+    const occupied = buildOccupiedTileSet(this.state.map, this.state.resourceNodes);
     if (occupied.has(`${tile.tx},${tile.ty}`)) return;
     const rType: ResourceType = 'small';
     this.state.map.resources.push({
@@ -366,7 +366,7 @@ export class GameWorld {
   private findFreeTileNearHq(): { tx: number; ty: number } | null {
     const map = this.state.map;
     const hq = map.hq;
-    const occupied = buildOccupiedTileSet(map);
+    const occupied = buildOccupiedTileSet(map, this.state.resourceNodes);
     // Also mark runtime harvester positions as occupied so spawned units
     // don't land on the same tile as an existing harvester.
     for (const h of this.state.harvesters) {
