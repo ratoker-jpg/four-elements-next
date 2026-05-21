@@ -1,5 +1,6 @@
 import type { Screen, ScreenTransitionData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
+import { isDevPanelAllowed } from '../dev/dev-panel.js';
 
 export function createMainMenuScreen(navigate: NavigateFn): Screen {
   return {
@@ -33,6 +34,14 @@ export function createMainMenuScreen(navigate: NavigateFn): Screen {
       menu.appendChild(btnNewGame);
       menu.appendChild(btnContinue);
       menu.appendChild(btnSettings);
+
+      // Dev-only: Map Editor button
+      if (isDevPanelAllowed()) {
+        const btnEditor = createButton('Редактор карты', () => navigate('editor-screen', { mapSize: 'standard' }));
+        btnEditor.id = 'editor-menu-btn';
+        menu.appendChild(btnEditor);
+      }
+
       card.appendChild(menu);
       wrapper.appendChild(card);
 

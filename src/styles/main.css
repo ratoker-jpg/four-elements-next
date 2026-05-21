@@ -563,3 +563,45 @@ html, body {
   background: #4cff4c;
   border-color: #4cff4c;
 }
+
+/* ── Editor Screen (DEV/test only) ──────────────────────────────── */
+
+.screen--editor {
+  position: relative;
+  background: var(--bg-deep);
+}
+
+.editor-overlay {
+  position: absolute;
+  top: calc(0.5rem * var(--ui-scale));
+  left: calc(1rem * var(--ui-scale));
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.4rem * var(--ui-scale));
+}
+
+.editor-overlay__title {
+  font-size: calc(1.3rem * var(--ui-scale));
+  font-weight: 900;
+  color: var(--title);
+  text-shadow: 0 2px 0 #4c2600, 0 0 12px rgba(255, 190, 55, 0.2);
+  pointer-events: none;
+}
+
+.editor-overlay__info {
+  display: flex;
+  gap: calc(0.8rem * var(--ui-scale));
+  font-size: calc(0.8rem * var(--ui-scale));
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.editor-overlay__back {
+  width: auto;
+  min-width: calc(120px * var(--ui-scale));
+  pointer-events: auto;
+  margin-top: calc(0.3rem * var(--ui-scale));
+}
