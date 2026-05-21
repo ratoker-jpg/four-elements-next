@@ -267,7 +267,7 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
     });
     expect(devActions).toBe('object');
 
-    // Verify all expected methods exist
+    // Verify all expected methods exist (including DEV-SANDBOX-TOOLS-01 additions)
     const methods = await page.evaluate(() => {
       const dev = (window as Record<string, unknown>).__devActions as Record<string, unknown> | null;
       if (!dev) return null;
@@ -278,6 +278,13 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
         fastForward: typeof dev.fastForward,
         cameraToHq: typeof dev.cameraToHq,
         cameraToCenter: typeof dev.cameraToCenter,
+        maxAll: typeof dev.maxAll,
+        zeroAll: typeof dev.zeroAll,
+        spawnBuilder: typeof dev.spawnBuilder,
+        spawnHarvester: typeof dev.spawnHarvester,
+        addObstacle: typeof dev.addObstacle,
+        addResource: typeof dev.addResource,
+        clearConstruction: typeof dev.clearConstruction,
       };
     });
     expect(methods).not.toBeNull();
@@ -287,6 +294,13 @@ test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
     expect(methods!.fastForward).toBe('function');
     expect(methods!.cameraToHq).toBe('function');
     expect(methods!.cameraToCenter).toBe('function');
+    expect(methods!.maxAll).toBe('function');
+    expect(methods!.zeroAll).toBe('function');
+    expect(methods!.spawnBuilder).toBe('function');
+    expect(methods!.spawnHarvester).toBe('function');
+    expect(methods!.addObstacle).toBe('function');
+    expect(methods!.addResource).toBe('function');
+    expect(methods!.clearConstruction).toBe('function');
   });
 
   test('no critical console errors when dev panel is used', async ({ page }) => {

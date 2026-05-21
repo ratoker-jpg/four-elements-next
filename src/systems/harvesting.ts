@@ -33,7 +33,7 @@ export const HARVESTER_CARRY_AMOUNT = 10;
 const ARRIVAL_THRESHOLD = 0.15;
 
 /** Raw amount stored in each resource type. */
-const RESOURCE_AMOUNTS: Record<ResourceType, number> = {
+export const RESOURCE_AMOUNTS: Record<ResourceType, number> = {
   small: 50,
   medium: 100,
   large: 200,

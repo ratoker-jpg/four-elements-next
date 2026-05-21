@@ -61,6 +61,20 @@ export interface DevPanelActions {
   fastForward: (seconds: number) => void;
   cameraToHq: () => void;
   cameraToCenter: () => void;
+  /** Set raw, matter, and active faction element to their caps. */
+  maxAll: () => void;
+  /** Set raw, matter, and active faction element to zero. */
+  zeroAll: () => void;
+  /** Spawn a builder near HQ. Dev-only — free spawn, ignores economy/control costs. */
+  spawnBuilder: () => void;
+  /** Spawn a harvester near HQ. Dev-only — free spawn, ignores economy/control costs. */
+  spawnHarvester: () => void;
+  /** Add a 1×1 obstacle at camera center tile. No-op if occupied. */
+  addObstacle: () => void;
+  /** Add a 1×1 resource at camera center tile (also creates ResourceNodeState). No-op if occupied. */
+  addResource: () => void;
+  /** Clear all construction sites, refund matter (clamped to cap), reset builders to idle. */
+  clearConstruction: () => void;
 }
 
 // ── Environment guard ──────────────────────────────────────────────
@@ -125,7 +139,26 @@ export function createDevPanel(actions: DevPanelActions): {
   resSection.appendChild(makeActionBtn('+50 Raw', () => actions.addRaw(50)));
   resSection.appendChild(makeActionBtn('+50 Matter', () => actions.addMatter(50)));
   resSection.appendChild(makeActionBtn('+1 Element', () => actions.addElementUnits(ELEMENT_UNITS_PER_ELEMENT)));
+  resSection.appendChild(makeActionBtn('Max All', () => actions.maxAll()));
+  resSection.appendChild(makeActionBtn('Zero All', () => actions.zeroAll()));
   actionsEl.appendChild(resSection);
+
+  // Unit spawn buttons
+  const unitsSection = makeSection('Units');
+  unitsSection.appendChild(makeActionBtn('+ Builder', () => actions.spawnBuilder()));
+  unitsSection.appendChild(makeActionBtn('+ Harvester', () => actions.spawnHarvester()));
+  actionsEl.appendChild(unitsSection);
+
+  // Map quick tools
+  const mapSection = makeSection('Map');
+  mapSection.appendChild(makeActionBtn('+ Obstacle', () => actions.addObstacle()));
+  mapSection.appendChild(makeActionBtn('+ Resource', () => actions.addResource()));
+  actionsEl.appendChild(mapSection);
+
+  // Construction tools
+  const constSection = makeSection('Construction');
+  constSection.appendChild(makeActionBtn('Clear Sites', () => actions.clearConstruction()));
+  actionsEl.appendChild(constSection);
 
   // Fast-forward buttons
   const ffSection = makeSection('Fast-Forward');
