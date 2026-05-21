@@ -605,3 +605,68 @@ html, body {
   pointer-events: auto;
   margin-top: calc(0.3rem * var(--ui-scale));
 }
+
+/* ── Editor Toolbar ──────────────────────────────────────────────── */
+
+.editor-toolbar {
+  display: flex;
+  gap: calc(0.3rem * var(--ui-scale));
+  pointer-events: auto;
+}
+
+.btn--tool {
+  width: auto;
+  min-width: calc(90px * var(--ui-scale));
+  min-height: calc(32px * var(--ui-scale));
+  padding: calc(0.3rem * var(--ui-scale)) calc(0.6rem * var(--ui-scale));
+  font-size: calc(0.82rem * var(--ui-scale));
+}
+
+/* ── Editor Palette ──────────────────────────────────────────────── */
+
+.editor-palette {
+  position: absolute;
+  top: calc(0.5rem * var(--ui-scale));
+  right: calc(1rem * var(--ui-scale));
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.35rem * var(--ui-scale));
+  padding: calc(0.7rem * var(--ui-scale));
+  width: min(calc(220px * var(--ui-scale)), 40vw);
+  max-height: calc(100vh - 2rem * var(--ui-scale));
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(64, 41, 17, 0.94), rgba(28, 18, 8, 0.96)),
+    var(--panel);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.editor-palette__title {
+  font-size: calc(0.95rem * var(--ui-scale));
+  font-weight: 900;
+  color: var(--title);
+  text-align: center;
+  margin-bottom: calc(0.2rem * var(--ui-scale));
+}
+
+.editor-palette__group-label {
+  font-size: calc(0.75rem * var(--ui-scale));
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: calc(0.3rem * var(--ui-scale));
+  padding-bottom: calc(0.15rem * var(--ui-scale));
+  border-bottom: 1px solid rgba(240, 201, 106, 0.18);
+}
+
+.btn--palette-item {
+  min-height: calc(30px * var(--ui-scale));
+  padding: calc(0.2rem * var(--ui-scale)) calc(0.5rem * var(--ui-scale));
+  font-size: calc(0.8rem * var(--ui-scale));
+  text-align: left;
+}

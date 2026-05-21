@@ -1,8 +1,10 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1 — Editor screen shell.
+ * MAP-EDITOR-ARCH-01 PR1+PR2 — Editor screen with tools and palette.
  *
- * Dev-only screen for viewing a generated map preview.
- * Camera pan/zoom works. No placement, removal, save/load, or gameplay.
+ * Dev-only screen for viewing and editing a generated map preview.
+ * Camera pan/zoom works. PR2 adds: Select/Place/Erase tools,
+ * object palette, hover tile tracking, valid/invalid footprint preview,
+ * placement/removal on editor MapData only.
  *
  * Availability: same guard as dev panel (DEV / test / ?devtools=1).
  */
@@ -10,12 +12,28 @@
 import type { Screen, ScreenTransitionData, EditorScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 import { MAP_SIZE_STANDARD, MAP_SIZE_LARGE, ASSET_MANIFEST } from '../core/constants.js';
-import { tileToScreen } from '../core/coordinates.js';
+import { canvasToTile, tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import { generateMap } from '../game/mapgen.js';
 import { createResourceNodeStates } from '../systems/harvesting.js';
 import { Camera } from '../render/camera.js';
 import { editorPreviewRender } from '../render/editor-preview.js';
+import type { EditorHoverState } from '../render/editor-preview.js';
+import {
+  type EditorTool,
+  type PaletteItem,
+  type PaletteGroup,
+  PALETTE_ITEMS,
+  buildEditorOccupiedSet,
+  canPlace,
+  placeResource,
+  placeObstacle,
+  placeDecor,
+  findEntityAtTile,
+  eraseAtTile,
+} from '../game/editor-state.js';
+import type { ResourceNodeState } from '../systems/harvesting.js';
+import type { MapData, ResourceType, ObstacleType, DecorType } from '../game/map-types.js';
 
 function resolveMapSize(mapSize: string): number {
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
@@ -36,6 +54,24 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
   let camPanStartX = 0;
   let camPanStartY = 0;
 
+  // PR2: Tool state
+  let activeTool: EditorTool = 'select';
+  let selectedPaletteItem: PaletteItem | null = null;
+
+  // PR2: Hover state
+  let hoverTx = -1;
+  let hoverTy = -1;
+
+  // Map data — stored for render loop and editor operations
+  let mapData: MapData | null = null;
+  let resourceNodes: ResourceNodeState[] | null = null;
+
+  // DOM references for live updates
+  let infoEl: HTMLElement | null = null;
+  let paletteEl: HTMLElement | null = null;
+  let toolBtns: Map<EditorTool, HTMLButtonElement> = new Map();
+  let canvas: HTMLCanvasElement | null = null;
+
   // Bound handlers for cleanup
   let boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
   let boundKeyUp: ((e: KeyboardEvent) => void) | null = null;
@@ -44,10 +80,132 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
   let boundMouseUp: (() => void) | null = null;
   let boundWheel: ((e: WheelEvent) => void) | null = null;
   let boundResize: (() => void) | null = null;
+  let boundContextMenu: ((e: Event) => void) | null = null;
 
-  // Map data — stored for render loop
-  let mapData: ReturnType<typeof generateMap> | null = null;
-  let resourceNodes: ReturnType<typeof createResourceNodeStates> | null = null;
+  /** Update the info panel with current map counts. */
+  function updateInfo(): void {
+    if (!infoEl || !mapData) return;
+    infoEl.innerHTML =
+      `<span>Размер: ${mapWidth}×${mapHeight}</span>` +
+      `<span>Ресурсы: ${mapData.resources.length}</span>` +
+      `<span>Препятствия: ${mapData.obstacles.length}</span>` +
+      `<span>Декор: ${mapData.decor.length}</span>`;
+  }
+
+  /** Set the active tool and update UI. */
+  function setTool(tool: EditorTool): void {
+    activeTool = tool;
+    // Update button active states
+    for (const [t, btn] of toolBtns) {
+      if (t === tool) {
+        btn.classList.add('btn--active');
+      } else {
+        btn.classList.remove('btn--active');
+      }
+    }
+    // Show/hide palette
+    if (paletteEl) {
+      paletteEl.style.display = tool === 'place' ? 'flex' : 'none';
+    }
+    // Update cursor
+    if (canvas) {
+      if (tool === 'place') {
+        canvas.style.cursor = 'crosshair';
+      } else if (tool === 'erase') {
+        canvas.style.cursor = 'pointer';
+      } else {
+        canvas.style.cursor = 'grab';
+      }
+    }
+  }
+
+  /** Select a palette item. */
+  function selectPaletteItem(item: PaletteItem): void {
+    selectedPaletteItem = item;
+    // Update palette button active states
+    if (paletteEl) {
+      const buttons = paletteEl.querySelectorAll('.editor-palette__item');
+      buttons.forEach((btn) => {
+        const btnItem = (btn as HTMLButtonElement).dataset.paletteType;
+        const btnGroup = (btn as HTMLButtonElement).dataset.paletteGroup;
+        if (btnItem === item.type && btnGroup === item.group) {
+          btn.classList.add('btn--active');
+        } else {
+          btn.classList.remove('btn--active');
+        }
+      });
+    }
+  }
+
+  /** Convert mouse event to tile coordinates, clamped to map bounds. */
+  function mouseToTile(e: MouseEvent): { tx: number; ty: number } {
+    if (!camera || !canvas) return { tx: -1, ty: -1 };
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const tile = canvasToTile(cx, cy, camera.x, camera.y, camera.zoom, canvas.width, canvas.height);
+    const tx = Math.floor(tile.x);
+    const ty = Math.floor(tile.y);
+    return { tx, ty };
+  }
+
+  /** Handle left-click on canvas based on active tool. */
+  function handleToolClick(e: MouseEvent): void {
+    if (!mapData || !resourceNodes) return;
+    const { tx, ty } = mouseToTile(e);
+    if (tx < 0 || ty < 0 || tx >= mapWidth || ty >= mapHeight) return;
+
+    if (activeTool === 'place' && selectedPaletteItem) {
+      const item = selectedPaletteItem;
+      let placed = false;
+      switch (item.group) {
+        case 'resource':
+          placed = placeResource(mapData, tx, ty, item.type as ResourceType, resourceNodes);
+          break;
+        case 'obstacle':
+          placed = placeObstacle(mapData, tx, ty, item.type as ObstacleType);
+          break;
+        case 'decor':
+          placed = placeDecor(mapData, tx, ty, item.type as DecorType);
+          break;
+      }
+      if (placed) {
+        updateInfo();
+      }
+    } else if (activeTool === 'erase') {
+      const erased = eraseAtTile(mapData, tx, ty, resourceNodes);
+      if (erased) {
+        updateInfo();
+      }
+    }
+  }
+
+  /** Compute the current hover state for the render loop. */
+  function computeHoverState(): EditorHoverState | undefined {
+    if (!mapData || hoverTx < 0 || hoverTy < 0) return undefined;
+
+    const hover: EditorHoverState = {
+      tx: hoverTx,
+      ty: hoverTy,
+      tool: activeTool,
+    };
+
+    if (activeTool === 'place' && selectedPaletteItem) {
+      hover.paletteGroup = selectedPaletteItem.group;
+      hover.paletteFootprint = selectedPaletteItem.footprint;
+      const occupied = buildEditorOccupiedSet(mapData);
+      hover.isValid = canPlace(mapData, occupied, hoverTx, hoverTy, selectedPaletteItem.footprint);
+    } else if (activeTool === 'erase') {
+      const entity = findEntityAtTile(mapData, hoverTx, hoverTy);
+      if (entity) {
+        hover.eraseTx = entity.tx;
+        hover.eraseTy = entity.ty;
+        hover.eraseFootprint = entity.footprint;
+      }
+    }
+
+    return hover;
+  }
 
   return {
     id: 'editor-screen',
@@ -68,13 +226,13 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       wrapper.className = 'screen screen--editor';
 
       // Create canvas
-      const canvas = document.createElement('canvas');
+      canvas = document.createElement('canvas');
       canvas.className = 'screen__canvas';
       canvas.id = 'editor-canvas';
       canvas.style.cursor = 'grab';
       wrapper.appendChild(canvas);
 
-      // Editor overlay UI
+      // ── Editor overlay UI (top-left) ─────────────────────────────────
       const overlay = document.createElement('div');
       overlay.className = 'editor-overlay';
       overlay.id = 'editor-overlay';
@@ -84,14 +242,42 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       title.textContent = 'Редактор карты';
       overlay.appendChild(title);
 
-      const info = document.createElement('div');
-      info.className = 'editor-overlay__info';
-      info.id = 'editor-info';
-      info.innerHTML =
-        `<span>Размер: ${mapWidth}×${mapHeight}</span>` +
-        `<span>Ресурсы: ${mapData.resources.length}</span>` +
-        `<span>Препятствия: ${mapData.obstacles.length}</span>`;
-      overlay.appendChild(info);
+      // Tool bar
+      const toolbar = document.createElement('div');
+      toolbar.className = 'editor-toolbar';
+      toolbar.id = 'editor-toolbar';
+
+      const toolSelect = document.createElement('button');
+      toolSelect.className = 'btn btn--tool btn--active';
+      toolSelect.textContent = 'Выбор';
+      toolSelect.id = 'editor-tool-select';
+      toolSelect.addEventListener('click', () => setTool('select'));
+      toolBtns.set('select', toolSelect);
+
+      const toolPlace = document.createElement('button');
+      toolPlace.className = 'btn btn--tool';
+      toolPlace.textContent = 'Размещение';
+      toolPlace.id = 'editor-tool-place';
+      toolPlace.addEventListener('click', () => setTool('place'));
+      toolBtns.set('place', toolPlace);
+
+      const toolErase = document.createElement('button');
+      toolErase.className = 'btn btn--tool';
+      toolErase.textContent = 'Удаление';
+      toolErase.id = 'editor-tool-erase';
+      toolErase.addEventListener('click', () => setTool('erase'));
+      toolBtns.set('erase', toolErase);
+
+      toolbar.appendChild(toolSelect);
+      toolbar.appendChild(toolPlace);
+      toolbar.appendChild(toolErase);
+      overlay.appendChild(toolbar);
+
+      infoEl = document.createElement('div');
+      infoEl.className = 'editor-overlay__info';
+      infoEl.id = 'editor-info';
+      updateInfo();
+      overlay.appendChild(infoEl);
 
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back editor-overlay__back';
@@ -101,6 +287,50 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       overlay.appendChild(btnBack);
 
       wrapper.appendChild(overlay);
+
+      // ── Object palette (right side, visible only in Place mode) ──────
+      paletteEl = document.createElement('div');
+      paletteEl.className = 'editor-palette';
+      paletteEl.id = 'editor-palette';
+      paletteEl.style.display = 'none'; // Hidden until Place tool is active
+
+      const paletteTitle = document.createElement('div');
+      paletteTitle.className = 'editor-palette__title';
+      paletteTitle.textContent = 'Объекты';
+      paletteEl.appendChild(paletteTitle);
+
+      // Group palette items by group
+      const groups: Array<{ label: string; group: PaletteGroup; items: readonly PaletteItem[] }> = [
+        { label: 'Ресурсы', group: 'resource', items: PALETTE_ITEMS.filter(i => i.group === 'resource') },
+        { label: 'Препятствия', group: 'obstacle', items: PALETTE_ITEMS.filter(i => i.group === 'obstacle') },
+        { label: 'Декор', group: 'decor', items: PALETTE_ITEMS.filter(i => i.group === 'decor') },
+      ];
+
+      for (const group of groups) {
+        const groupLabel = document.createElement('div');
+        groupLabel.className = 'editor-palette__group-label';
+        groupLabel.textContent = group.label;
+        paletteEl.appendChild(groupLabel);
+
+        for (const item of group.items) {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn--palette-item editor-palette__item';
+          btn.textContent = item.label;
+          btn.dataset.paletteType = item.type;
+          btn.dataset.paletteGroup = item.group;
+          // Show footprint hint for multi-tile objects
+          if (item.footprint > 1) {
+            const hint = document.createElement('small');
+            hint.textContent = `${item.footprint}×${item.footprint}`;
+            btn.appendChild(hint);
+          }
+          btn.addEventListener('click', () => selectPaletteItem(item));
+          paletteEl.appendChild(btn);
+        }
+      }
+
+      wrapper.appendChild(paletteEl);
+
       container.appendChild(wrapper);
 
       // Setup canvas context
@@ -113,23 +343,39 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       assets = store;
 
       // Setup camera — center on map center
-      const centerScreen = tileToScreen(mapWidth / 2, mapHeight / 2);
-      camera = new Camera(centerScreen.x, centerScreen.y);
+      const center = tileToScreen(mapWidth / 2, mapHeight / 2);
+      camera = new Camera(center.x, center.y);
 
       // Setup event handlers
-      boundKeyDown = (e: KeyboardEvent) => { keys.add(e.code); };
+      boundKeyDown = (e: KeyboardEvent) => {
+        keys.add(e.code);
+        // Keyboard shortcuts for tools
+        if (e.code === 'KeyQ') setTool('select');
+        if (e.code === 'KeyW' && !e.ctrlKey) setTool('place');
+        if (e.code === 'KeyE') setTool('erase');
+      };
       boundKeyUp = (e: KeyboardEvent) => { keys.delete(e.code); };
       boundMouseDown = (e: MouseEvent) => {
         if (e.button === 1 || e.button === 2) {
+          // Middle or right click — start panning
           isPanning = true;
           panStartX = e.clientX;
           panStartY = e.clientY;
           camPanStartX = camera!.x;
           camPanStartY = camera!.y;
-          canvas.style.cursor = 'grabbing';
+          if (canvas) canvas.style.cursor = 'grabbing';
+        } else if (e.button === 0) {
+          // Left click — tool action
+          handleToolClick(e);
         }
       };
       boundMouseMove = (e: MouseEvent) => {
+        // Update hover tile
+        const { tx, ty } = mouseToTile(e);
+        hoverTx = tx;
+        hoverTy = ty;
+
+        // Panning
         if (!isPanning || !camera) return;
         const dx = e.clientX - panStartX;
         const dy = e.clientY - panStartY;
@@ -139,12 +385,17 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       boundMouseUp = () => {
         if (isPanning) {
           isPanning = false;
-          canvas.style.cursor = 'grab';
+          // Restore cursor based on active tool
+          if (canvas) {
+            if (activeTool === 'place') canvas.style.cursor = 'crosshair';
+            else if (activeTool === 'erase') canvas.style.cursor = 'pointer';
+            else canvas.style.cursor = 'grab';
+          }
         }
       };
       boundWheel = (e: WheelEvent) => {
         e.preventDefault();
-        if (!camera) return;
+        if (!camera || !canvas) return;
         const delta = e.deltaY > 0 ? -1 : 1;
         const rect = canvas.getBoundingClientRect();
         const cx = e.clientX - rect.left;
@@ -152,8 +403,13 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
         camera.zoomAt(delta, cx, cy, canvas.width, canvas.height);
       };
       boundResize = () => {
+        if (!canvas) return;
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+      };
+      boundContextMenu = (e: Event) => {
+        // Prevent browser context menu on right-click canvas pan
+        e.preventDefault();
       };
 
       window.addEventListener('keydown', boundKeyDown);
@@ -163,6 +419,7 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       window.addEventListener('mouseup', boundMouseUp);
       canvas.addEventListener('wheel', boundWheel, { passive: false });
       window.addEventListener('resize', boundResize);
+      canvas.addEventListener('contextmenu', boundContextMenu);
 
       // Initial resize
       boundResize();
@@ -171,17 +428,21 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       const loop = () => {
         if (!camera || !mapData || !assets) return;
 
-        // Keyboard pan
+        // Keyboard pan (only when not in Place/Erase mode or when select is active)
         let dx = 0;
         let dy = 0;
-        if (keys.has('KeyW') || keys.has('ArrowUp')) dy -= 1;
-        if (keys.has('KeyS') || keys.has('ArrowDown')) dy += 1;
-        if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
-        if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+        // Use arrow keys for camera pan (WASD used for tool shortcuts)
+        if (keys.has('ArrowUp')) dy -= 1;
+        if (keys.has('ArrowDown')) dy += 1;
+        if (keys.has('ArrowLeft')) dx -= 1;
+        if (keys.has('ArrowRight')) dx += 1;
         if (dx !== 0 || dy !== 0) camera.panDirection(dx, dy, 0.016);
 
+        // Compute hover state for rendering
+        const hover = computeHoverState();
+
         // Render editor preview
-        editorPreviewRender(ctx, mapData, camera, assets, resourceNodes ?? undefined);
+        editorPreviewRender(ctx, mapData, camera, assets, resourceNodes ?? undefined, hover);
 
         animFrameId = requestAnimationFrame(loop);
       };
@@ -198,16 +459,20 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       if (boundKeyDown) window.removeEventListener('keydown', boundKeyDown);
       if (boundKeyUp) window.removeEventListener('keyup', boundKeyUp);
       if (boundMouseDown) {
-        const canvas = document.getElementById('editor-canvas');
-        if (canvas) canvas.removeEventListener('mousedown', boundMouseDown);
+        const el = document.getElementById('editor-canvas');
+        if (el) el.removeEventListener('mousedown', boundMouseDown);
       }
       if (boundMouseMove) window.removeEventListener('mousemove', boundMouseMove);
       if (boundMouseUp) window.removeEventListener('mouseup', boundMouseUp);
       if (boundWheel) {
-        const canvas = document.getElementById('editor-canvas');
-        if (canvas) canvas.removeEventListener('wheel', boundWheel);
+        const el = document.getElementById('editor-canvas');
+        if (el) el.removeEventListener('wheel', boundWheel);
       }
       if (boundResize) window.removeEventListener('resize', boundResize);
+      if (boundContextMenu) {
+        const el = document.getElementById('editor-canvas');
+        if (el) el.removeEventListener('contextmenu', boundContextMenu);
+      }
 
       keys.clear();
       isPanning = false;
@@ -215,6 +480,10 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       assets = null;
       mapData = null;
       resourceNodes = null;
+      canvas = null;
+      infoEl = null;
+      paletteEl = null;
+      toolBtns.clear();
 
       boundKeyDown = null;
       boundKeyUp = null;
@@ -223,6 +492,7 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       boundMouseUp = null;
       boundWheel = null;
       boundResize = null;
+      boundContextMenu = null;
     },
   };
 }

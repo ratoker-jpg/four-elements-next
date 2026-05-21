@@ -1,9 +1,12 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1 — Thin editor preview renderer.
+ * MAP-EDITOR-ARCH-01 PR1+PR2 — Thin editor preview renderer.
  *
  * Renders a map preview for the editor screen: terrain, HQ, resources,
  * obstacles, decor, and an always-on grid overlay. No economy, power,
  * harvesters, territory, construction sites, or unit rendering.
+ *
+ * PR2 adds: hover tile highlight, valid/invalid footprint preview,
+ * erase-target highlight.
  *
  * This is a standalone renderer to avoid coupling the editor to the full
  * render() signature which requires economy/power/harvesters/territory.
@@ -18,6 +21,25 @@ import { renderHq } from './buildings.js';
 import { renderResourceNode, renderObstacle, renderDecor } from './environment.js';
 import { renderTerrain } from './terrain.js';
 import type { ResourceNodeState } from '../systems/harvesting.js';
+import type { EditorTool, PaletteGroup } from '../game/editor-state.js';
+
+// ── Hover state for PR2 ──────────────────────────────────────────────
+
+export interface EditorHoverState {
+  tx: number;
+  ty: number;
+  tool: EditorTool;
+  /** Selected palette item group. */
+  paletteGroup?: PaletteGroup;
+  /** Selected palette item footprint. */
+  paletteFootprint?: number;
+  /** Whether the current hover position is valid for placement. */
+  isValid?: boolean;
+  /** Entity footprint to highlight in erase mode. */
+  eraseFootprint?: number;
+  eraseTx?: number;
+  eraseTy?: number;
+}
 
 // ── Shadow profiles (subset of main renderer — editor only shows env + HQ) ──
 
@@ -110,6 +132,100 @@ function drawGridOverlay(
   ctx.restore();
 }
 
+// ── Hover / footprint preview ────────────────────────────────────────
+
+function drawHoverOverlay(
+  ctx: CanvasRenderingContext2D,
+  map: MapData,
+  camera: Camera,
+  hover: EditorHoverState,
+): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+  const hw = (TILE_W / 2) * camera.zoom;
+  const hh = (TILE_H / 2) * camera.zoom;
+
+  ctx.save();
+
+  if (hover.tool === 'select') {
+    // Simple white outline on hovered tile
+    const scr = tileToScreen(hover.tx + 0.5, hover.ty + 0.5);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    drawDiamondOutline(ctx, cv.x, cv.y, hw, hh, 'rgba(255,255,255,0.6)', 2);
+  } else if (hover.tool === 'place') {
+    // Footprint preview: green if valid, red if invalid
+    const footprint = hover.paletteFootprint ?? 1;
+    const isValid = hover.isValid ?? false;
+    const fillColor = isValid ? 'rgba(100,255,100,0.2)' : 'rgba(255,80,80,0.2)';
+    const strokeColor = isValid ? 'rgba(100,255,100,0.7)' : 'rgba(255,80,80,0.7)';
+
+    for (let dy = 0; dy < footprint; dy++) {
+      for (let dx = 0; dx < footprint; dx++) {
+        const ttx = hover.tx + dx;
+        const tty = hover.ty + dy;
+        if (ttx < 0 || ttx >= map.width || tty < 0 || tty >= map.height) continue;
+        const scr = tileToScreen(ttx + 0.5, tty + 0.5);
+        const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+        drawDiamondFill(ctx, cv.x, cv.y, hw, hh, fillColor);
+        drawDiamondOutline(ctx, cv.x, cv.y, hw, hh, strokeColor, 2);
+      }
+    }
+  } else if (hover.tool === 'erase') {
+    // Highlight entity to be erased
+    const eTx = hover.eraseTx ?? hover.tx;
+    const eTy = hover.eraseTy ?? hover.ty;
+    const eFp = hover.eraseFootprint ?? 1;
+
+    for (let dy = 0; dy < eFp; dy++) {
+      for (let dx = 0; dx < eFp; dx++) {
+        const ttx = eTx + dx;
+        const tty = eTy + dy;
+        if (ttx < 0 || ttx >= map.width || tty < 0 || tty >= map.height) continue;
+        const scr = tileToScreen(ttx + 0.5, tty + 0.5);
+        const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+        drawDiamondFill(ctx, cv.x, cv.y, hw, hh, 'rgba(255,60,60,0.25)');
+        drawDiamondOutline(ctx, cv.x, cv.y, hw, hh, 'rgba(255,60,60,0.8)', 2);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawDiamondOutline(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  hw: number, hh: number,
+  color: string,
+  lineWidth: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - hh);
+  ctx.lineTo(cx + hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx - hw, cy);
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+}
+
+function drawDiamondFill(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  hw: number, hh: number,
+  color: string,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - hh);
+  ctx.lineTo(cx + hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx - hw, cy);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
 // ── Sorted entity rendering ──────────────────────────────────────────
 
 interface SortedEntity {
@@ -130,6 +246,7 @@ export function editorPreviewRender(
   camera: Camera,
   assets: AssetStore,
   resourceNodes?: readonly ResourceNodeState[],
+  hover?: EditorHoverState,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -197,4 +314,9 @@ export function editorPreviewRender(
 
   // Grid overlay — always on in editor
   drawGridOverlay(ctx, map, camera);
+
+  // Hover / footprint preview — drawn on top of everything
+  if (hover) {
+    drawHoverOverlay(ctx, map, camera, hover);
+  }
 }
