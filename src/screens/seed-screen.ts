@@ -1,13 +1,16 @@
 /**
- * MAP-EDITOR-ARCH-01 PR4 — Seed selection screen.
+ * MAP-EDITOR-ARCH-01 PR4/PR6 — Seed selection screen with preset selector.
  *
  * Inserted between Map Size and Faction Select.
- * Shows a numeric seed input pre-filled with a random seed.
- * User can type a custom seed, generate a new random seed, or continue.
+ * Shows a numeric seed input pre-filled with a random seed,
+ * a "Случайный сид" button, and a mapgen preset selector.
+ * User can type a custom seed, generate a new random seed,
+ * select a preset, and continue.
  */
 
 import type { Screen, ScreenTransitionData, SeedScreenData, FactionSelectData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
+import { MAPGEN_PRESETS, DEFAULT_PRESET_ID, PRESET_IDS, type MapgenPresetId } from '../game/mapgen-presets.js';
 
 /** Generate a random positive integer seed (1–999999). */
 function generateRandomSeed(): number {
@@ -28,6 +31,9 @@ export function createSeedScreen(navigate: NavigateFn): Screen {
     mount(container: HTMLElement, data: ScreenTransitionData): void {
       const seedData = data as SeedScreenData | null;
       const mapSize = seedData?.mapSize ?? 'standard';
+      // Preserve seed and preset on back navigation
+      const incomingSeed = seedData?.seed;
+      const incomingPreset = seedData?.mapgenPresetId ?? DEFAULT_PRESET_ID;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--seed';
@@ -58,7 +64,8 @@ export function createSeedScreen(navigate: NavigateFn): Screen {
       input.type = 'text';
       input.inputMode = 'numeric';
       input.pattern = '[0-9]*';
-      input.value = String(generateRandomSeed());
+      // Use incoming seed if returning from back navigation, otherwise generate random
+      input.value = String(incomingSeed ?? generateRandomSeed());
       input.setAttribute('aria-label', 'Сид карты');
 
       // Strip non-numeric characters on input
@@ -83,6 +90,42 @@ export function createSeedScreen(navigate: NavigateFn): Screen {
 
       menu.appendChild(inputRow);
 
+      // Preset selector
+      const presetLabel = document.createElement('p');
+      presetLabel.className = 'preset-label';
+      presetLabel.textContent = 'Генерация карты';
+      menu.appendChild(presetLabel);
+
+      const presetGroup = document.createElement('div');
+      presetGroup.className = 'preset-selector';
+      presetGroup.id = 'preset-selector';
+
+      let selectedPreset: MapgenPresetId = incomingPreset;
+
+      for (const presetId of PRESET_IDS) {
+        const preset = MAPGEN_PRESETS[presetId];
+        const btn = document.createElement('button');
+        btn.className = 'btn btn--preset';
+        btn.dataset.presetId = presetId;
+        btn.textContent = preset.label;
+        if (presetId === selectedPreset) {
+          btn.classList.add('btn--preset-active');
+        }
+        btn.addEventListener('click', () => {
+          // Deselect all, then select this one
+          for (const child of presetGroup.children) {
+            if (child instanceof HTMLElement) {
+              child.classList.remove('btn--preset-active');
+            }
+          }
+          btn.classList.add('btn--preset-active');
+          selectedPreset = presetId;
+        });
+        presetGroup.appendChild(btn);
+      }
+
+      menu.appendChild(presetGroup);
+
       // Continue button
       const btnContinue = document.createElement('button');
       btnContinue.className = 'btn';
@@ -93,7 +136,7 @@ export function createSeedScreen(navigate: NavigateFn): Screen {
           input.value = String(generateRandomSeed());
         }
         const seed = clampSeed(parseInt(input.value, 10));
-        const factionData: FactionSelectData = { mapSize, seed };
+        const factionData: FactionSelectData = { mapSize, seed, mapgenPresetId: selectedPreset };
         navigate('faction-select', factionData);
       });
       menu.appendChild(btnContinue);

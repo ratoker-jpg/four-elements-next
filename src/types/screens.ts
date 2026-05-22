@@ -17,17 +17,23 @@ export interface MapSizeData {
 
 export interface SeedScreenData {
   readonly mapSize: 'standard' | 'large';
+  /** Preserved seed when returning from Faction Select. Undefined on first visit. */
+  readonly seed?: number;
+  /** Preserved preset when returning from Faction Select. Undefined on first visit. */
+  readonly mapgenPresetId?: import('../game/mapgen-presets.js').MapgenPresetId;
 }
 
 export interface FactionSelectData {
   readonly mapSize: 'standard' | 'large';
   readonly seed: number;
+  readonly mapgenPresetId: import('../game/mapgen-presets.js').MapgenPresetId;
 }
 
 export interface GameScreenData {
   readonly mapSize: 'standard' | 'large';
   readonly faction: 'cyan' | 'green' | 'yellow' | 'purple' | 'random';
   readonly seed: number;
+  readonly mapgenPresetId: import('../game/mapgen-presets.js').MapgenPresetId;
 }
 
 export interface EditorScreenData {

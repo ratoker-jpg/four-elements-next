@@ -4,6 +4,8 @@ import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED
 import { tileToScreen, screenToTile } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement, ResourceType, ObstacleType } from './map-types.js';
+import type { MapgenPresetId } from './mapgen-presets.js';
+import { DEFAULT_PRESET_ID } from './mapgen-presets.js';
 import { RESOURCE_FOOTPRINTS, OBSTACLE_FOOTPRINTS } from './map-types.js';
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
 import type { GameState } from './game-state.js';
@@ -79,13 +81,13 @@ export class GameWorld {
   private boundWheel: (e: WheelEvent) => void;
   private boundResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random', seed: number = 42) {
+  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random', seed: number = 42, mapgenPresetId: MapgenPresetId = DEFAULT_PRESET_ID) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Cannot get 2D context');
     this.ctx = ctx;
 
-    this.state = createGameState(mapSize, faction, seed);
+    this.state = createGameState(mapSize, faction, seed, mapgenPresetId);
     this.assets = new AssetStore();
 
     const hqScreen = tileToScreen(this.state.map.hq.tx + 1.5, this.state.map.hq.ty + 1.5);

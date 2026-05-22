@@ -101,3 +101,83 @@ test.describe('MAP-EDITOR-ARCH-01 PR4 — Seed selection flow', () => {
     await expect(page.locator('#economy-hud')).toBeVisible();
   });
 });
+
+test.describe('MAP-EDITOR-ARCH-01 PR6 — Preset selector on Seed Screen', () => {
+  test('preset selector is visible on seed screen', async ({ page }) => {
+    await navigateToSeedScreen(page);
+    await expect(page.locator('#preset-selector')).toBeVisible();
+  });
+
+  test('default preset is balanced (Сбалансированная)', async ({ page }) => {
+    await navigateToSeedScreen(page);
+    const balancedBtn = page.locator('#preset-selector').getByRole('button', { name: 'Сбалансированная' });
+    await expect(balancedBtn).toBeVisible();
+    // Balanced should be active by default
+    await expect(balancedBtn).toHaveClass(/btn--preset-active/);
+  });
+
+  test('all four preset buttons are visible', async ({ page }) => {
+    await navigateToSeedScreen(page);
+    await expect(page.locator('#preset-selector').getByRole('button', { name: 'Сбалансированная' })).toBeVisible();
+    await expect(page.locator('#preset-selector').getByRole('button', { name: 'Больше ресурсов' })).toBeVisible();
+    await expect(page.locator('#preset-selector').getByRole('button', { name: 'Больше скал и гор' })).toBeVisible();
+    await expect(page.locator('#preset-selector').getByRole('button', { name: 'Открытая карта' })).toBeVisible();
+  });
+
+  test('selecting "Больше ресурсов" reaches faction select and starts game', async ({ page }) => {
+    await navigateToGameScreen(page, { preset: 'more-resources' });
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await expect(page.locator('#game-canvas')).toBeVisible();
+  });
+
+  test('selecting "Больше скал и гор" reaches faction select and starts game', async ({ page }) => {
+    await navigateToGameScreen(page, { preset: 'more-mountains' });
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await expect(page.locator('#game-canvas')).toBeVisible();
+  });
+
+  test('selecting "Открытая карта" reaches faction select and starts game', async ({ page }) => {
+    await navigateToGameScreen(page, { preset: 'open-map' });
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await expect(page.locator('#game-canvas')).toBeVisible();
+  });
+
+  test('Back from faction select returns to seed screen with same seed and preset', async ({ page }) => {
+    await navigateToSeedScreen(page, { seed: 555, preset: 'more-resources' });
+
+    // Verify "Больше ресурсов" is active
+    const moreResBtn = page.locator('#preset-selector').getByRole('button', { name: 'Больше ресурсов' });
+    await expect(moreResBtn).toHaveClass(/btn--preset-active/);
+
+    // Verify seed is 555
+    const input = page.locator('#seed-input');
+    await expect(input).toHaveValue('555');
+
+    // Navigate forward
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await expect(page.locator('.screen--faction-select')).toBeVisible();
+
+    // Go back
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+
+    // Seed should be preserved
+    await expect(input).toHaveValue('555');
+
+    // Preset should still be "Больше ресурсов"
+    await expect(moreResBtn).toHaveClass(/btn--preset-active/);
+  });
+
+  test('no volcano preset exists in the UI', async ({ page }) => {
+    await navigateToSeedScreen(page);
+    const volcanoButtons = page.locator('#preset-selector').getByRole('button', { name: /вулкан/i });
+    await expect(volcanoButtons).toHaveCount(0);
+  });
+
+  test('E2E helper defaults to balanced preset', async ({ page }) => {
+    // navigateToGameScreen without preset option should use balanced
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game')).toBeVisible();
+    await expect(page.locator('#economy-hud')).toBeVisible();
+  });
+});

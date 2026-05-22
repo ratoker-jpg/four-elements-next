@@ -5,6 +5,7 @@ import { createEconomyHud } from '../render/economy-hud.js';
 import { createBuildMenu } from '../render/build-menu.js';
 import { createProductionPanel } from '../render/production-panel.js';
 import { isDevPanelAllowed, createDevPanel } from '../dev/dev-panel.js';
+import { DEFAULT_PRESET_ID, type MapgenPresetId } from '../game/mapgen-presets.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
@@ -19,6 +20,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       const mapSize = gameData?.mapSize ?? 'standard';
       const faction = gameData?.faction ?? 'cyan';
       const seed = gameData?.seed ?? 42;
+      const mapgenPresetId: MapgenPresetId = gameData?.mapgenPresetId ?? DEFAULT_PRESET_ID;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--game';
@@ -59,7 +61,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       container.appendChild(wrapper);
 
-      const world = new GameWorld(canvas, mapSize, faction, seed);
+      const world = new GameWorld(canvas, mapSize, faction, seed, mapgenPresetId);
       gameWorld = world;
 
       world.onEconomyUpdate = (state) => hud.updateEconomy(state);

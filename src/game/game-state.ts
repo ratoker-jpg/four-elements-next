@@ -2,6 +2,8 @@
 
 import { MAP_SIZE_STANDARD, MAP_SIZE_LARGE, HQ_FOOTPRINT } from '../core/constants.js';
 import { generateMap } from './mapgen.js';
+import type { MapgenPresetId } from './mapgen-presets.js';
+import { DEFAULT_PRESET_ID, resolveMapgenPresetConfig } from './mapgen-presets.js';
 import type { MapData, FactionId } from './map-types.js';
 import {
   createEconomyState,
@@ -113,10 +115,16 @@ function buildOccupiedSet(map: MapData): Set<string> {
 }
 
 /** Create the full initial GameState from UI parameters. */
-export function createGameState(mapSize: string, faction: FactionId | 'random', seed: number = 42): GameState {
+export function createGameState(
+  mapSize: string,
+  faction: FactionId | 'random',
+  seed: number = 42,
+  mapgenPresetId: MapgenPresetId = DEFAULT_PRESET_ID,
+): GameState {
   const resolvedFaction = resolveFaction(faction);
   const size = resolveMapSize(mapSize);
-  const map = generateMap(size, size, resolvedFaction, seed);
+  const mapgenConfig = resolveMapgenPresetConfig(mapgenPresetId);
+  const map = generateMap(size, size, resolvedFaction, seed, mapgenConfig);
 
   const separatorPositions = getSeparatorPositions(map.buildings);
   const rawStorageCount = getRawStorageCount(map.buildings);
