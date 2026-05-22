@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('NEXT-04 power and control', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('economy HUD now shows 5 items + separator', async ({ page }) => {
     await navigateToGameScreen(page);

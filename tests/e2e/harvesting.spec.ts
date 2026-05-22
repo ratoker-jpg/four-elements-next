@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('NEXT-06B harvester raw delivery', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('harvester state is published at game start', async ({ page }) => {
     await navigateToGameScreen(page);

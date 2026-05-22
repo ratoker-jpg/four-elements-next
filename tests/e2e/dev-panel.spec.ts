@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('DEV-SANDBOX-ARCH-01 dev panel', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('dev panel is hidden by default', async ({ page }) => {
     await navigateToGameScreen(page);
@@ -351,14 +344,6 @@ test.describe('DEV-SANDBOX-PR1B devtools URL flag', () => {
 });
 
 test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('overlay toggle buttons exist in dev panel', async ({ page }) => {
     await navigateToGameScreen(page);
@@ -563,14 +548,6 @@ test.describe('DEV-SANDBOX-ARCH-01 PR2 overlay toggles', () => {
 });
 
 test.describe('VISUAL-QA-ARCH-01 PR1 — Sprite Debug overlay', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('Sprite Debug toggle exists in dev panel', async ({ page }) => {
     await navigateToGameScreen(page);

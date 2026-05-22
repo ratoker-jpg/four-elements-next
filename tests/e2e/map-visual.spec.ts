@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('NEXT-02 map visual baseline', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('Canvas is visible with correct dimensions', async ({ page }) => {
     await navigateToGameScreen(page);
@@ -111,12 +104,7 @@ test.describe('NEXT-02 map visual baseline', () => {
   });
 
   test('different factions render correctly', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Зелёные' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
+    await navigateToGameScreen(page, { faction: 'Зелёные' });
 
     const canvas = page.locator('#game-canvas');
     await expect(canvas).toBeVisible();

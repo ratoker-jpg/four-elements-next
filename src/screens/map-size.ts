@@ -1,4 +1,4 @@
-import type { Screen, ScreenTransitionData, FactionSelectData } from '../types/screens.js';
+import type { Screen, ScreenTransitionData, SeedScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 
 const MAP_SIZES = [
@@ -30,8 +30,8 @@ export function createMapSizeScreen(navigate: NavigateFn): Screen {
         btn.className = 'btn';
         btn.innerHTML = `<span>${size.label}</span><small>${size.note}</small>`;
         btn.addEventListener('click', () => {
-          const data: FactionSelectData = { mapSize: size.id };
-          navigate('faction-select', data);
+          const data: SeedScreenData = { mapSize: size.id };
+          navigate('seed-screen', data);
         });
         menu.appendChild(btn);
       }

@@ -100,4 +100,39 @@ describe('createGameState', () => {
       expect(inHqX && inHqY).toBe(false);
     }
   });
+
+  // ── Seed determinism ────────────────────────────────────────────────
+
+  it('same seed + same size + same faction produces identical map', () => {
+    const a = createGameState('standard', 'cyan', 12345);
+    const b = createGameState('standard', 'cyan', 12345);
+    expect(a.map.hq.tx).toBe(b.map.hq.tx);
+    expect(a.map.hq.ty).toBe(b.map.hq.ty);
+    expect(a.map.resources.length).toBe(b.map.resources.length);
+    expect(a.map.obstacles.length).toBe(b.map.obstacles.length);
+    expect(a.map.decor.length).toBe(b.map.decor.length);
+    for (let i = 0; i < a.map.resources.length; i++) {
+      expect(a.map.resources[i]!.tx).toBe(b.map.resources[i]!.tx);
+      expect(a.map.resources[i]!.ty).toBe(b.map.resources[i]!.ty);
+      expect(a.map.resources[i]!.type).toBe(b.map.resources[i]!.type);
+    }
+  });
+
+  it('different seeds produce different resource layouts', () => {
+    const a = createGameState('standard', 'cyan', 1);
+    const b = createGameState('standard', 'cyan', 99999);
+    // Extremely unlikely that two very different seeds produce the same resource count
+    // and positions. At minimum, some resource position should differ.
+    const samePositions = a.map.resources.every(
+      (r, i) => r.tx === b.map.resources[i]?.tx && r.ty === b.map.resources[i]?.ty,
+    );
+    expect(samePositions).toBe(false);
+  });
+
+  it('createGameState with no seed uses default (backward compatible)', () => {
+    // Calling without seed should still work — uses default seed 42
+    const state = createGameState('standard', 'cyan');
+    expect(state.map.width).toBe(48);
+    expect(state.map.resources.length).toBeGreaterThan(0);
+  });
 });

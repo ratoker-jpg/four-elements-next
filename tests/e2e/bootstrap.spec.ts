@@ -46,30 +46,53 @@ test.describe('NEXT-01 bootstrap flow', () => {
     await expect(page.locator('.screen--main-menu')).toBeVisible();
   });
 
-  test('Standard -> faction screen', async ({ page }) => {
+  test('Standard -> seed screen', async ({ page }) => {
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+  });
+
+  test('Standard -> seed screen -> faction screen', async ({ page }) => {
+    await page.getByRole('button', { name: 'Новая игра' }).click();
+    await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     await expect(page.locator('.screen--faction-select')).toBeVisible();
   });
 
   test('faction options are visible', async ({ page }) => {
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     for (const faction of ['Голубые', 'Зелёные', 'Жёлтые', 'Фиолетовые', 'Случайная']) {
       await expect(page.getByRole('button', { name: faction })).toBeVisible();
     }
   });
 
-  test('Back from faction screen works', async ({ page }) => {
+  test('Back from seed screen goes to map size', async ({ page }) => {
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(page.locator('.screen--map-size')).toBeVisible();
+  });
+
+  test('Back from faction screen goes to seed screen', async ({ page }) => {
+    await page.getByRole('button', { name: 'Новая игра' }).click();
+    await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
+    await expect(page.locator('.screen--faction-select')).toBeVisible();
+    await page.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
   });
 
   test('selecting faction opens game screen', async ({ page }) => {
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Большая/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('button', { name: 'Голубые' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();
   });
@@ -77,6 +100,8 @@ test.describe('NEXT-01 bootstrap flow', () => {
   test('Canvas exists on game screen', async ({ page }) => {
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     await page.getByRole('button', { name: 'Зелёные' }).click();
     await expect(page.locator('#game-canvas')).toBeVisible();
   });

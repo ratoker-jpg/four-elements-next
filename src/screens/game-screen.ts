@@ -18,6 +18,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       const gameData = data as GameScreenData | null;
       const mapSize = gameData?.mapSize ?? 'standard';
       const faction = gameData?.faction ?? 'cyan';
+      const seed = gameData?.seed ?? 42;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--game';
@@ -58,7 +59,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
       container.appendChild(wrapper);
 
-      const world = new GameWorld(canvas, mapSize, faction);
+      const world = new GameWorld(canvas, mapSize, faction, seed);
       gameWorld = world;
 
       world.onEconomyUpdate = (state) => hud.updateEconomy(state);
