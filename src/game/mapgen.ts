@@ -7,23 +7,21 @@ import {
   START_CORE_RADIUS,
   START_ECONOMY_RADIUS,
   START_TRANSITION_RADIUS,
-  STARTER_POCKET_SMALL_COUNT,
-  STARTER_POCKET_MEDIUM_COUNT,
   STARTER_POCKET_SUBCLUSTER_MIN,
   STARTER_POCKET_SUBCLUSTER_MAX,
   STARTER_POCKET_SUBCLUSTER_RADIUS,
   STARTER_POCKET_CORNER_BIAS,
   STARTER_POCKET_WEDGE_HALF_ANGLE,
-  CENTER_FIELD_LARGE_COUNT,
-  CENTER_FIELD_MEDIUM_COUNT,
   CENTER_INFINITE_OFFSET_MAX,
   EDGE_BIOME_DEPTH,
-  EDGE_CLUSTER_COUNT_STANDARD,
-  EDGE_CLUSTER_COUNT_LARGE,
   EDGE_CLUSTER_SUPPORT_MIN,
   EDGE_CLUSTER_SUPPORT_MAX,
   EDGE_CENTER_EXCLUSION_RADIUS,
 } from '../core/constants.js';
+import { type MapgenConfig, resolveMapgenConfig } from './mapgen-config.js';
+
+// Re-export config types and helpers for convenience
+export { type MapgenConfig, resolveMapgenConfig, DEFAULT_MAPGEN_CONFIG } from './mapgen-config.js';
 import type {
   MapData,
   FactionId,
@@ -59,7 +57,10 @@ export function generateMap(
   height: number = MAP_SIZE_STANDARD,
   faction: FactionId = 'cyan',
   seed: number = 42,
+  config?: Partial<MapgenConfig>,
 ): MapData {
+  const cfg = resolveMapgenConfig(config);
+
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
     const currentSeed = seed + attempt;
     const rand = mulberry32(currentSeed);
@@ -69,15 +70,15 @@ export function generateMap(
     const builders = placeBuildersNearHq(width, height, hq, occupied);
 
     // Place resources by distance zones
-    const resources = placeResources(width, height, hq, rand, occupied);
+    const resources = placeResources(width, height, hq, rand, occupied, cfg);
 
     // Stage C: Place edge obstacle biome before interior obstacles
-    const edgeResult = placeEdgeObstacleBiome(width, height, hq, rand, occupied, resources);
+    const edgeResult = placeEdgeObstacleBiome(width, height, hq, rand, occupied, resources, cfg);
 
     // Place interior obstacle clusters away from start zone
     const obstaclesResult = placeObstacles(
       width, height, hq, rand, occupied,
-      edgeResult.mountainLargeCount, edgeResult.volcanoMediumCount,
+      edgeResult.mountainLargeCount, edgeResult.volcanoMediumCount, cfg,
     );
 
     // Combine edge + interior obstacles
@@ -85,7 +86,7 @@ export function generateMap(
     const totalRejected = edgeResult.rejectedClusters + obstaclesResult.rejectedClusters;
 
     // Place non-blocking decor (minimal Stage D: increased counts + edge bias)
-    const decor = placeDecor(width, height, hq, rand, occupied);
+    const decor = placeDecor(width, height, hq, rand, occupied, cfg);
 
     const map: MapData = {
       width,
@@ -224,6 +225,7 @@ function placeResources(
   hq: MapData['hq'],
   rand: () => number,
   occupied: Set<string>,
+  cfg: MapgenConfig,
 ): MapData['resources'] {
   const resources: MapData['resources'] = [];
   const hqCx = hq.tx + HQ_FOOTPRINT / 2;
@@ -233,17 +235,17 @@ function placeResources(
   const maxDist = Math.hypot(w, h) / 2;
 
   // ── Stage A: Starter resource pocket (corner-biased, clustered) ─────
-  placeStarterResourcePocket(w, h, hq, rand, occupied, resources);
+  placeStarterResourcePocket(w, h, hq, rand, occupied, resources, cfg);
 
   // ── Transition zone (dist START_ECONOMY_RADIUS to START_TRANSITION_RADIUS) ──
-  placeInZone('medium', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 3, w, h, hqCx, hqCy, rand, occupied, resources);
-  placeInZone('large', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, 2, w, h, hqCx, hqCy, rand, occupied, resources);
+  placeInZone('medium', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, cfg.transitionMediumCount, w, h, hqCx, hqCy, rand, occupied, resources);
+  placeInZone('large', START_ECONOMY_RADIUS, START_TRANSITION_RADIUS, cfg.transitionLargeCount, w, h, hqCx, hqCy, rand, occupied, resources);
 
   // ── Far zone (dist START_TRANSITION_RADIUS to maxDist) ──
-  placeInZone('large', START_TRANSITION_RADIUS, maxDist, 2, w, h, hqCx, hqCy, rand, occupied, resources, 300);
+  placeInZone('large', START_TRANSITION_RADIUS, maxDist, cfg.farLargeCount, w, h, hqCx, hqCy, rand, occupied, resources, 300);
 
   // ── Stage B: Center resource field (3×3 infinite + surrounding field) ──
-  placeCenterResourceField(w, h, hq, centerX, centerY, rand, occupied, resources);
+  placeCenterResourceField(w, h, hq, centerX, centerY, rand, occupied, resources, cfg);
 
   return resources;
 }
@@ -258,6 +260,7 @@ function placeStarterResourcePocket(
   rand: () => number,
   occupied: Set<string>,
   resources: MapData['resources'],
+  cfg: MapgenConfig,
 ): void {
   const hqCx = hq.tx + HQ_FOOTPRINT / 2;
   const hqCy = hq.ty + HQ_FOOTPRINT / 2;
@@ -279,10 +282,10 @@ function placeStarterResourcePocket(
 
   // Build a list of (type, count) pairs
   const toPlace: Array<{ type: ResourceType; remaining: number }> = [];
-  for (let i = 0; i < STARTER_POCKET_SMALL_COUNT; i++) {
+  for (let i = 0; i < cfg.starterSmallCount; i++) {
     toPlace.push({ type: 'small', remaining: 1 });
   }
-  for (let i = 0; i < STARTER_POCKET_MEDIUM_COUNT; i++) {
+  for (let i = 0; i < cfg.starterMediumCount; i++) {
     toPlace.push({ type: 'medium', remaining: 1 });
   }
 
@@ -348,28 +351,31 @@ function placeCenterResourceField(
   rand: () => number,
   occupied: Set<string>,
   resources: MapData['resources'],
+  cfg: MapgenConfig,
 ): void {
   const hqCx = hq.tx + HQ_FOOTPRINT / 2;
   const hqCy = hq.ty + HQ_FOOTPRINT / 2;
 
-  // Place 3×3 mineral_infinite near exact center
-  let infPlaced = false;
-  const infFp = RESOURCE_FOOTPRINTS.infinite; // 3
-  for (let attempts = 0; attempts < 100 && !infPlaced; attempts++) {
-    const tx = Math.floor(centerX + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
-    const ty = Math.floor(centerY + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
+  // Place 3×3 mineral_infinite near exact center (if enabled)
+  if (cfg.centerInfiniteEnabled) {
+    let infPlaced = false;
+    const infFp = RESOURCE_FOOTPRINTS.infinite; // 3
+    for (let attempts = 0; attempts < 100 && !infPlaced; attempts++) {
+      const tx = Math.floor(centerX + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
+      const ty = Math.floor(centerY + (rand() - 0.5) * (CENTER_INFINITE_OFFSET_MAX * 2 + 1)) - Math.floor(infFp / 2);
 
-    if (canPlaceResource(tx, ty, infFp, w, h, occupied, hqCx, hqCy)) {
-      markResourceOccupied(occupied, tx, ty, infFp);
-      resources.push({ tx, ty, type: 'infinite', footprint: infFp });
-      infPlaced = true;
+      if (canPlaceResource(tx, ty, infFp, w, h, occupied, hqCx, hqCy)) {
+        markResourceOccupied(occupied, tx, ty, infFp);
+        resources.push({ tx, ty, type: 'infinite', footprint: infFp });
+        infPlaced = true;
+      }
     }
   }
 
   // Place surrounding large resources (6-12 tiles from center)
   let largePlaced = 0;
   let largeAttempts = 0;
-  while (largePlaced < CENTER_FIELD_LARGE_COUNT && largeAttempts < CENTER_FIELD_LARGE_COUNT * 40) {
+  while (largePlaced < cfg.centerLargeCount && largeAttempts < cfg.centerLargeCount * 40) {
     largeAttempts++;
     const angle = rand() * Math.PI * 2;
     const dist = 7 + rand() * 5;
@@ -387,7 +393,7 @@ function placeCenterResourceField(
   // Place surrounding medium resources (8-14 tiles from center)
   let mediumPlaced = 0;
   let mediumAttempts = 0;
-  while (mediumPlaced < CENTER_FIELD_MEDIUM_COUNT && mediumAttempts < CENTER_FIELD_MEDIUM_COUNT * 40) {
+  while (mediumPlaced < cfg.centerMediumCount && mediumAttempts < cfg.centerMediumCount * 40) {
     mediumAttempts++;
     const angle = rand() * Math.PI * 2;
     const dist = 9 + rand() * 5;
@@ -498,6 +504,7 @@ function placeEdgeObstacleBiome(
   rand: () => number,
   occupied: Set<string>,
   resources: MapData['resources'],
+  cfg: MapgenConfig,
 ): EdgeBiomeResult {
   const obstacles: ObstaclePlacement[] = [];
   let rejectedClusters = 0;
@@ -507,7 +514,7 @@ function placeEdgeObstacleBiome(
   const centerY = Math.floor(h / 2);
 
   const isLargeMap = w >= MAP_SIZE_LARGE;
-  const clusterCount = isLargeMap ? EDGE_CLUSTER_COUNT_LARGE : EDGE_CLUSTER_COUNT_STANDARD;
+  const clusterCount = isLargeMap ? cfg.edgeClusterCountLarge : cfg.edgeClusterCountStandard;
 
   // Track rare obstacle types for limit enforcement
   let mountainLargeCount = 0;
@@ -668,6 +675,7 @@ function placeObstacles(
   occupied: Set<string>,
   initialMountainLargeCount: number = 0,
   initialVolcanoMediumCount: number = 0,
+  cfg: MapgenConfig = resolveMapgenConfig(),
 ): ClusterResult {
   const obstacles: ObstaclePlacement[] = [];
   let rejectedClusters = 0;
@@ -679,7 +687,7 @@ function placeObstacles(
   const isLargeMap = w >= MAP_SIZE_LARGE;
 
   // Number of clusters scales with map size
-  const clusterCount = Math.floor(w * h / 400); // ~5 for 48x48, ~10 for 64x64
+  const clusterCount = Math.floor(w * h / cfg.interiorClusterDensityDivisor);
 
   // Track rare obstacle types (combined with any already placed by edge biome)
   let mountainLargeCount = initialMountainLargeCount;
@@ -841,6 +849,7 @@ function placeDecor(
   hq: MapData['hq'],
   rand: () => number,
   occupied: Set<string>,
+  cfg: MapgenConfig,
 ): MapData['decor'] {
   const decor: MapData['decor'] = [];
   const hqCx = hq.tx + HQ_FOOTPRINT / 2;
@@ -848,8 +857,8 @@ function placeDecor(
 
   // Regular scatter — increased counts for visual variation
   const decorSpecs: Array<{ type: DecorType; count: number }> = [
-    { type: 'bush', count: 18 },
-    { type: 'sand-bump', count: 22 },
+    { type: 'bush', count: cfg.decorBushCount },
+    { type: 'sand-bump', count: cfg.decorSandBumpCount },
   ];
 
   for (const spec of decorSpecs) {
@@ -870,8 +879,8 @@ function placeDecor(
 
   // Edge-biased decor — extra decor near map borders
   const edgeDecorSpecs: Array<{ type: DecorType; count: number }> = [
-    { type: 'bush', count: 6 },
-    { type: 'sand-bump', count: 8 },
+    { type: 'bush', count: cfg.edgeDecorBushCount },
+    { type: 'sand-bump', count: cfg.edgeDecorSandBumpCount },
   ];
 
   const isInEdgeBand = (x: number, y: number): boolean =>

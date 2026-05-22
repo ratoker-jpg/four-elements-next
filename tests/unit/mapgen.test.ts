@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMap } from '../../src/game/mapgen.js';
+import { generateMap, DEFAULT_MAPGEN_CONFIG, resolveMapgenConfig } from '../../src/game/mapgen.js';
 import {
   HQ_FOOTPRINT,
   MAP_SIZE_STANDARD,
@@ -697,5 +697,121 @@ describe('mapgen', () => {
       expect(profile.size[1]).toBeGreaterThan(0);
       expect(typeof profile.groundOffset).toBe('number');
     }
+  });
+
+  // ── PR5: MapgenConfig / preset foundation tests ──────────────────────
+
+  it('DEFAULT_MAPGEN_CONFIG has all expected fields with correct default values', () => {
+    expect(DEFAULT_MAPGEN_CONFIG.starterSmallCount).toBe(10);
+    expect(DEFAULT_MAPGEN_CONFIG.starterMediumCount).toBe(5);
+    expect(DEFAULT_MAPGEN_CONFIG.transitionMediumCount).toBe(3);
+    expect(DEFAULT_MAPGEN_CONFIG.transitionLargeCount).toBe(2);
+    expect(DEFAULT_MAPGEN_CONFIG.farLargeCount).toBe(2);
+    expect(DEFAULT_MAPGEN_CONFIG.centerInfiniteEnabled).toBe(true);
+    expect(DEFAULT_MAPGEN_CONFIG.centerLargeCount).toBe(4);
+    expect(DEFAULT_MAPGEN_CONFIG.centerMediumCount).toBe(5);
+    expect(DEFAULT_MAPGEN_CONFIG.edgeClusterCountStandard).toBe(8);
+    expect(DEFAULT_MAPGEN_CONFIG.edgeClusterCountLarge).toBe(14);
+    expect(DEFAULT_MAPGEN_CONFIG.interiorClusterDensityDivisor).toBe(400);
+    expect(DEFAULT_MAPGEN_CONFIG.decorBushCount).toBe(18);
+    expect(DEFAULT_MAPGEN_CONFIG.decorSandBumpCount).toBe(22);
+    expect(DEFAULT_MAPGEN_CONFIG.edgeDecorBushCount).toBe(6);
+    expect(DEFAULT_MAPGEN_CONFIG.edgeDecorSandBumpCount).toBe(8);
+  });
+
+  it('resolveMapgenConfig() returns default config when omitted', () => {
+    const cfg = resolveMapgenConfig();
+    expect(cfg).toEqual(DEFAULT_MAPGEN_CONFIG);
+  });
+
+  it('resolveMapgenConfig({ starterSmallCount: 20 }) overrides only that field', () => {
+    const cfg = resolveMapgenConfig({ starterSmallCount: 20 });
+    expect(cfg.starterSmallCount).toBe(20);
+    // All other fields should remain at defaults
+    expect(cfg.starterMediumCount).toBe(5);
+    expect(cfg.centerInfiniteEnabled).toBe(true);
+    expect(cfg.interiorClusterDensityDivisor).toBe(400);
+    expect(cfg.decorBushCount).toBe(18);
+  });
+
+  it('generateMap without config matches generateMap with DEFAULT_MAPGEN_CONFIG for same seed/size/faction', () => {
+    const a = generateMap(48, 48, 'cyan', 42);
+    const b = generateMap(48, 48, 'cyan', 42, DEFAULT_MAPGEN_CONFIG);
+    // Deep comparison of key arrays
+    expect(a.resources.length).toBe(b.resources.length);
+    expect(a.obstacles.length).toBe(b.obstacles.length);
+    expect(a.decor.length).toBe(b.decor.length);
+    for (let i = 0; i < a.resources.length; i++) {
+      expect(a.resources[i]!.tx).toBe(b.resources[i]!.tx);
+      expect(a.resources[i]!.ty).toBe(b.resources[i]!.ty);
+      expect(a.resources[i]!.type).toBe(b.resources[i]!.type);
+    }
+    for (let i = 0; i < a.obstacles.length; i++) {
+      expect(a.obstacles[i]!.tx).toBe(b.obstacles[i]!.tx);
+      expect(a.obstacles[i]!.ty).toBe(b.obstacles[i]!.ty);
+      expect(a.obstacles[i]!.type).toBe(b.obstacles[i]!.type);
+    }
+    for (let i = 0; i < a.decor.length; i++) {
+      expect(a.decor[i]!.tx).toBe(b.decor[i]!.tx);
+      expect(a.decor[i]!.ty).toBe(b.decor[i]!.ty);
+      expect(a.decor[i]!.type).toBe(b.decor[i]!.type);
+    }
+  });
+
+  it('same seed + same explicit config remains deterministic', () => {
+    const cfg = { starterSmallCount: 15, interiorClusterDensityDivisor: 500 };
+    const a = generateMap(48, 48, 'cyan', 77, cfg);
+    const b = generateMap(48, 48, 'cyan', 77, cfg);
+    expect(a.resources.length).toBe(b.resources.length);
+    expect(a.obstacles.length).toBe(b.obstacles.length);
+    for (let i = 0; i < a.resources.length; i++) {
+      expect(a.resources[i]!.tx).toBe(b.resources[i]!.tx);
+      expect(a.resources[i]!.ty).toBe(b.resources[i]!.ty);
+    }
+  });
+
+  it('centerInfiniteEnabled=false produces no infinite resources', () => {
+    const map = generateMap(48, 48, 'cyan', 42, { centerInfiniteEnabled: false });
+    const infinite = map.resources.filter((r) => r.type === 'infinite');
+    expect(infinite.length).toBe(0);
+  });
+
+  it('increased starterSmallCount increases or preserves starter small resource count near HQ', () => {
+    const defaultMap = generateMap(48, 48, 'cyan', 42);
+    const richMap = generateMap(48, 48, 'cyan', 42, { starterSmallCount: 20 });
+    const hqCx = defaultMap.hq.tx + HQ_FOOTPRINT / 2;
+    const hqCy = defaultMap.hq.ty + HQ_FOOTPRINT / 2;
+    const defaultNearSmall = defaultMap.resources.filter(
+      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
+    );
+    const richNearSmall = richMap.resources.filter(
+      (r) => r.type === 'small' && Math.hypot(r.tx - hqCx, r.ty - hqCy) < START_ECONOMY_RADIUS,
+    );
+    // More small resources requested → at least as many near HQ (usually more)
+    expect(richNearSmall.length).toBeGreaterThanOrEqual(defaultNearSmall.length);
+  });
+
+  it('higher interiorClusterDensityDivisor reduces or preserves obstacle count', () => {
+    const defaultMap = generateMap(48, 48, 'cyan', 42);
+    const sparseMap = generateMap(48, 48, 'cyan', 42, { interiorClusterDensityDivisor: 800 });
+    // Higher divisor = fewer interior clusters → fewer or equal obstacles
+    expect(sparseMap.obstacles.length).toBeLessThanOrEqual(defaultMap.obstacles.length);
+  });
+
+  it('reduced decor counts reduce decor total', () => {
+    const defaultMap = generateMap(48, 48, 'cyan', 42);
+    const sparseMap = generateMap(48, 48, 'cyan', 42, {
+      decorBushCount: 5,
+      decorSandBumpCount: 5,
+      edgeDecorBushCount: 0,
+      edgeDecorSandBumpCount: 0,
+    });
+    expect(sparseMap.decor.length).toBeLessThan(defaultMap.decor.length);
+  });
+
+  it('DEFAULT_MAPGEN_CONFIG has no keys matching /volcano/i', () => {
+    const keys = Object.keys(DEFAULT_MAPGEN_CONFIG);
+    const volcanoKeys = keys.filter((k) => /volcano/i.test(k));
+    expect(volcanoKeys).toEqual([]);
   });
 });
