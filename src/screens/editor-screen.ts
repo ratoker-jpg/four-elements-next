@@ -1,5 +1,6 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1+PR2+PR3 — Editor screen with tools, palette, and validation.
+ * MAP-EDITOR-ARCH-01 PR1+PR2+PR3+PR9 — Editor screen with tools, palette,
+ * validation, and custom map save/load.
  *
  * Dev-only screen for viewing and editing a generated map preview.
  * Camera pan/zoom works. PR2 adds: Select/Place/Erase tools,
@@ -7,6 +8,8 @@
  * placement/removal on editor MapData only.
  * PR3 adds: status line, validation panel, "Проверить карту" button,
  * placement rejection reasons, validation after edit, HQ/economy overlays.
+ * PR9 adds: "Сохранить карту" button, saved custom maps list,
+ * load saved map into editor, delete saved map, editor status feedback.
  *
  * Availability: same guard as dev panel (DEV / test / ?devtools=1).
  */
@@ -41,6 +44,12 @@ import {
 import type { EditorValidationResult } from '../game/editor-validation.js';
 import type { ResourceNodeState } from '../systems/harvesting.js';
 import type { MapData, ResourceType, ObstacleType, DecorType } from '../game/map-types.js';
+import {
+  loadSavedMaps,
+  saveCustomMap,
+  deleteSavedMap,
+  type SavedCustomMap,
+} from '../game/custom-map-storage.js';
 
 function resolveMapSize(mapSize: string): number {
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
@@ -52,6 +61,15 @@ const TOOL_LABELS: Record<EditorTool, string> = {
   place: 'Размещение',
   erase: 'Удаление',
 };
+
+/** Format a timestamp to a locale-friendly date/time string. */
+function formatDate(epoch: number): string {
+  try {
+    return new Date(epoch).toLocaleString();
+  } catch {
+    return String(epoch);
+  }
+}
 
 export function createEditorScreen(navigate: NavigateFn): Screen {
   let camera: Camera | null = null;
@@ -80,6 +98,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
   let mapData: MapData | null = null;
   let resourceNodes: ResourceNodeState[] | null = null;
 
+  // PR9: Current saved map id — tracks which saved map is currently loaded
+  let currentSavedMapId: string | null = null;
+
   // DOM references for live updates
   let infoEl: HTMLElement | null = null;
   let statusEl: HTMLElement | null = null;
@@ -87,6 +108,10 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
   let paletteEl: HTMLElement | null = null;
   let toolBtns: Map<EditorTool, HTMLButtonElement> = new Map();
   let canvas: HTMLCanvasElement | null = null;
+
+  // PR9: DOM references for custom maps UI
+  let savedMapsListEl: HTMLElement | null = null;
+  let editorStatusEl: HTMLElement | null = null;
 
   // PR3: Cached validation result
   let lastValidation: EditorValidationResult | null = null;
@@ -297,6 +322,166 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
     return hover;
   }
 
+  // ── PR9: Editor status feedback ────────────────────────────────
+
+  let editorStatusTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  function showEditorStatus(message: string, isError = false): void {
+    if (!editorStatusEl) return;
+    editorStatusEl.textContent = message;
+    editorStatusEl.dataset.visible = 'true';
+    editorStatusEl.dataset.tone = isError ? 'error' : 'ok';
+    if (editorStatusTimeout !== undefined) {
+      clearTimeout(editorStatusTimeout);
+    }
+    editorStatusTimeout = setTimeout(() => {
+      if (editorStatusEl) {
+        editorStatusEl.dataset.visible = 'false';
+      }
+    }, 3000);
+  }
+
+  // ── PR9: Load saved map into editor ────────────────────────────
+
+  function loadMapIntoEditor(savedMap: SavedCustomMap): void {
+    if (!mapData) return;
+
+    // Replace current editor MapData with loaded map
+    const loadedMap = savedMap.map;
+    mapData.width = loadedMap.width;
+    mapData.height = loadedMap.height;
+    mapData.terrain = loadedMap.terrain;
+    mapData.hq = loadedMap.hq;
+    mapData.resources = loadedMap.resources;
+    mapData.obstacles = loadedMap.obstacles;
+    mapData.decor = loadedMap.decor;
+    mapData.buildings = loadedMap.buildings;
+    mapData.builders = loadedMap.builders;
+    mapData.constructionSites = loadedMap.constructionSites;
+
+    // Update map dimensions
+    mapWidth = loadedMap.width;
+    mapHeight = loadedMap.height;
+
+    // Rebuild editor-local resourceNodes from map.resources
+    resourceNodes = createResourceNodeStates(loadedMap.resources);
+
+    // Update current saved map id
+    currentSavedMapId = savedMap.id;
+
+    // Recenters camera
+    if (camera) {
+      const center = tileToScreen(mapWidth / 2, mapHeight / 2);
+      camera.x = center.x;
+      camera.y = center.y;
+    }
+
+    // Clear hover/preview/transient state
+    hoverTx = -1;
+    hoverTy = -1;
+    selectedPaletteItem = null;
+    setTool('select');
+
+    // Update counts/info
+    updateInfo();
+    updateStatus();
+
+    // Run validation
+    runValidation();
+
+    showEditorStatus(`Загружена: ${savedMap.name}`);
+  }
+
+  // ── PR9: Render saved maps list ────────────────────────────────
+
+  function renderSavedMaps(): void {
+    if (!savedMapsListEl) return;
+    savedMapsListEl.innerHTML = '';
+
+    let savedMaps: SavedCustomMap[];
+    try {
+      savedMaps = loadSavedMaps();
+    } catch {
+      savedMaps = [];
+    }
+
+    if (savedMaps.length === 0) {
+      const emptyEl = document.createElement('p');
+      emptyEl.className = 'editor-saved-maps__empty';
+      emptyEl.textContent = 'Нет сохранённых карт';
+      savedMapsListEl.appendChild(emptyEl);
+      return;
+    }
+
+    for (const entry of savedMaps) {
+      const row = document.createElement('div');
+      row.className = 'editor-saved-map-entry';
+      if (entry.id === currentSavedMapId) {
+        row.classList.add('editor-saved-map-entry--active');
+      }
+      row.dataset.mapId = entry.id;
+
+      const info = document.createElement('div');
+      info.className = 'editor-saved-map-entry__info';
+
+      const nameLabel = document.createElement('span');
+      nameLabel.className = 'editor-saved-map-entry__name';
+      nameLabel.textContent = entry.name;
+      info.appendChild(nameLabel);
+
+      const sizeLabel = document.createElement('span');
+      sizeLabel.className = 'editor-saved-map-entry__size';
+      sizeLabel.textContent = `${entry.map.width}×${entry.map.height}`;
+      info.appendChild(sizeLabel);
+
+      const countsLabel = document.createElement('span');
+      countsLabel.className = 'editor-saved-map-entry__counts';
+      countsLabel.textContent = `Р:${entry.map.resources.length} П:${entry.map.obstacles.length} Д:${entry.map.decor.length}`;
+      info.appendChild(countsLabel);
+
+      const dateLabel = document.createElement('span');
+      dateLabel.className = 'editor-saved-map-entry__date';
+      dateLabel.textContent = formatDate(entry.updatedAt);
+      info.appendChild(dateLabel);
+
+      row.appendChild(info);
+
+      // Delete button
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn btn--delete-map';
+      btnDelete.dataset.mapId = entry.id;
+      btnDelete.textContent = 'Удалить';
+      btnDelete.setAttribute('aria-label', `Удалить карту ${entry.name}`);
+      btnDelete.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent triggering the row click
+        try {
+          const ok = deleteSavedMap(entry.id);
+          if (ok) {
+            // If the deleted map was the current one, clear currentSavedMapId
+            if (currentSavedMapId === entry.id) {
+              currentSavedMapId = null;
+            }
+            showEditorStatus('Карта удалена');
+          } else {
+            showEditorStatus('Не удалось удалить карту', true);
+          }
+        } catch {
+          showEditorStatus('Не удалось удалить карту', true);
+        }
+        renderSavedMaps();
+      });
+      row.appendChild(btnDelete);
+
+      // Click entry info area to load the map
+      info.addEventListener('click', () => {
+        loadMapIntoEditor(entry);
+        renderSavedMaps(); // re-render to update active state
+      });
+
+      savedMapsListEl.appendChild(row);
+    }
+  }
+
   return {
     id: 'editor-screen',
 
@@ -304,6 +489,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       const editorData = data as EditorScreenData | null;
       const mapSize = editorData?.mapSize ?? 'standard';
       const size = resolveMapSize(mapSize);
+
+      // Reset state
+      currentSavedMapId = null;
 
       // Generate map and resource node states
       mapData = generateMap(size, size, 'cyan');
@@ -390,6 +578,52 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       validationEl.id = 'editor-validation';
       overlay.appendChild(validationEl);
 
+      // ── PR9: Save map button ────────────────────────────────────────
+      const btnSaveMap = document.createElement('button');
+      btnSaveMap.className = 'btn btn--tool editor-overlay__save-btn';
+      btnSaveMap.id = 'editor-save-map-btn';
+      btnSaveMap.textContent = 'Сохранить карту';
+      btnSaveMap.addEventListener('click', () => {
+        if (!mapData) return;
+        try {
+          const id = saveCustomMap(mapData, { id: currentSavedMapId ?? undefined });
+          if (id !== null) {
+            currentSavedMapId = id;
+            showEditorStatus('Карта сохранена');
+          } else {
+            showEditorStatus('Не удалось сохранить карту', true);
+          }
+        } catch {
+          showEditorStatus('Не удалось сохранить карту', true);
+        }
+        renderSavedMaps();
+      });
+      overlay.appendChild(btnSaveMap);
+
+      // ── PR9: Editor status feedback ─────────────────────────────────
+      editorStatusEl = document.createElement('div');
+      editorStatusEl.className = 'editor-map-status';
+      editorStatusEl.id = 'editor-map-status';
+      editorStatusEl.dataset.visible = 'false';
+      overlay.appendChild(editorStatusEl);
+
+      // ── PR9: Saved maps list ────────────────────────────────────────
+      const savedMapsSection = document.createElement('div');
+      savedMapsSection.className = 'editor-saved-maps';
+      savedMapsSection.id = 'editor-saved-maps';
+
+      const savedMapsHeading = document.createElement('p');
+      savedMapsHeading.className = 'editor-saved-maps__heading';
+      savedMapsHeading.textContent = 'Сохранённые карты';
+      savedMapsSection.appendChild(savedMapsHeading);
+
+      savedMapsListEl = document.createElement('div');
+      savedMapsListEl.className = 'editor-saved-maps__list';
+      savedMapsListEl.id = 'editor-saved-maps-list';
+      savedMapsSection.appendChild(savedMapsListEl);
+
+      overlay.appendChild(savedMapsSection);
+
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back editor-overlay__back';
       btnBack.id = 'editor-back-btn';
@@ -459,6 +693,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
 
       // PR3: Run initial validation on generated map
       runValidation();
+
+      // PR9: Render saved maps list
+      renderSavedMaps();
 
       // Setup event handlers
       boundKeyDown = (e: KeyboardEvent) => {
@@ -604,6 +841,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       paletteEl = null;
       toolBtns.clear();
       lastValidation = null;
+      currentSavedMapId = null;
+      savedMapsListEl = null;
+      editorStatusEl = null;
 
       boundKeyDown = null;
       boundKeyUp = null;
@@ -613,6 +853,11 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       boundWheel = null;
       boundResize = null;
       boundContextMenu = null;
+
+      if (editorStatusTimeout !== undefined) {
+        clearTimeout(editorStatusTimeout);
+        editorStatusTimeout = undefined;
+      }
     },
   };
 }
