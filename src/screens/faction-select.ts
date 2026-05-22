@@ -1,4 +1,4 @@
-import type { Screen, ScreenTransitionData, FactionSelectData, GameScreenData } from '../types/screens.js';
+import type { Screen, ScreenTransitionData, FactionSelectData, GameScreenData, SeedScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 
 const FACTIONS = [
@@ -16,6 +16,7 @@ export function createFactionSelectScreen(navigate: NavigateFn): Screen {
     mount(container: HTMLElement, data: ScreenTransitionData): void {
       const factionData = data as FactionSelectData | null;
       const mapSize = factionData?.mapSize ?? 'standard';
+      const seed = factionData?.seed ?? 42;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--faction-select';
@@ -36,7 +37,7 @@ export function createFactionSelectScreen(navigate: NavigateFn): Screen {
         btn.className = `btn btn--faction btn--faction-${faction.id}`;
         btn.textContent = faction.label;
         btn.addEventListener('click', () => {
-          const gameData: GameScreenData = { mapSize, faction: faction.id };
+          const gameData: GameScreenData = { mapSize, faction: faction.id, seed };
           navigate('game-screen', gameData);
         });
         menu.appendChild(btn);
@@ -45,7 +46,10 @@ export function createFactionSelectScreen(navigate: NavigateFn): Screen {
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back';
       btnBack.textContent = 'Назад';
-      btnBack.addEventListener('click', () => navigate('map-size', { source: 'main-menu' }));
+      btnBack.addEventListener('click', () => {
+        const backData: SeedScreenData = { mapSize };
+        navigate('seed-screen', backData);
+      });
       menu.appendChild(btnBack);
 
       card.appendChild(menu);

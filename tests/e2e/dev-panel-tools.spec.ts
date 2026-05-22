@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('DEV-SANDBOX-TOOLS-01 dev panel tools', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('Max All sets raw/matter/active element to caps', async ({ page }) => {
     await navigateToGameScreen(page);
@@ -297,14 +290,6 @@ test.describe('DEV-SANDBOX-TOOLS-01 dev panel tools', () => {
 });
 
 test.describe('DEV-SANDBOX-TOOLS-02 scenario buttons', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('scenario buttons exist in the dev panel', async ({ page }) => {
     await navigateToGameScreen(page);

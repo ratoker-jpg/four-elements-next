@@ -206,10 +206,12 @@ test.describe('MAP-EDITOR-ARCH-01 PR2 — Object palette + placement/removal', (
     await page.locator('#editor-back-btn').click();
     await expect(page.locator('.screen--main-menu')).toBeVisible();
 
-    // Normal new game flow
+    // Normal new game flow (now includes seed screen)
     await page.getByRole('button', { name: 'Новая игра' }).click();
     await expect(page.locator('.screen--map-size')).toBeVisible();
     await page.getByRole('button', { name: /Стандартная/ }).click();
+    await expect(page.locator('.screen--seed')).toBeVisible();
+    await page.getByRole('button', { name: 'Далее' }).click();
     await expect(page.locator('.screen--faction-select')).toBeVisible();
     await page.getByRole('button', { name: 'Голубые' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();

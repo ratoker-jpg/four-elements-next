@@ -79,13 +79,13 @@ export class GameWorld {
   private boundWheel: (e: WheelEvent) => void;
   private boundResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random') {
+  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random', seed: number = 42) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Cannot get 2D context');
     this.ctx = ctx;
 
-    this.state = createGameState(mapSize, faction);
+    this.state = createGameState(mapSize, faction, seed);
     this.assets = new AssetStore();
 
     const hqScreen = tileToScreen(this.state.map.hq.tx + 1.5, this.state.map.hq.ty + 1.5);

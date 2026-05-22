@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { navigateToGameScreen } from './helpers/navigate.js';
 
 test.describe('NEXT-03 economy baseline', () => {
-  async function navigateToGameScreen(page: import('@playwright/test').Page) {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Голубые' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
-  }
 
   test('economy HUD is visible', async ({ page }) => {
     await navigateToGameScreen(page);
@@ -66,12 +59,7 @@ test.describe('NEXT-03 economy baseline', () => {
   });
 
   test('green faction starts with green element only (elementUnits)', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Новая игра' }).click();
-    await page.getByRole('button', { name: /Стандартная/ }).click();
-    await page.getByRole('button', { name: 'Зелёные' }).click();
-    await expect(page.locator('.screen--game')).toBeVisible();
-    await page.locator('.screen--game[data-ready="true"]').waitFor({ timeout: 5000 });
+    await navigateToGameScreen(page, { faction: 'Зелёные' });
 
     await expect(page.locator('.economy-hud__label').nth(2)).toHaveText('Зелёный элемент');
     const economyState = await page.evaluate(() => {

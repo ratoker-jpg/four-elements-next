@@ -113,10 +113,10 @@ function buildOccupiedSet(map: MapData): Set<string> {
 }
 
 /** Create the full initial GameState from UI parameters. */
-export function createGameState(mapSize: string, faction: FactionId | 'random'): GameState {
+export function createGameState(mapSize: string, faction: FactionId | 'random', seed: number = 42): GameState {
   const resolvedFaction = resolveFaction(faction);
   const size = resolveMapSize(mapSize);
-  const map = generateMap(size, size, resolvedFaction);
+  const map = generateMap(size, size, resolvedFaction, seed);
 
   const separatorPositions = getSeparatorPositions(map.buildings);
   const rawStorageCount = getRawStorageCount(map.buildings);
