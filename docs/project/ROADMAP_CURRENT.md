@@ -1,7 +1,7 @@
 # Four Elements Next — Current Roadmap
 
 Status: living roadmap.
-Last updated: 2026-05-19.
+Last updated: 2026-05-23.
 
 This document is the current project roadmap for `ratoker-jpg/four-elements-next`.
 
@@ -12,6 +12,7 @@ It consolidates:
 - map/resource/territory requirements;
 - visual asset pipeline direction;
 - manual QA observations after WORLD-GEN-ARCH-01 PR #59/#60;
+- MAP-EDITOR-ARCH-01 PR1–PR6 (editor, seed flow, mapgen config/presets);
 - the order of work before combat and enemy bot development.
 
 ## 1. Current project rule
@@ -79,6 +80,26 @@ Done:
 - harvester can deliver to HQ fallback;
 - one-tile construction spacing implemented.
 
+### MAP-EDITOR-ARCH-01
+
+Done:
+
+- PR #93 — Editor shell: separate editor screen, map preview, pan/zoom, info panel, toolbar
+- PR #94 — Object palette + placement/removal: Select/Place/Erase tools, palette UI, hover preview
+- PR #95 — Validation + placement feedback: `validateEditorMap()`, status line, validation panel, rejection reasons
+- PR #96 — Seed selection flow: Seed Screen between Map Size and Faction Select, seed input, "Случайный сид" button
+- PR #97 — Mapgen config foundation: `MapgenConfig` (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)`
+- PR #98 — Mapgen preset selector: `MapgenPresetId`, 4 presets (balanced / Сбалансированная, more-resources / Больше ресурсов, more-mountains / Больше скал и гор, open-map / Открытая карта)
+
+Current editor palette (no volcano entries):
+- Resources: small / medium / large / infinite
+- Obstacles: rock-cluster, mountain-small, mountain-medium, mountain-large
+- Decor: bush, sand-bump
+
+Not yet implemented: saved seeds, localStorage custom maps, launch game from edited map, sliders, custom preset editor, undo/redo, export/import/share.
+
+Volcanoes deprecated for current visual direction: no volcano UI, no volcano presets, no volcano config fields. Existing volcano code/types not removed.
+
 ### WORLD-GEN-ARCH-01
 
 Done:
@@ -143,12 +164,12 @@ Possible future dev tool:
 
 - optional resource amount overlay in debug/test mode.
 
-### 4.3 Too few mountains/volcanoes/obstacles
+### 4.3 Too few mountains/obstacles
 
 Current problem:
 
 - obstacles became too rare after mapgen work;
-- mountains and volcanoes visually disappeared or feel underrepresented;
+- mountains visually disappeared or feel underrepresented;
 - the map edges feel like empty cutoff instead of natural terrain boundaries.
 
 Target:
@@ -156,22 +177,21 @@ Target:
 - use map edges as terrain boundary zones;
 - edges should contain more mountains/rocks, creating a natural border instead of a simple map cutoff;
 - use mostly small and medium mountains;
-- use a small number of volcanoes;
 - avoid overfilling the playable start area;
 - avoid blocking first economy routes.
 
 Standard map target:
 
-- no large volcano by default;
 - no large mountain by default, unless explicitly tested and readable;
-- use small + medium mountains as edge/border content;
-- a few small/medium volcanoes only if they improve the map and do not dominate it.
+- use small + medium mountains as edge/border content.
 
 Large map target:
 
-- large mountains and one large volcano may be considered;
+- large mountains may be considered;
 - use sparingly;
 - keep center and start routes reachable.
+
+Note: volcanoes are deprecated for current visual direction. No volcano UI, no volcano presets, no volcano config fields. Use mountains and rock clusters for obstacles instead.
 
 ### 4.4 Edge terrain boundary
 
@@ -182,7 +202,6 @@ Target:
 - create an edge/border band around the map;
 - denser obstacle/decor near outer edges;
 - mostly mountain/rock clusters;
-- a few volcanoes as landmarks;
 - still keep camera/game readability clear.
 
 Possible stage:
@@ -194,7 +213,7 @@ Possible stage:
 Current problem:
 
 - buildings were tuned, but environment objects are not grounded/centered consistently;
-- small rocks, bumps, mountains, volcanoes, and resources can look offset from the tile center;
+- small rocks, bumps, mountains, and resources can look offset from the tile center;
 - many non-building assets appear to use default offset values that do not match their footprint/visual footprint.
 
 Target:
@@ -321,8 +340,7 @@ Stages:
 
 - create edge/border mountain zones;
 - use small and medium mountains near edges;
-- use volcanoes sparingly;
-- standard map avoids large volcano/large mountain by default;
+- standard map avoids large mountain by default;
 - large map may allow larger landmarks sparingly;
 - preserve center/start reachability.
 
@@ -394,15 +412,13 @@ Goal:
 Current existing pieces:
 
 - test hooks for economy/power/control/construction/harvesters/production/territory;
-- asset preview sandbox with `0` key.
+- asset preview sandbox with `0` key;
+- dev panel (DEV-SANDBOX-ARCH-01, DEV-SANDBOX-TOOLS-01, DEV-SANDBOX-TOOLS-02);
+- map editor screen with preview, palette, validation (MAP-EDITOR-ARCH-01).
 
 Missing:
 
-- visible dev panel;
 - fast-forward time;
-- add resources buttons;
-- move camera to HQ/center;
-- spawn/test builder/harvester/buildings;
 - show map seed/validation report/resource counts;
 - toggle territory/grid/obstacles/resource debug.
 
@@ -423,8 +439,10 @@ Current state:
 
 - main menu exists;
 - map size screen exists;
+- seed screen exists (seed input, "Случайный сид", 4 mapgen presets);
 - faction select exists;
 - settings has UI scale buttons;
+- editor screen exists (dev-only, preview/palette/validation);
 - Continue is disabled;
 - no save slot shell;
 - no Esc pause menu.
