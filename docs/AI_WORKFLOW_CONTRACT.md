@@ -132,7 +132,7 @@ Run a second audit only if one of these happens:
 - GLM starts using old sandbox architecture or wrong repository structure.
 - Branch/PR history becomes dirty enough that the diff is no longer trustworthy.
 
-## Current project status — 2026-05-19
+## Current project status — 2026-05-23
 
 ### Closed / accepted
 
@@ -140,9 +140,19 @@ Run a second audit only if one of these happens:
 - PR #52 — `ASSET-BUILDINGS-01`: tuned building render profiles and placement offsets.
 - PR #54 — `BUILDING-PLACEMENT-01`: added one-tile gap for auto-placed buildings.
 - PR #55 — `START-STATE-01`: simplified initial base state.
+- PR #93 — `MAP-EDITOR-ARCH-01 PR1`: editor shell, map preview, pan/zoom, info panel, toolbar.
+- PR #94 — `MAP-EDITOR-ARCH-01 PR2`: object palette + placement/removal, Select/Place/Erase tools.
+- PR #95 — `MAP-EDITOR-ARCH-01 PR3`: validation + placement feedback, status line, validation panel.
+- PR #96 — `MAP-EDITOR-ARCH-01 PR4`: seed selection flow, Seed Screen between Map Size and Faction Select.
+- PR #97 — `MAP-EDITOR-ARCH-01 PR5`: mapgen config foundation, `MapgenConfig`, `resolveMapgenConfig()`.
+- PR #98 — `MAP-EDITOR-ARCH-01 PR6`: mapgen preset selector, 4 presets on Seed Screen.
 
 ### Current gameplay baseline
 
+- New Game flow: Main Menu → Map Size → Seed Screen → Faction Select → Game Screen
+- Seed Screen: seed input, "Случайный сид" button, 4 mapgen presets (balanced, more-resources, more-mountains, open-map)
+- Back from Faction Select to Seed Screen preserves seed + preset
+- Map editor: dev-only screen with preview, pan/zoom, palette placement/removal, validation
 - Start state: HQ/base only as the starting building.
 - Starting units: 2 harvesters + 1 builder.
 - No extra starting buildings: no separator, no raw-storage, no power-plant, no command-relay.
@@ -150,6 +160,7 @@ Run a second audit only if one of these happens:
 - If a raw-storage is later built, harvester delivery should prefer it where appropriate.
 - Buildings and construction sites occupy their full footprint in occupied-tile checks.
 - New construction auto-placement enforces one-tile gap between buildings/sites.
+- Volcanoes deprecated for current visual direction: no volcano UI, no volcano presets, no volcano config fields.
 
 ### Current starting values
 

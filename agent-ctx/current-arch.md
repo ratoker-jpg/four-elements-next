@@ -38,25 +38,33 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - Tuned shadows smaller/directional, fixed builder movement facing, fixed/stabilized harvester runtime animation/flicker via waypoint-derived facing and guarded animation windows.
 **Status:** Done.
 
+### MAP-EDITOR-ARCH-01
+- PR1: Editor shell — separate editor screen, map preview, pan/zoom, info panel, toolbar
+- PR2: Object palette + placement/removal — Select/Place/Erase tools, palette UI, hover preview, placement helpers
+- PR3: Validation + placement feedback — `validateEditorMap()`, status line, validation panel, rejection reasons, HQ/economy overlays
+- PR4: Seed selection flow — Seed Screen between Map Size and Faction Select, seed input, "Случайный сид" button, Back preserves seed/preset
+- PR5: Mapgen config foundation — `MapgenConfig` (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)`
+- PR6: Mapgen preset selector — `MapgenPresetId`, 4 presets (balanced, more-resources, more-mountains, open-map), preset buttons on Seed Screen, threading to `createGameState`
+**Status:** Done (PR1–PR6 merged).
+
 ### WORKFLOW-SPEED-01
 Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
 **Status:** Done.
 
 ### WORKFLOW-SPEED-02
 Consolidation of workflow docs, prompt templates, conflict resolution with docs/AI_WORKFLOW_CONTRACT.md.
-**Status:** In progress.
+**Status:** Done.
 
 ## Likely Next Candidates
 
 | ID | Description | Priority |
 |---|---|---|
-| DOCS-SYNC-20260521 | Agent context sync after PRs 83–87 (done/current) | Done |
-| HARVESTER-VIDEO-MOVE-01 | Harvester movement video/visual polish | Medium |
-| HARVESTER-ANIMATION-PIPELINE-01 | Harvester animation pipeline improvements | Medium |
+| MAP-EDITOR-ARCH-01 (future) | Launch game from edited map, undo/redo, export/import/share | Medium |
 | UI-SHELL-01 | Esc menu / save / continue shell | Medium |
 | SAVE-LOAD-01 | Save/load system | Medium |
+| HARVESTER-VIDEO-MOVE-01 | Harvester movement video/visual polish | Medium |
+| HARVESTER-ANIMATION-PIPELINE-01 | Harvester animation pipeline improvements | Medium |
 | COMBAT-ARCH-01 | Combat system architecture | Low |
-| MAP-EDITOR-ARCH-01 | Map editor (later) | Low |
 
 ## Rule
 

@@ -19,9 +19,9 @@ TypeScript strict + Vite + Canvas 2D + HTML overlay UI + Vitest + Playwright.
 
 | Folder | Purpose |
 |---|---|
-| `src/game` | Map data, game state, game world, mapgen |
+| `src/game` | Map data, game state, game world, mapgen, mapgen-config, mapgen-presets, editor-state, editor-validation |
 | `src/systems` | economy, construction, production, harvesting, power, control, territory, passability, pathfinding |
-| `src/render` | Terrain, buildings, resources, units, dev overlays |
+| `src/render` | Terrain, buildings, resources, units, dev overlays, editor-preview |
 | `src/dev` | Dev panel, Sprite Debug, test hooks |
 | `src/core` | Constants (FORBIDDEN to change without explicit approval) |
 | `src/config` | Building definitions, footprints |
@@ -57,6 +57,69 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 ### VISUAL-QA-FIX-01
 - Shadow tuning (smaller/directional), builder movement facing fix, harvester runtime animation/flicker fix via waypoint-derived facing and guarded animation windows
 
+### MAP-EDITOR-ARCH-01
+- **PR1:** Editor shell — separate editor screen, map preview, pan/zoom, camera, info panel, toolbar skeleton (`src/screens/editor-screen.ts`, `src/render/editor-preview.ts`)
+- **PR2:** Object palette + placement/removal — Select/Place/Erase tools, palette UI (resources, obstacles, decor), hover tile tracking, valid/invalid footprint preview, `editor-state.ts` placement helpers (`src/game/editor-state.ts`)
+- **PR3:** Validation + placement feedback — `validateEditorMap()`, status line, validation panel, "Проверить карту" button, placement rejection reasons, HQ/start marker overlay, economy radius circle (`src/game/editor-validation.ts`)
+- **PR4:** Seed selection flow — Seed Screen inserted between Map Size and Faction Select, seed input pre-filled with random seed, "Случайный сид" button, `SeedScreenData` with optional `seed` and `mapgenPresetId`, Back preserves seed + preset (`src/screens/seed-screen.ts`, `src/types/screens.ts`)
+- **PR5:** Mapgen config foundation — `MapgenConfig` interface (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)` (`src/game/mapgen-config.ts`, `src/game/mapgen.ts`)
+- **PR6:** Mapgen preset selector on Seed Screen — `MapgenPresetId` type, `MAPGEN_PRESETS` record (4 presets), `resolveMapgenPresetConfig()`, preset buttons on Seed Screen, preset threading through all screens to `createGameState` (`src/game/mapgen-presets.ts`)
+
+## New Game Flow
+
+Main Menu → Map Size → Seed Screen → Faction Select → Game Screen
+
+Each screen passes data forward. Back navigation preserves user choices:
+- Back from Seed Screen to Map Size: no special state
+- Back from Faction Select to Seed Screen: preserves `seed` + `mapgenPresetId`
+
+## Seed Screen
+
+- Seed input field pre-filled with random seed
+- "Случайный сид" button to regenerate seed
+- Mapgen preset selector (4 buttons):
+  - `balanced` / Сбалансированная (default)
+  - `more-resources` / Больше ресурсов
+  - `more-mountains` / Больше скал и гор
+  - `open-map` / Открытая карта
+- Back from Faction Select preserves seed and selected preset
+
+## Mapgen Config & Presets
+
+- `MapgenConfig` — 15 tunable fields (resource counts, obstacle counts, decor counts)
+- `DEFAULT_MAPGEN_CONFIG` — matches pre-PR5 hardcoded values
+- `resolveMapgenConfig(config?: Partial<MapgenConfig>)` — merges partial overrides with defaults
+- `resolveMapgenPresetConfig(id: MapgenPresetId)` — resolves a preset ID to full `MapgenConfig`
+- `generateMap(width, height, faction, seed, config?: Partial<MapgenConfig>)` — config param added in PR5
+- Presets are defined in `src/game/mapgen-presets.ts`, resolved only in `createGameState`
+- No volcano presets or volcano-specific config fields
+
+## Map Editor
+
+- Separate editor screen (dev-only: `DEV` / `test` / `?devtools=1`)
+- Map preview with camera pan (arrow keys / right-click drag) and zoom (scroll wheel)
+- Tools: Select, Place, Erase (keyboard shortcuts Q/W/E)
+- Object palette (visible in Place mode):
+  - **Resources:** small / medium / large / infinite
+  - **Obstacles:** rock-cluster, mountain-small, mountain-medium, mountain-large
+  - **Decor:** bush, sand-bump
+  - No volcano UI/palette entries
+- Valid/invalid footprint preview (green/red) on hover in Place mode
+- Erase-target highlight on hover in Erase mode
+- Status line showing current tile, active tool, selection, and rejection reasons
+- Validation panel with "Проверить карту" button, `validateEditorMap()` runs on edit and on demand
+- Editor mutates editor `MapData` only — not live `GameState`
+
+## Not Implemented Yet
+
+- Saved seeds / seed history
+- localStorage for custom maps
+- Launch game from custom/edited map
+- Sliders / advanced numeric controls for mapgen parameters
+- Custom preset editor
+- Undo/redo in editor
+- Map export/import/share
+
 ## Important Gameplay Facts
 
 - **Blocking:** resources, buildings, HQ, obstacles block movement and construction
@@ -67,6 +130,7 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - **Matter refund:** on repath-failure cancel, `economy.resources.matter = Math.min(matter + costMatter, matterCap)`
 - **Building spacing:** one-tile gap required between buildings/HQ/construction-sites
 - **E2E timing:** `__constructionState` hook updates per animation frame; use `expect.poll()` for state changes after UI clicks
+- **Volcanoes:** deprecated for current visual direction; no volcano UI, no volcano presets, no volcano config fields; existing volcano code/types are not removed
 
 ## Dev Panel Capabilities
 
