@@ -1,10 +1,12 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1+PR2 — Editor screen with tools and palette.
+ * MAP-EDITOR-ARCH-01 PR1+PR2+PR3 — Editor screen with tools, palette, and validation.
  *
  * Dev-only screen for viewing and editing a generated map preview.
  * Camera pan/zoom works. PR2 adds: Select/Place/Erase tools,
  * object palette, hover tile tracking, valid/invalid footprint preview,
  * placement/removal on editor MapData only.
+ * PR3 adds: status line, validation panel, "Проверить карту" button,
+ * placement rejection reasons, validation after edit, HQ/economy overlays.
  *
  * Availability: same guard as dev panel (DEV / test / ?devtools=1).
  */
@@ -32,12 +34,24 @@ import {
   findEntityAtTile,
   eraseAtTile,
 } from '../game/editor-state.js';
+import {
+  validateEditorMap,
+  getPlacementRejectionReason,
+} from '../game/editor-validation.js';
+import type { EditorValidationResult } from '../game/editor-validation.js';
 import type { ResourceNodeState } from '../systems/harvesting.js';
 import type { MapData, ResourceType, ObstacleType, DecorType } from '../game/map-types.js';
 
 function resolveMapSize(mapSize: string): number {
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
 }
+
+/** Tool labels for status line display. */
+const TOOL_LABELS: Record<EditorTool, string> = {
+  select: 'Выбор',
+  place: 'Размещение',
+  erase: 'Удаление',
+};
 
 export function createEditorScreen(navigate: NavigateFn): Screen {
   let camera: Camera | null = null;
@@ -68,9 +82,14 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
 
   // DOM references for live updates
   let infoEl: HTMLElement | null = null;
+  let statusEl: HTMLElement | null = null;
+  let validationEl: HTMLElement | null = null;
   let paletteEl: HTMLElement | null = null;
   let toolBtns: Map<EditorTool, HTMLButtonElement> = new Map();
   let canvas: HTMLCanvasElement | null = null;
+
+  // PR3: Cached validation result
+  let lastValidation: EditorValidationResult | null = null;
 
   // Bound handlers for cleanup
   let boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
@@ -90,6 +109,75 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       `<span>Ресурсы: ${mapData.resources.length}</span>` +
       `<span>Препятствия: ${mapData.obstacles.length}</span>` +
       `<span>Декор: ${mapData.decor.length}</span>`;
+  }
+
+  /** Update the status line with current hover/tool/selection info. */
+  function updateStatus(): void {
+    if (!statusEl || !mapData) return;
+
+    const parts: string[] = [];
+
+    // Current tile
+    if (hoverTx >= 0 && hoverTy >= 0 && hoverTx < mapWidth && hoverTy < mapHeight) {
+      parts.push(`Клетка: (${hoverTx}, ${hoverTy})`);
+    }
+
+    // Active tool
+    parts.push(`Инструмент: ${TOOL_LABELS[activeTool]}`);
+
+    // Selected object (only in Place mode)
+    if (activeTool === 'place' && selectedPaletteItem) {
+      parts.push(`Объект: ${selectedPaletteItem.label}`);
+    } else if (activeTool === 'place' && !selectedPaletteItem) {
+      parts.push('Объект: не выбран');
+    }
+
+    // Rejection reason (only when hovering in Place mode)
+    if (activeTool === 'place' && selectedPaletteItem && hoverTx >= 0 && hoverTy >= 0) {
+      const reason = getPlacementRejectionReason(
+        mapData, hoverTx, hoverTy, selectedPaletteItem.footprint,
+      );
+      if (reason) {
+        parts.push(`<span class="editor-status__reason">${reason}</span>`);
+      }
+    }
+
+    statusEl.innerHTML = parts.join(' &middot; ');
+  }
+
+  /** Run validation and update the validation panel. */
+  function runValidation(): void {
+    if (!mapData || !validationEl) return;
+    lastValidation = validateEditorMap(mapData);
+    renderValidationPanel(lastValidation);
+  }
+
+  /** Render validation results into the validation panel. */
+  function renderValidationPanel(result: EditorValidationResult): void {
+    if (!validationEl) return;
+
+    const statusClass = result.ok ? 'editor-validation__status--ok' : 'editor-validation__status--error';
+    const statusText = result.ok ? 'OK' : 'ОШИБКИ';
+
+    let html = `<div class="editor-validation__status ${statusClass}">${statusText}</div>`;
+
+    if (result.errors.length > 0) {
+      html += '<div class="editor-validation__errors">';
+      for (const err of result.errors) {
+        html += `<div class="editor-validation__error">⚠ ${err}</div>`;
+      }
+      html += '</div>';
+    }
+
+    if (result.warnings.length > 0) {
+      html += '<div class="editor-validation__warnings">';
+      for (const warn of result.warnings) {
+        html += `<div class="editor-validation__warning">⚡ ${warn}</div>`;
+      }
+      html += '</div>';
+    }
+
+    validationEl.innerHTML = html;
   }
 
   /** Set the active tool and update UI. */
@@ -171,11 +259,13 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       }
       if (placed) {
         updateInfo();
+        runValidation();
       }
     } else if (activeTool === 'erase') {
       const erased = eraseAtTile(mapData, tx, ty, resourceNodes);
       if (erased) {
         updateInfo();
+        runValidation();
       }
     }
   }
@@ -279,6 +369,27 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       updateInfo();
       overlay.appendChild(infoEl);
 
+      // ── PR3: Status line ────────────────────────────────────────────
+      statusEl = document.createElement('div');
+      statusEl.className = 'editor-status';
+      statusEl.id = 'editor-status';
+      statusEl.textContent = 'Инструмент: Выбор';
+      overlay.appendChild(statusEl);
+
+      // ── PR3: Validate button ────────────────────────────────────────
+      const btnValidate = document.createElement('button');
+      btnValidate.className = 'btn btn--tool editor-overlay__validate-btn';
+      btnValidate.id = 'editor-validate-btn';
+      btnValidate.textContent = 'Проверить карту';
+      btnValidate.addEventListener('click', () => runValidation());
+      overlay.appendChild(btnValidate);
+
+      // ── PR3: Validation result panel ────────────────────────────────
+      validationEl = document.createElement('div');
+      validationEl.className = 'editor-validation';
+      validationEl.id = 'editor-validation';
+      overlay.appendChild(validationEl);
+
       const btnBack = document.createElement('button');
       btnBack.className = 'btn btn--back editor-overlay__back';
       btnBack.id = 'editor-back-btn';
@@ -346,6 +457,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       const center = tileToScreen(mapWidth / 2, mapHeight / 2);
       camera = new Camera(center.x, center.y);
 
+      // PR3: Run initial validation on generated map
+      runValidation();
+
       // Setup event handlers
       boundKeyDown = (e: KeyboardEvent) => {
         keys.add(e.code);
@@ -374,6 +488,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
         const { tx, ty } = mouseToTile(e);
         hoverTx = tx;
         hoverTy = ty;
+
+        // PR3: Update status line on every mouse move
+        updateStatus();
 
         // Panning
         if (!isPanning || !camera) return;
@@ -482,8 +599,11 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       resourceNodes = null;
       canvas = null;
       infoEl = null;
+      statusEl = null;
+      validationEl = null;
       paletteEl = null;
       toolBtns.clear();
+      lastValidation = null;
 
       boundKeyDown = null;
       boundKeyUp = null;

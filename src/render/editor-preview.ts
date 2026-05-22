@@ -1,5 +1,5 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1+PR2 — Thin editor preview renderer.
+ * MAP-EDITOR-ARCH-01 PR1+PR2+PR3 — Thin editor preview renderer.
  *
  * Renders a map preview for the editor screen: terrain, HQ, resources,
  * obstacles, decor, and an always-on grid overlay. No economy, power,
@@ -8,11 +8,13 @@
  * PR2 adds: hover tile highlight, valid/invalid footprint preview,
  * erase-target highlight.
  *
+ * PR3 adds: HQ/start marker border, start economy radius circle.
+ *
  * This is a standalone renderer to avoid coupling the editor to the full
  * render() signature which requires economy/power/harvesters/territory.
  */
 
-import { BG_COLOR, HQ_FOOTPRINT, TILE_W, TILE_H } from '../core/constants.js';
+import { BG_COLOR, HQ_FOOTPRINT, TILE_W, TILE_H, START_ECONOMY_RADIUS } from '../core/constants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { AssetStore } from '../core/assets.js';
 import type { MapData } from '../game/map-types.js';
@@ -129,6 +131,93 @@ function drawGridOverlay(
     }
   }
 
+  ctx.restore();
+}
+
+// ── PR3: HQ / start marker overlay ──────────────────────────────────
+
+/** Draw a highlighted border around the HQ footprint to mark the start position. */
+function drawHqMarkerOverlay(
+  ctx: CanvasRenderingContext2D,
+  map: MapData,
+  camera: Camera,
+): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+  const hw = (TILE_W / 2) * camera.zoom;
+  const hh = (TILE_H / 2) * camera.zoom;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,229,255,0.45)';
+  ctx.lineWidth = 2;
+
+  for (let dy = 0; dy < HQ_FOOTPRINT; dy++) {
+    for (let dx = 0; dx < HQ_FOOTPRINT; dx++) {
+      const tx = map.hq.tx + dx;
+      const ty = map.hq.ty + dy;
+      const scr = tileToScreen(tx + 0.5, ty + 0.5);
+      const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+
+      if (cv.x < -hw * 2 || cv.x > canvasW + hw * 2) continue;
+      if (cv.y < -hh * 2 || cv.y > canvasH + hh * 2) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(cv.x, cv.y - hh);
+      ctx.lineTo(cv.x + hw, cv.y);
+      ctx.lineTo(cv.x, cv.y + hh);
+      ctx.lineTo(cv.x - hw, cv.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+// ── PR3: Start economy radius circle ─────────────────────────────────
+
+/**
+ * Draw a faint elliptical ring showing the start economy radius around HQ.
+ * In isometric projection, a circle in tile space becomes an ellipse on screen.
+ */
+function drawEconomyRadiusOverlay(
+  ctx: CanvasRenderingContext2D,
+  map: MapData,
+  camera: Camera,
+): void {
+  const canvasW = ctx.canvas.width;
+  const canvasH = ctx.canvas.height;
+
+  // HQ center in tile coordinates
+  const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
+  const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
+
+  // Sample points on a circle of radius START_ECONOMY_RADIUS in tile space,
+  // then draw them as a polygon in screen space
+  const numPoints = 64;
+  const points: Array<{ x: number; y: number }> = [];
+
+  for (let i = 0; i < numPoints; i++) {
+    const angle = (2 * Math.PI * i) / numPoints;
+    const tx = hqCx + START_ECONOMY_RADIUS * Math.cos(angle);
+    const ty = hqCy + START_ECONOMY_RADIUS * Math.sin(angle);
+    const scr = tileToScreen(tx, ty);
+    const cv = camera.toCanvas(scr.x, scr.y, canvasW, canvasH);
+    points.push(cv);
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(33,150,243,0.28)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(points[0]!.x, points[0]!.y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i]!.x, points[i]!.y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.restore();
 }
 
@@ -314,6 +403,12 @@ export function editorPreviewRender(
 
   // Grid overlay — always on in editor
   drawGridOverlay(ctx, map, camera);
+
+  // PR3: HQ start marker — drawn after grid, before hover
+  drawHqMarkerOverlay(ctx, map, camera);
+
+  // PR3: Start economy radius — faint dashed ring
+  drawEconomyRadiusOverlay(ctx, map, camera);
 
   // Hover / footprint preview — drawn on top of everything
   if (hover) {
