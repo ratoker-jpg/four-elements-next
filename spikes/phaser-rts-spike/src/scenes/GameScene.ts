@@ -273,14 +273,19 @@ export class GameScene extends Phaser.Scene {
     const startPos = tileToScreen(ROUTE_HQ_TILE.tx, ROUTE_HQ_TILE.ty);
     const depth = getDepthKey(ROUTE_HQ_TILE.tx, ROUTE_HQ_TILE.ty, profile.footprint);
 
+    // Use texture key 'harvester' with south-idle frame (row 2, col 0 → frame 16)
+    // Animation keys like 'harvester_south_idle' are for .play(), not for sprite creation.
+    const SOUTH_IDLE_FRAME = 2 * 8 + 0; // row 2 (south), col 0 (idle)
     const sprite = this.add.sprite(
       startPos.x,
       startPos.y - profile.groundOffset,
-      'harvester_south_idle',
+      'harvester',
+      SOUTH_IDLE_FRAME,
     );
     sprite.setDisplaySize(profile.displayW, profile.displayH);
     sprite.setDepth(depth + 0.5);
     sprite.setOrigin(0.5, 1);
+    sprite.play('harvester_south_idle');
 
     const mineralPos = tileToScreen(ROUTE_MINERAL_TILE.tx, ROUTE_MINERAL_TILE.ty);
 
@@ -396,10 +401,10 @@ export class GameScene extends Phaser.Scene {
       const tileDy = aheadTile.ty - currentTile.ty;
 
       const newRow = directionToRow(tileDx, tileDy);
-      if (newRow !== h.dirRow) {
-        h.dirRow = newRow;
-        this.playHarvesterAnim(h, 'move');
-      }
+      h.dirRow = newRow;
+      // Always ensure 'move' animation is playing while the harvester is
+      // in a movement state — direction may not change but phase must.
+      this.playHarvesterAnim(h, 'move');
     }
 
     // Update sprite position
