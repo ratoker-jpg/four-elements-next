@@ -29,6 +29,26 @@
     #hud span { white-space: nowrap; }
     #hud .label { color: #9a9070; }
     #hud .value { color: #f0e8d0; font-weight: 600; }
+    #debug-hud {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      pointer-events: none;
+      font-family: monospace;
+      font-size: 12px;
+      color: #c0b890;
+      background: rgba(30, 28, 24, 0.75);
+      padding: 6px 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(200, 190, 160, 0.2);
+      display: flex;
+      gap: 16px;
+    }
+    #debug-hud span { white-space: nowrap; }
+    #debug-hud .label { color: #887755; }
+    #debug-hud .value { color: #d0c8a0; font-weight: 600; }
     #spike-label {
       position: absolute;
       bottom: 12px;
@@ -49,7 +69,12 @@
     <span><span class="label">Matter:</span> <span class="value" id="hud-matter">120</span></span>
     <span><span class="label">Element:</span> <span class="value" id="hud-element">3</span></span>
   </div>
-  <div id="spike-label">PHASER-SPIKE-01 Stage 1 — WASD/Arrows=Pan, Scroll=Zoom</div>
+  <div id="debug-hud">
+    <span><span class="label">State:</span> <span class="value" id="hud-state">—</span></span>
+    <span><span class="label">Dir:</span> <span class="value" id="hud-direction">—</span></span>
+    <span><span class="label">Depth:</span> <span class="value" id="hud-depth">—</span></span>
+  </div>
+  <div id="spike-label">PHASER-SPIKE-01 Stage 2 — WASD/Arrows=Pan, Scroll=Zoom</div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
