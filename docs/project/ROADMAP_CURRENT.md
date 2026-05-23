@@ -12,7 +12,7 @@ It consolidates:
 - map/resource/territory requirements;
 - visual asset pipeline direction;
 - manual QA observations after WORLD-GEN-ARCH-01 PR #59/#60;
-- MAP-EDITOR-ARCH-01 PR1–PR6 (editor, seed flow, mapgen config/presets);
+- MAP-EDITOR-ARCH-01 PR1–PR10 (editor, seed flow, mapgen config/presets, saved seeds, custom maps, game launch);
 - the order of work before combat and enemy bot development.
 
 ## 1. Current project rule
@@ -90,13 +90,43 @@ Done:
 - PR #96 — Seed selection flow: Seed Screen between Map Size and Faction Select, seed input, "Случайный сид" button
 - PR #97 — Mapgen config foundation: `MapgenConfig` (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)`
 - PR #98 — Mapgen preset selector: `MapgenPresetId`, 4 presets (balanced / Сбалансированная, more-resources / Больше ресурсов, more-mountains / Больше скал и гор, open-map / Открытая карта)
+- PR #99 — Docs sync after PR1–PR6
+- PR #100 — Saved seeds: `SeedStorageAdapter` pattern, "Сохранить сид" button, saved seed list with load/delete on Seed Screen, key `four-elements-next.seeds.v1`, cap 20
+- PR #101 — Custom map localStorage slots: `CustomMapStorageAdapter` pattern, "Сохранить карту" button, collapsible saved maps panel with load/delete, key `four-elements-next.custom-maps.v1`, cap 20 maps, stores MapData only
+- PR #102 — Launch game from custom map: "Начать игру" button, `createGameStateFromMap()`, `GameWorld.fromCustomMap()`, `customMapData` in `GameScreenData`, faction from `mapData.hq.faction`, invalid map blocked with status feedback
 
 Current editor palette (no volcano entries):
 - Resources: small / medium / large / infinite
 - Obstacles: rock-cluster, mountain-small, mountain-medium, mountain-large
 - Decor: bush, sand-bump
 
-Not yet implemented: saved seeds, localStorage custom maps, launch game from edited map, sliders, custom preset editor, undo/redo, export/import/share.
+Current Seed Screen features:
+- Seed input pre-filled with random seed
+- "Случайный сид" button to regenerate seed
+- 4 mapgen preset buttons
+- "Сохранить сид" button — saves seed + preset to localStorage
+- Saved seeds list — load/delete (collapsible panel)
+- Back from Faction Select preserves seed + preset
+
+Current editor features:
+- Map preview with pan/zoom
+- Select/Place/Erase tools with keyboard shortcuts
+- Object palette, valid/invalid hover preview, erase-target highlight
+- Validation panel + status line
+- Save/load/delete custom maps in localStorage
+- "Начать игру" button — launches game from valid editor map
+- Invalid map shows error status and does not launch
+- Deep-clones MapData before runtime use
+- Editor MapData mutations do not affect saved maps or running game
+
+Custom map runtime path:
+- Editor MapData → `validateEditorMap(mapData)` → `customMapData` in `GameScreenData` → `GameWorld.fromCustomMap(canvas, mapData, faction)` → `createGameStateFromMap(map, faction)` (deep-clones input) → normal game loop
+
+Storage:
+- Saved seeds: key `four-elements-next.seeds.v1`, cap 20, stores seed + preset ID
+- Custom maps: key `four-elements-next.custom-maps.v1`, cap 20, stores MapData only (not GameState)
+
+Not yet implemented: export/import, map sharing, undo/redo, map rename/duplicate, sliders, custom preset editor, asset calibration system, full asset variant pipeline, GameState save/load.
 
 Volcanoes deprecated for current visual direction: no volcano UI, no volcano presets, no volcano config fields. Existing volcano code/types not removed.
 
@@ -414,7 +444,7 @@ Current existing pieces:
 - test hooks for economy/power/control/construction/harvesters/production/territory;
 - asset preview sandbox with `0` key;
 - dev panel (DEV-SANDBOX-ARCH-01, DEV-SANDBOX-TOOLS-01, DEV-SANDBOX-TOOLS-02);
-- map editor screen with preview, palette, validation (MAP-EDITOR-ARCH-01).
+- map editor screen with preview, palette, validation, save/load, game launch (MAP-EDITOR-ARCH-01 PR1–PR10).
 
 Missing:
 
@@ -442,7 +472,8 @@ Current state:
 - seed screen exists (seed input, "Случайный сид", 4 mapgen presets);
 - faction select exists;
 - settings has UI scale buttons;
-- editor screen exists (dev-only, preview/palette/validation);
+- editor screen exists (dev-only, preview/palette/validation/save/load/game launch);
+- seed screen has saved seeds (load/delete, collapsible panel);
 - Continue is disabled;
 - no save slot shell;
 - no Esc pause menu.

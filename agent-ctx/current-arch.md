@@ -45,7 +45,11 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - PR4: Seed selection flow — Seed Screen between Map Size and Faction Select, seed input, "Случайный сид" button, Back preserves seed/preset
 - PR5: Mapgen config foundation — `MapgenConfig` (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)`
 - PR6: Mapgen preset selector — `MapgenPresetId`, 4 presets (balanced, more-resources, more-mountains, open-map), preset buttons on Seed Screen, threading to `createGameState`
-**Status:** Done (PR1–PR6 merged).
+- PR7: Docs sync — updated agent-ctx, workflow docs, and roadmap after PR1–PR6
+- PR8: Saved seeds — `SeedStorageAdapter` pattern, "Сохранить сид" button, saved seed list with load/delete on Seed Screen, key `four-elements-next.seeds.v1`, cap 20
+- PR9: Custom map localStorage slots — `CustomMapStorageAdapter` pattern, "Сохранить карту" button, collapsible saved maps panel with load/delete, key `four-elements-next.custom-maps.v1`, cap 20 maps, stores MapData only
+- PR10: Launch game from custom map — "Начать игру" button, `createGameStateFromMap()`, `GameWorld.fromCustomMap()`, `customMapData` in `GameScreenData`, faction from `mapData.hq.faction`, invalid map blocked
+**Status:** Done (PR1–PR10).
 
 ### WORKFLOW-SPEED-01
 Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
@@ -59,9 +63,9 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 
 | ID | Description | Priority |
 |---|---|---|
-| MAP-EDITOR-ARCH-01 (future) | Launch game from edited map, undo/redo, export/import/share | Medium |
+| MAP-EDITOR-ARCH-01 (future) | Export/import, map sharing, undo/redo, map rename/duplicate, advanced sliders, custom preset editor | Low |
 | UI-SHELL-01 | Esc menu / save / continue shell | Medium |
-| SAVE-LOAD-01 | Save/load system | Medium |
+| SAVE-LOAD-01 | Save/load system (GameState persistence) | Medium |
 | HARVESTER-VIDEO-MOVE-01 | Harvester movement video/visual polish | Medium |
 | HARVESTER-ANIMATION-PIPELINE-01 | Harvester animation pipeline improvements | Medium |
 | COMBAT-ARCH-01 | Combat system architecture | Low |

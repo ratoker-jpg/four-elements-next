@@ -64,6 +64,10 @@ Dev panel, `?devtools=1` guard, grid/footprint/blocking overlays, Sprite Debug o
 - **PR4:** Seed selection flow — Seed Screen inserted between Map Size and Faction Select, seed input pre-filled with random seed, "Случайный сид" button, `SeedScreenData` with optional `seed` and `mapgenPresetId`, Back preserves seed + preset (`src/screens/seed-screen.ts`, `src/types/screens.ts`)
 - **PR5:** Mapgen config foundation — `MapgenConfig` interface (15 fields), `DEFAULT_MAPGEN_CONFIG`, `resolveMapgenConfig()`, `generateMap(..., config?)` (`src/game/mapgen-config.ts`, `src/game/mapgen.ts`)
 - **PR6:** Mapgen preset selector on Seed Screen — `MapgenPresetId` type, `MAPGEN_PRESETS` record (4 presets), `resolveMapgenPresetConfig()`, preset buttons on Seed Screen, preset threading through all screens to `createGameState` (`src/game/mapgen-presets.ts`)
+- **PR7:** Docs sync — updated agent-ctx, workflow docs, and roadmap after PR1–PR6
+- **PR8:** Saved seeds — `SeedStorageAdapter` pattern (production: localStorage, tests: in-memory Map), seed input pre-fill, "Сохранить сид" button, saved seed list on Seed Screen with load/delete, key `four-elements-next.seeds.v1`, cap 20 seeds (`src/game/seed-storage.ts`, `src/screens/seed-screen.ts`)
+- **PR9:** Custom map localStorage slots — `CustomMapStorageAdapter` pattern (production: localStorage, tests: in-memory Map), "Сохранить карту" button in editor, collapsible saved maps panel with load/delete, key `four-elements-next.custom-maps.v1`, cap 20 maps, stores `MapData` only (not `GameState`) (`src/game/custom-map-storage.ts`, `src/screens/editor-screen.ts`)
+- **PR10:** Launch game from custom map — "Начать игру" button in editor, `createGameStateFromMap(map, faction)` deep-clones input `MapData`, `GameWorld.fromCustomMap(canvas, mapData, faction)` static factory, `customMapData` field in `GameScreenData`, faction from `mapData.hq.faction`, builder logic preserves `map.builders` or creates one near HQ, invalid map blocked with status feedback (`src/game/game-state.ts`, `src/game/game-world.ts`, `src/types/screens.ts`, `src/screens/game-screen.ts`, `src/screens/editor-screen.ts`)
 
 ## New Game Flow
 
@@ -82,6 +86,8 @@ Each screen passes data forward. Back navigation preserves user choices:
   - `more-resources` / Больше ресурсов
   - `more-mountains` / Больше скал и гор
   - `open-map` / Открытая карта
+- "Сохранить сид" button — saves current seed + preset to localStorage
+- Saved seeds list — load/delete saved seeds (collapsible panel)
 - Back from Faction Select preserves seed and selected preset
 
 ## Mapgen Config & Presets
@@ -108,17 +114,46 @@ Each screen passes data forward. Back navigation preserves user choices:
 - Erase-target highlight on hover in Erase mode
 - Status line showing current tile, active tool, selection, and rejection reasons
 - Validation panel with "Проверить карту" button, `validateEditorMap()` runs on edit and on demand
+- "Сохранить карту" button — saves current editor MapData to localStorage
+- Collapsible saved maps panel — load/delete saved custom maps
+- "Начать игру" button — launches Game Screen from current valid editor MapData
+  - Validates map before launch; shows error status if invalid
+  - Deep-clones MapData before runtime use (JSON round-trip)
+  - Faction from `mapData.hq.faction`
+  - Builder logic: preserves `map.builders` if valid, else creates one near HQ
 - Editor mutates editor `MapData` only — not live `GameState`
+- Custom map does not mutate saved map data in localStorage
+
+## Custom Map Runtime Path
+
+Editor MapData → `validateEditorMap(mapData)` → `customMapData` field in `GameScreenData` → `GameWorld.fromCustomMap(canvas, mapData, faction)` → `createGameStateFromMap(map, faction)` (deep-clones input) → normal game loop
+
+## Storage
+
+- **Saved seeds:** key `four-elements-next.seeds.v1`, cap 20, stores seed + preset ID
+- **Custom maps:** key `four-elements-next.custom-maps.v1`, cap 20, stores MapData only (not GameState)
+- **Adapter pattern:** `SeedStorageAdapter` and `CustomMapStorageAdapter` — production uses localStorage, tests inject in-memory Map
 
 ## Not Implemented Yet
 
-- Saved seeds / seed history
-- localStorage for custom maps
-- Launch game from custom/edited map
-- Sliders / advanced numeric controls for mapgen parameters
-- Custom preset editor
+- Export/import for custom maps
+- Map sharing
 - Undo/redo in editor
-- Map export/import/share
+- Map rename/duplicate
+- Advanced sliders / numeric controls for mapgen parameters
+- Custom preset editor
+- Asset calibration system
+- Full asset variant pipeline
+- GameState save/load
+
+## Constraints
+
+- No volcano UI/presets in editor or seed screen
+- No GameState save/load yet (only MapData is persisted in localStorage)
+- Normal seed/preset New Game flow must remain unchanged
+- Editor mutates editor MapData, not live GameState until launch
+- Custom maps store MapData only — runtime mutations do not flow back to saved data
+- Custom map launch deep-clones MapData to prevent runtime side effects on editor state
 
 ## Important Gameplay Facts
 
