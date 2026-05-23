@@ -59,16 +59,27 @@ Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
 Consolidation of workflow docs, prompt templates, conflict resolution with docs/AI_WORKFLOW_CONTRACT.md.
 **Status:** Done.
 
+### ENV-ASSET-CALIBRATION-01
+- PR1 (PR #111): ENV-NO-VOLCANO-01 — removed volcanoes from active generation and editor
+- PR2 (PR #112): ENV-ASSET-TUNER-01 — dev-only environment asset calibration panel
+- PR3 (PR #113): ENV-ASSET-PROFILE-APPLY-01 — applied approved environment asset calibration values
+**Status:** Done.
+
+### CIVIL-BASELINE-01
+- PR1 (PR #114): ECONOMY-PACE-01 — first 5-8 minutes economy pacing baseline
+- PR2 (PR #115): VALIDATION-BFS-01 — BFS/flood-fill map reachability validation
+- PR3 (PR #116): PATH-TELEMETRY-CACHE-01 — pathfinding telemetry and passability grid cache
+**Status:** Done.
+
 ## In Progress
 
-### ASSET-PIPELINE-ARCH-01
-- PR1: Docs/spec only — asset pipeline spec for map/environment assets (`docs/project/ASSET_PIPELINE_ARCH_01.md`), generation prompt templates (`docs/project/ASSET_GENERATION_PROMPTS.md`), no code/tests/assets
-**Status:** PR1 in review.
+(None currently.)
 
 ## Likely Next Candidates
 
 | ID | Description | Priority |
 |---|---|---|
+| MAPGEN-RESOURCE-BALANCE-01 | Refine map resource distribution and balance for first 10+ minutes | High |
 | MAP-EDITOR-ARCH-01 (future) | Export/import, map sharing, undo/redo, map rename/duplicate, advanced sliders, custom preset editor | Low |
 | UI-SHELL-01 | Esc menu / save / continue shell | Medium |
 | SAVE-LOAD-01 | Save/load system (GameState persistence) | Medium |

@@ -10,6 +10,7 @@ This folder records project decisions for four-elements-next.
 
 ## Documents
 
+- QUICKSTART_FOR_AI.md: short AI onboarding doc — read this first in any new session.
 - NEXT_00_BLUEPRINT.md: product and architecture baseline.
 - NEXT_ROADMAP.md: staged roadmap.
 - ARCHITECTURE_RULES.md: architecture guardrails.

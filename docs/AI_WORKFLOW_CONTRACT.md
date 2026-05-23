@@ -132,7 +132,7 @@ Run a second audit only if one of these happens:
 - GLM starts using old sandbox architecture or wrong repository structure.
 - Branch/PR history becomes dirty enough that the diff is no longer trustworthy.
 
-## Current project status — 2026-05-23
+## Current project status — 2026-05-24
 
 ### Closed / accepted
 
@@ -150,6 +150,12 @@ Run a second audit only if one of these happens:
 - PR #100 — `MAP-EDITOR-ARCH-01 PR8`: saved seeds, `SeedStorageAdapter`, seed list on Seed Screen.
 - PR #101 — `MAP-EDITOR-ARCH-01 PR9`: custom map localStorage slots, `CustomMapStorageAdapter`, save/load/delete in editor.
 - PR #102 — `MAP-EDITOR-ARCH-01 PR10`: launch game from custom map, `createGameStateFromMap()`, `GameWorld.fromCustomMap()`, "Начать игру" button.
+- PR #111 — `ENV-NO-VOLCANO-01`: removed volcanoes from active generation and editor.
+- PR #112 — `ENV-ASSET-TUNER-01`: dev-only environment asset calibration panel.
+- PR #113 — `ENV-ASSET-PROFILE-APPLY-01`: applied approved environment asset calibration values.
+- PR #114 — `ECONOMY-PACE-01`: first 5-8 minutes economy pacing baseline.
+- PR #115 — `VALIDATION-BFS-01`: BFS/flood-fill map reachability validation.
+- PR #116 — `PATH-TELEMETRY-CACHE-01`: pathfinding telemetry and passability grid cache.
 
 ### Current gameplay baseline
 
@@ -171,16 +177,21 @@ Run a second audit only if one of these happens:
 - New construction auto-placement enforces one-tile gap between buildings/sites.
 - Volcanoes deprecated for current visual direction: no volcano UI, no volcano presets, no volcano config fields.
 
-### Current starting values
+### Current starting values (post ECONOMY-PACE-01)
 
 - Buildings: 0 extra buildings beyond HQ/base.
 - Builders: 1.
 - Harvesters: 2.
-- Raw: `0/200`.
-- Matter: `100/200`.
+- Raw: `30/200`.
+- Matter: `120/200`.
 - Active faction element: `3/10`.
 - Power: HQ supply only, net `+2`.
 - Control: `3/10`.
+- Separator: costMatter=60, buildTimeSeconds=20, RAW_COST=12, CYCLE_SECONDS=5, ELEMENT_YIELD=2.
+- Power Plant: costMatter=100.
+- Units Factory: costMatter=120.
+- Builder: matter=40, duration=15.
+- Harvester: matter=50, duration=20.
 
 ### Closed building asset block
 
@@ -201,11 +212,13 @@ Future candidate assets should go through asset preview and the asset gates in `
 
 Read before advising or implementing project work:
 
-1. `docs/AI_WORKFLOW_CONTRACT.md`
-2. `docs/ARCHITECTURE_RULES.md`
-3. `docs/architecture/NEXT_ARCHITECTURE_OVERVIEW.md`
-4. `docs/ASSET_POLICY.md`
-5. `docs/project/BUILDING_ASSETS_CHECKPOINT_20260519.md`
+1. `docs/QUICKSTART_FOR_AI.md` — start here
+2. `agent-ctx/state.md` — project state quick reference
+3. `docs/AI_WORKFLOW_CONTRACT.md` — this file
+4. `docs/ARCHITECTURE_RULES.md`
+5. `docs/architecture/NEXT_ARCHITECTURE_OVERVIEW.md`
+6. `docs/ASSET_POLICY.md`
+7. `docs/project/BUILDING_ASSETS_CHECKPOINT_20260519.md`
 
 Core rules:
 

@@ -20,7 +20,7 @@ TypeScript strict + Vite + Canvas 2D + HTML overlay UI + Vitest + Playwright.
 | Folder | Purpose |
 |---|---|
 | `src/game` | Map data, game state, game world, mapgen, mapgen-config, mapgen-presets, editor-state, editor-validation |
-| `src/systems` | economy, construction, production, harvesting, power, control, territory, passability, pathfinding |
+| `src/systems` | economy, construction, production, harvesting, power, control, territory, passability, pathfinding, path-telemetry |
 | `src/render` | Terrain, buildings, resources, units, dev overlays, editor-preview |
 | `src/dev` | Dev panel, Sprite Debug, test hooks |
 | `src/core` | Constants (FORBIDDEN to change without explicit approval) |
@@ -29,6 +29,16 @@ TypeScript strict + Vite + Canvas 2D + HTML overlay UI + Vitest + Playwright.
 | `tests/e2e` | Playwright E2E tests |
 
 ## Completed Architecture
+
+### ENV-ASSET-CALIBRATION-01
+- PR1 (PR #111): Removed volcanoes from active generation and editor
+- PR2 (PR #112): Dev-only environment asset calibration panel
+- PR3 (PR #113): Applied approved environment asset calibration values
+
+### CIVIL-BASELINE-01
+- PR1 (PR #114): ECONOMY-PACE-01 — first 5-8 minutes economy pacing baseline
+- PR2 (PR #115): VALIDATION-BFS-01 — BFS/flood-fill map reachability validation
+- PR3 (PR #116): PATH-TELEMETRY-CACHE-01 — pathfinding telemetry and passability grid cache
 
 ### CIVIL-UX-01
 - **PR1:** Construction cancellation feedback, toast near build toggle, WAIT/active construction labels, `cancelledSitesCount` hook
@@ -166,6 +176,9 @@ Editor MapData → `validateEditorMap(mapData)` → `customMapData` field in `Ga
 - **Building spacing:** one-tile gap required between buildings/HQ/construction-sites
 - **E2E timing:** `__constructionState` hook updates per animation frame; use `expect.poll()` for state changes after UI clicks
 - **Volcanoes:** deprecated for current visual direction; no volcano UI, no volcano presets, no volcano config fields; existing volcano code/types are not removed
+- **Passability cache:** grid cached and reused when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes
+- **Path telemetry:** `window.__pathfindingTelemetry` exposes `getSnapshot()` and `reset()` for dev/test inspection
+- **Map validation:** BFS/flood-fill via `buildPassabilityGrid()`; `isStraightLineClearOfObstacles()` kept but deprecated
 
 ## Dev Panel Capabilities
 
@@ -199,8 +212,23 @@ Editor MapData → `validateEditorMap(mapData)` → `customMapData` field in `Ga
 - **Broader process:** `docs/AI_WORKFLOW_CONTRACT.md` (roles, re-audit triggers, branch discipline)
 - On conflict between `agent-ctx/workflow.md` and `docs/AI_WORKFLOW_CONTRACT.md` on mode selection or E2E policy, **agent-ctx takes priority**.
 
+## Current Starting Values (post ECONOMY-PACE-01)
+
+- Raw: `30/200`
+- Matter: `120/200`
+- Active faction element: `3/10`
+- Separator: costMatter=60, buildTimeSeconds=20, RAW_COST=12, CYCLE_SECONDS=5, ELEMENT_YIELD=2
+- Power Plant: costMatter=100
+- Units Factory: costMatter=120
+- Builder: matter=40, duration=15
+- Harvester: matter=50, duration=20
+
 ## Key Constants (DO NOT CHANGE)
 
 - `src/core/constants.ts` — forbidden without explicit approval
 - Builder sprite: `builder_base: { size: [57, 57], groundOffset: 15 }`
 - `BUILDER_SPEED = 2.0` (in `src/systems/construction.ts`)
+
+## Next Focus
+
+**MAPGEN-RESOURCE-BALANCE-01** — refine map resource distribution and balance for the first 10+ minutes of civil gameplay. Requires Full Audit.

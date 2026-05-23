@@ -1,8 +1,8 @@
 # Four Elements Next — Remaining Work 2026-05-19
 
-Status: planning backlog after current civil-sandbox/mapgen/economy baseline.
+Status: **superseded by `docs/QUICKSTART_FOR_AI.md` and `docs/project/ROADMAP_CURRENT.md`.**
 
-This document translates the current project state into implementation lanes. It does not replace `docs/project/ROADMAP_CURRENT.md`; it complements it with a more direct task backlog.
+This document was the planning backlog after current civil-sandbox/mapgen/economy baseline. It is kept for historical reference only. For current priorities, see `docs/project/ROADMAP_CURRENT.md` and `docs/QUICKSTART_FOR_AI.md`.
 
 ## 1. Recommended next lanes
 
