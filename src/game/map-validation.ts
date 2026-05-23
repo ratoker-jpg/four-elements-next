@@ -4,10 +4,13 @@
  * Pure functions — no mutation, no DOM. Used by mapgen to validate generated
  * maps and by construction to check placement feasibility.
  *
- * IMPORTANT: Runtime pathfinding (A* / JPS / etc.) is NOT implemented here.
- * Movement validation uses straight-line checks that match the current
- * harvester movement model. If real pathfinding becomes necessary, this
- * module should be extended, not bypassed.
+ * VALIDATION-BFS-01: Reachability checks use BFS/flood-fill on the
+ * passability grid instead of straight-line obstacle checks. This ensures
+ * validation is consistent with the runtime passability model.
+ *
+ * The old isStraightLineClearOfObstacles() is still exported for backward
+ * compatibility (used as a conservative precheck in mapgen obstacle cluster
+ * placement) but is DEPRECATED for map validation purposes.
  */
 
 import type { MapData, ObstaclePlacement } from './map-types.js';
@@ -25,6 +28,8 @@ export interface MapValidationReport {
   infiniteReachable: boolean;
   startCoreBlockedTiles: number;
   rejectedClusters: number;
+  /** Reachability method used for validation. Always 'bfs' since VALIDATION-BFS-01. */
+  reachabilityMethod: 'bfs';
   warnings: string[];
   errors: string[];
 }
@@ -128,17 +133,18 @@ export function isTileBlockedByObstacle(
   return false;
 }
 
-// ── Straight-line walkability ────────────────────────────────────────
+// ── Straight-line walkability (DEPRECATED for validation) ────────────
 
 /**
  * Check whether a straight line from (fromTx, fromTy) to (toTx, toTy)
  * is clear of obstacle-blocked tiles.
  *
+ * DEPRECATED for map validation. Use BFS reachability instead.
+ * Still used as a conservative precheck in mapgen obstacle cluster placement
+ * to avoid expensive BFS on every cluster candidate.
+ *
  * This uses a DDA-style traversal to sample every tile the line crosses.
  * It does NOT check buildings, HQ, or resources — only obstacles.
- * This is intentionally narrow: it validates that the current straight-line
- * harvester movement model can traverse between two points without hitting
- * an obstacle.
  *
  * Returns true if no obstacle blocks the straight-line path.
  */
@@ -198,26 +204,172 @@ export function countStartZoneBlockedTiles(map: MapData): number {
   return count;
 }
 
+// ── BFS/flood-fill reachability ──────────────────────────────────────
+
+/** 4-way cardinal neighbor offsets for BFS (N, E, S, W). */
+const BFS_NEIGHBORS: ReadonlyArray<{ dx: number; dy: number }> = [
+  { dx: 0, dy: -1 }, // North
+  { dx: 1, dy: 0 },  // East
+  { dx: 0, dy: 1 },  // South
+  { dx: -1, dy: 0 }, // West
+];
+
+/**
+ * Compute the set of passable tiles reachable from any passable tile
+ * adjacent to the HQ footprint.
+ *
+ * Uses 4-way BFS (flood-fill) on the passability grid.
+ * Returns a Set of tile keys ("x,y") that are reachable from the start area.
+ */
+export function computeReachableSet(map: MapData, passability: boolean[][]): Set<string> {
+  const reachable = new Set<string>();
+  const queue: Array<{ tx: number; ty: number }> = [];
+
+  // Seed the BFS with all passable tiles adjacent to the HQ footprint.
+  // We check the ring of tiles around the HQ rectangle.
+  for (let ty = map.hq.ty - 1; ty <= map.hq.ty + HQ_FOOTPRINT; ty++) {
+    for (let tx = map.hq.tx - 1; tx <= map.hq.tx + HQ_FOOTPRINT; tx++) {
+      // Only include tiles on the ring (not inside the footprint)
+      const onRing =
+        tx === map.hq.tx - 1
+        || tx === map.hq.tx + HQ_FOOTPRINT
+        || ty === map.hq.ty - 1
+        || ty === map.hq.ty + HQ_FOOTPRINT;
+      if (!onRing) continue;
+      if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+      if (!passability[ty]![tx]!) continue;
+      const key = `${tx},${ty}`;
+      if (!reachable.has(key)) {
+        reachable.add(key);
+        queue.push({ tx, ty });
+      }
+    }
+  }
+
+  // BFS flood-fill
+  let head = 0;
+  while (head < queue.length) {
+    const { tx, ty } = queue[head]!;
+    head++;
+
+    for (const { dx, dy } of BFS_NEIGHBORS) {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+      const key = `${nx},${ny}`;
+      if (reachable.has(key)) continue;
+      if (!passability[ny]![nx]!) continue;
+      reachable.add(key);
+      queue.push({ tx: nx, ty: ny });
+    }
+  }
+
+  return reachable;
+}
+
+/**
+ * Check whether a footprint at (tx, ty) with the given size has at least
+ * one adjacent passable tile that is in the reachable set.
+ *
+ * Adjacent means sharing a cardinal edge with the footprint rectangle.
+ * The footprint tile itself does NOT need to be passable or reachable.
+ */
+export function isFootprintReachable(
+  reachable: Set<string>,
+  tx: number,
+  ty: number,
+  footprint: number,
+  mapWidth: number,
+  mapHeight: number,
+  passability: boolean[][],
+): boolean {
+  // Top edge: y = ty - 1, x from tx to tx + footprint - 1
+  for (let dx = 0; dx < footprint; dx++) {
+    const x = tx + dx;
+    const y = ty - 1;
+    if (y >= 0 && x < mapWidth && passability[y]![x]! && reachable.has(`${x},${y}`)) {
+      return true;
+    }
+  }
+
+  // Right edge: x = tx + footprint, y from ty to ty + footprint - 1
+  for (let dy = 0; dy < footprint; dy++) {
+    const x = tx + footprint;
+    const y = ty + dy;
+    if (x < mapWidth && y >= 0 && y < mapHeight && passability[y]![x]! && reachable.has(`${x},${y}`)) {
+      return true;
+    }
+  }
+
+  // Bottom edge: y = ty + footprint, x from tx to tx + footprint - 1
+  for (let dx = 0; dx < footprint; dx++) {
+    const x = tx + dx;
+    const y = ty + footprint;
+    if (y < mapHeight && x >= 0 && x < mapWidth && passability[y]![x]! && reachable.has(`${x},${y}`)) {
+      return true;
+    }
+  }
+
+  // Left edge: x = tx - 1, y from ty to ty + footprint - 1
+  for (let dy = 0; dy < footprint; dy++) {
+    const x = tx - 1;
+    const y = ty + dy;
+    if (x >= 0 && y >= 0 && y < mapHeight && passability[y]![x]! && reachable.has(`${x},${y}`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check whether any passable tile near a center point is in the reachable set.
+ * Searches in a small area (2-tile radius) around the center point.
+ * Used for center reachability where the exact center tile may be blocked
+ * by mineral_infinite or other intended features.
+ */
+export function isAreaReachable(
+  reachable: Set<string>,
+  cx: number,
+  cy: number,
+  radius: number,
+  mapWidth: number,
+  mapHeight: number,
+  passability: boolean[][],
+): boolean {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const tx = cx + dx;
+      const ty = cy + dy;
+      if (tx < 0 || ty < 0 || tx >= mapWidth || ty >= mapHeight) continue;
+      if (!passability[ty]![tx]!) continue;
+      if (reachable.has(`${tx},${ty}`)) return true;
+    }
+  }
+  return false;
+}
+
 // ── Full map validation ──────────────────────────────────────────────
 
 /**
  * Validate a generated map. Returns a MapValidationReport.
  *
+ * VALIDATION-BFS-01: Reachability uses BFS/flood-fill on the passability
+ * grid, starting from passable tiles adjacent to HQ. This replaces the
+ * old straight-line obstacle checks and provides validation consistent
+ * with the runtime passability model.
+ *
  * Checks:
  * 1. Start core zone is not blocked by obstacles.
- * 2. Starting units have valid spawn cells (already ensured by mapgen).
- * 3. At least one small/medium starter resource is reachable from HQ via straight line.
- * 4. Map center is reachable from HQ center via straight line clear of obstacles.
- * 5. Infinite mineral is reachable from HQ center via straight line.
- * 6. No resource overlaps an obstacle.
- * 7. No obstacle cluster fully encloses start or center (approximated by straight-line checks).
+ * 2. At least one small/medium starter resource is reachable via BFS.
+ * 3. Center area is reachable via BFS (2-tile radius around exact center).
+ * 4. Infinite mineral has at least one reachable adjacent passable tile via BFS.
+ * 5. No resource footprint overlaps an obstacle.
  */
 export function validateMap(map: MapData, seed: number, rejectedClusters: number = 0): MapValidationReport {
   const warnings: string[] = [];
   const errors: string[] = [];
 
-  const hqCx = map.hq.tx + HQ_FOOTPRINT / 2;
-  const hqCy = map.hq.ty + HQ_FOOTPRINT / 2;
   const mapCx = Math.floor(map.width / 2);
   const mapCy = Math.floor(map.height / 2);
 
@@ -227,51 +379,43 @@ export function validateMap(map: MapData, seed: number, rejectedClusters: number
     errors.push(`Start core zone has ${startCoreBlockedTiles} obstacle-blocked tile(s)`);
   }
 
-  // 2. Starter resources reachable (straight line from HQ center)
+  // Build passability grid and compute reachable set once
+  const passability = buildPassabilityMap(map);
+  const reachable = computeReachableSet(map, passability);
+
+  // 2. Starter resources reachable via BFS (adjacent passable tile in reachable set)
   const starterResources = map.resources.filter(
     (r) => r.type === 'small' || r.type === 'medium',
   );
   let reachableStarterResources = 0;
   for (const r of starterResources) {
-    if (isStraightLineClearOfObstacles(map.obstacles, Math.floor(hqCx), Math.floor(hqCy), r.tx, r.ty, map.width, map.height)) {
+    if (isFootprintReachable(reachable, r.tx, r.ty, r.footprint, map.width, map.height, passability)) {
       reachableStarterResources++;
     }
   }
   if (reachableStarterResources === 0 && starterResources.length > 0) {
-    errors.push('No starter resources are reachable from HQ via straight line');
+    errors.push('No starter resources are reachable from HQ (BFS)');
   } else if (reachableStarterResources < starterResources.length) {
-    warnings.push(`Only ${reachableStarterResources}/${starterResources.length} starter resources reachable from HQ via straight line`);
+    warnings.push(`Only ${reachableStarterResources}/${starterResources.length} starter resources reachable from HQ (BFS)`);
   }
 
-  // 3. Center reachable
-  const centerReachable = isStraightLineClearOfObstacles(
-    map.obstacles,
-    Math.floor(hqCx),
-    Math.floor(hqCy),
-    mapCx,
-    mapCy,
-    map.width,
-    map.height,
-  );
+  // 3. Center reachable via BFS (check area near center, not just exact center tile)
+  const centerReachable = isAreaReachable(reachable, mapCx, mapCy, 2, map.width, map.height, passability);
   if (!centerReachable) {
-    errors.push('Map center is not reachable from HQ via straight line');
+    errors.push('Map center area is not reachable from HQ (BFS)');
   }
 
-  // 4. Infinite mineral reachable (check any tile of infinite footprint)
+  // 4. Infinite mineral reachable via BFS (adjacent passable tile in reachable set)
   const infiniteResources = map.resources.filter((r) => r.type === 'infinite');
   let infiniteReachable = false;
   for (const r of infiniteResources) {
-    // Check if any tile of the infinite footprint is reachable from HQ
-    for (let dy = 0; dy < r.footprint && !infiniteReachable; dy++) {
-      for (let dx = 0; dx < r.footprint && !infiniteReachable; dx++) {
-        if (isStraightLineClearOfObstacles(map.obstacles, Math.floor(hqCx), Math.floor(hqCy), r.tx + dx, r.ty + dy, map.width, map.height)) {
-          infiniteReachable = true;
-        }
-      }
+    if (isFootprintReachable(reachable, r.tx, r.ty, r.footprint, map.width, map.height, passability)) {
+      infiniteReachable = true;
+      break;
     }
   }
   if (!infiniteReachable && infiniteResources.length > 0) {
-    errors.push('Infinite mineral is not reachable from HQ via straight line');
+    errors.push('Infinite mineral is not reachable from HQ (BFS)');
   }
 
   // 5. No resource footprint overlaps obstacle
@@ -305,6 +449,7 @@ export function validateMap(map: MapData, seed: number, rejectedClusters: number
     infiniteReachable,
     startCoreBlockedTiles,
     rejectedClusters,
+    reachabilityMethod: 'bfs',
     warnings,
     errors,
   };
