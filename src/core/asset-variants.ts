@@ -208,8 +208,21 @@ const DECOR_VARIANTS: Record<DecorType, VariantSpec> = {
 
 export const TERRAIN_VARIANT_GROUPS: Record<TerrainType, readonly string[]> = {
   'sand-light': ['sand_tile_01', 'sand_tile_02', 'sand_tile_03', 'sand_tile_04'],
-  'sand-dark': ['sand_tile_05', 'sand_tile_06', 'sand_tile_07', 'sand_tile_08'],
-  sand: ['sand_tile_09', 'sand_tile_10', 'sand_tile_11', 'sand_tile_12'],
+  // Keep the default terrain on cleaner base tiles because mapgen produces
+  // mostly plain sand and accent-heavy tiles would dominate the whole map.
+  sand: [
+    'sand_tile_01',
+    'sand_tile_02',
+    'sand_tile_03',
+    'sand_tile_04',
+    'sand_tile_05',
+    'sand_tile_06',
+    'sand_tile_07',
+    'sand_tile_08',
+  ],
+  // Make the cracked accent tile available but rarer than the other rough
+  // dark-sand options.
+  'sand-dark': ['sand_tile_09', 'sand_tile_10', 'sand_tile_12', 'sand_tile_09', 'sand_tile_10', 'sand_tile_12', 'sand_tile_11'],
 };
 
 const TERRAIN_FALLBACK_KEYS: Record<TerrainType, string> = {

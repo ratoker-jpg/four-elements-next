@@ -36,12 +36,39 @@ describe('asset variant resolvers', () => {
     const first = resolveTerrainAsset('sand', 1, 1, 99);
     const second = resolveTerrainAsset('sand', 2, 2, 99);
     const dark = resolveTerrainAsset('sand-dark', 1, 1, 99);
+    const light = resolveTerrainAsset('sand-light', 1, 1, 99);
 
     expect(first).toEqual(second);
     expect(TERRAIN_VARIANT_GROUPS.sand).toContain(first.preferredKey);
     expect(TERRAIN_VARIANT_GROUPS['sand-dark']).toContain(dark.preferredKey);
+    expect(TERRAIN_VARIANT_GROUPS['sand-light']).toContain(light.preferredKey);
     expect(first.fallbackKey).toBe('terrain_sand');
     expect(dark.fallbackKey).toBe('terrain_sand_dark');
+    expect(light.fallbackKey).toBe('terrain_sand_light');
+  });
+
+  it('keeps cracked dark-sand accents rarer than the other dark variants', () => {
+    const darkTiles = TERRAIN_VARIANT_GROUPS['sand-dark'];
+    const crackedCount = darkTiles.filter((key) => key === 'sand_tile_11').length;
+    const baseCount = darkTiles.filter((key) => key === 'sand_tile_09').length;
+
+    expect(TERRAIN_VARIANT_GROUPS.sand).toEqual([
+      'sand_tile_01',
+      'sand_tile_02',
+      'sand_tile_03',
+      'sand_tile_04',
+      'sand_tile_05',
+      'sand_tile_06',
+      'sand_tile_07',
+      'sand_tile_08',
+    ]);
+    expect(TERRAIN_VARIANT_GROUPS['sand-light']).toEqual([
+      'sand_tile_01',
+      'sand_tile_02',
+      'sand_tile_03',
+      'sand_tile_04',
+    ]);
+    expect(crackedCount).toBeLessThan(baseCount);
   });
 
   it('computes a stable visual seed from map metadata', () => {
