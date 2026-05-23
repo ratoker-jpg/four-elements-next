@@ -139,9 +139,9 @@ describe('shouldComputeAlphaMeta', () => {
     }
   });
 
-  it('returns false for terrain manifest keys when procedural sand is enabled', () => {
-    // PROC-SAND-01: When FE_PROCEDURAL_SAND_ENABLED is true, terrain alpha
-    // metadata is not needed for the active render path. Assets still load.
+  it('returns false for terrain manifest keys (legacy path does not use alpha-crop)', () => {
+    // TERRAIN-LEGACY-SAND-RESTORE-01: Active terrain render path uses simple
+    // drawImage stretch-to-cell with legacy terrain sprites. No alpha-crop.
     expect(shouldComputeAlphaMeta('terrain_sand')).toBe(false);
     expect(shouldComputeAlphaMeta('sand_tile_09')).toBe(false);
   });
