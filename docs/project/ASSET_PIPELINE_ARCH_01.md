@@ -1,6 +1,6 @@
 # ASSET-PIPELINE-ARCH-01 — Map/Environment Asset Pipeline Spec
 
-Status: **PR1 — docs/spec only.** No code, no tests, no assets, no manifests changed.
+Status: **PR2 — offline tooling added.** No runtime code, no production assets, no manifests changed.
 
 Last updated: 2026-05-23.
 
@@ -333,7 +333,7 @@ After chroma removal:
 - No pixel in the output should have RGB values within a threshold of `#9900FF`.
 - No purple halo or fringe around object edges.
 - If fringe is detected, increase the color distance threshold or add a secondary cleanup pass.
-- This can be automated in a future `tools/assets/normalize_sprite.py` script.
+- This is automated by `tools/assets/validate_asset_outputs.py` (see section 14).
 
 ## 9. Validation Checklist
 
@@ -427,3 +427,61 @@ These items are documented here for planning but are explicitly **not** part of 
 - Calibration UI for visual profile tuning
 - Sand tile variant integration in terrain renderer
 - Asset preview sandbox updates for variant browsing
+
+## 14. CLI Tooling Reference
+
+PR2 adds offline Python tooling for the asset pipeline. Full documentation is in `tools/assets/README.md`.
+
+### 14.1 normalize_asset_sheet.py
+
+Slices a chroma-purple sprite sheet into normalized 256x256 transparent PNGs with bottom-center anchor alignment.
+
+```bash
+python3 tools/assets/normalize_asset_sheet.py SOURCE.png \
+    --rows 3 --cols 4 --prefix mineral_small \
+    --start-variant 2 --output-dir ./output
+```
+
+Key options:
+- `--rows` / `--cols` — grid dimensions (required)
+- `--prefix` — output filename prefix (required)
+- `--start-variant` — starting variant number (default: 1)
+- `--chroma-threshold` — color distance threshold for chroma removal (default: 80)
+- `--anchor-y-ratio` — vertical anchor ratio (default: 0.88)
+- `--bottom-padding` — pixels from bottom edge (default: 8)
+- `--report` — optional JSON report output path
+
+Output naming: `{prefix}_{NN}.png` where `NN` is the two-digit variant number starting from `--start-variant`.
+
+### 14.2 render_asset_preview.py
+
+Renders a contact/preview sheet from a directory of PNGs.
+
+```bash
+python3 tools/assets/render_asset_preview.py ./output \
+    --output preview.png --cols 4 --labels
+```
+
+### 14.3 validate_asset_outputs.py
+
+Validates output PNGs against the pipeline spec: 256x256 size, alpha channel, no chroma fringe, non-empty content. Warns on clipping, excessive padding, and anchor deviation. Exit code 0 if pass, 1 if fail.
+
+```bash
+python3 tools/assets/validate_asset_outputs.py ./output \
+    --report validation.json
+```
+
+### 14.4 test_normalize.py
+
+Self-tests using in-memory generated Pillow images. No binary fixtures required.
+
+```bash
+python3 tools/assets/test_normalize.py
+```
+
+### 14.5 Constraints
+
+- These tools do **not** modify runtime code, game assets, sprite profiles, or manifests.
+- Do **not** commit generated PNGs, preview sheets, JSON reports, or output folders to the repository.
+- Assets remain candidate-stage until they pass the asset candidate gate in `docs/ASSET_POLICY.md`.
+- No additional Python dependencies beyond Pillow.

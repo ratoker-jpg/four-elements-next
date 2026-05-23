@@ -1,0 +1,6 @@
+# Generated outputs — do not commit these to the repository.
+# Source sheets should be kept outside this directory.
+output_*/
+report.json
+validation.json
+preview.png
