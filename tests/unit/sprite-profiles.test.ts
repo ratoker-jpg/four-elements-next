@@ -31,6 +31,6 @@ describe('VISUAL-QA-ARCH-01 PR2 — civil unit sprite profiles', () => {
     expect(SPRITE_PROFILES.hq_base.size).toEqual([200, 200]);
     expect(SPRITE_PROFILES.building_separator.size).toEqual([128, 128]);
     expect(SPRITE_PROFILES.mineral_small.size).toEqual([42, 42]);
-    expect(SPRITE_PROFILES.mountain_small_01.size).toEqual([80, 72]);
+    expect(SPRITE_PROFILES.mountain_small_01.size).toEqual([80, 73]);
   });
 });
