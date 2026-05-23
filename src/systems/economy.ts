@@ -59,17 +59,17 @@ export const MATTER_STORAGE_MATTER_BONUS = 200;
 export const MATTER_STORAGE_ELEMENT_BONUS = 200;
 
 /** Starting resources. START_ELEMENT is in elementUnits: 30 units = 3.0 displayed elements. */
-export const START_RAW = 0;
-export const START_MATTER = 100;
+export const START_RAW = 30;
+export const START_MATTER = 120;
 export const START_ELEMENT = 30;
 
-/** Separator conversion: 15 Raw → 10 Matter + 1 elementUnit (= 0.1 displayed element) per cycle. */
-export const SEP_RAW_COST = 15;
+/** Separator conversion: 12 Raw → 10 Matter + 2 elementUnits (= 0.2 displayed element) per cycle. */
+export const SEP_RAW_COST = 12;
 export const SEP_MATTER_YIELD = 10;
-/** Separator element yield: 1 elementUnit per cycle = 0.1 displayed element.
- *  10 cycles produce 10 elementUnits = 1.0 displayed element. */
-export const SEP_ELEMENT_YIELD = 1;
-export const SEP_CYCLE_SECONDS = 6;
+/** Separator element yield: 2 elementUnits per cycle = 0.2 displayed element.
+ *  5 cycles produce 10 elementUnits = 1.0 displayed element. */
+export const SEP_ELEMENT_YIELD = 2;
+export const SEP_CYCLE_SECONDS = 5;
 
 export const FACTION_IDS: readonly FactionId[] = ['cyan', 'green', 'yellow', 'purple'];
 

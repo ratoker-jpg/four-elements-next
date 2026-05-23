@@ -78,18 +78,18 @@ describe('applyCompletedBuildingToProduction', () => {
 // ── PRODUCTION_COSTS ───────────────────────────────────────────────────
 
 describe('PRODUCTION_COSTS', () => {
-  it('builder costs 50 Matter + 10 elementUnits (= 1 Element), 20s, 1 Control', () => {
-    expect(PRODUCTION_COSTS.builder.matter).toBe(50);
+  it('builder costs 40 Matter + 10 elementUnits (= 1 Element), 15s, 1 Control', () => {
+    expect(PRODUCTION_COSTS.builder.matter).toBe(40);
     expect(PRODUCTION_COSTS.builder.element).toBe(10); // 10 elementUnits = 1 displayed element
     expect(PRODUCTION_COSTS.builder.control).toBe(1);
-    expect(PRODUCTION_COSTS.builder.duration).toBe(20);
+    expect(PRODUCTION_COSTS.builder.duration).toBe(15);
   });
 
-  it('harvester costs 60 Matter + 10 elementUnits (= 1 Element), 25s, 1 Control', () => {
-    expect(PRODUCTION_COSTS.harvester.matter).toBe(60);
+  it('harvester costs 50 Matter + 10 elementUnits (= 1 Element), 20s, 1 Control', () => {
+    expect(PRODUCTION_COSTS.harvester.matter).toBe(50);
     expect(PRODUCTION_COSTS.harvester.element).toBe(10); // 10 elementUnits = 1 displayed element
     expect(PRODUCTION_COSTS.harvester.control).toBe(1);
-    expect(PRODUCTION_COSTS.harvester.duration).toBe(25);
+    expect(PRODUCTION_COSTS.harvester.duration).toBe(20);
   });
 });
 
@@ -124,7 +124,7 @@ describe('startProduction', () => {
 
     startProduction(state, 10, 10, 'builder');
 
-    expect(state.economy.resources.matter).toBe(matterBefore - 50);
+    expect(state.economy.resources.matter).toBe(matterBefore - 40);
     expect(state.economy.resources.elements.cyan).toBe(elemBefore - 10); // 10 elementUnits = 1 displayed element
   });
 
@@ -297,7 +297,7 @@ describe('tickProduction', () => {
 
     const item = state.production.factories[0]!.queue[0]!;
     expect(item.elapsed).toBe(5);
-    expect(item.progress).toBeCloseTo(5 / 20, 4);
+    expect(item.progress).toBeCloseTo(5 / 15, 4);
     expect(item.completed).toBe(false);
   });
 
@@ -306,7 +306,7 @@ describe('tickProduction', () => {
     startProduction(state, 10, 10, 'builder');
 
     // Advance just short of completion to verify it's not completed yet
-    tickProduction(state, 19.5);
+    tickProduction(state, 14.5);
     let item = state.production.factories[0]!.queue[0]!;
     expect(item.completed).toBe(false);
 
@@ -329,7 +329,7 @@ describe('tickProduction', () => {
     const builderCountBefore = state.map.builders.length;
 
     startProduction(state, 10, 10, 'builder');
-    tickProduction(state, 21);
+    tickProduction(state, 16);
 
     expect(state.map.builders.length).toBe(builderCountBefore + 1);
     // Builder should be at an integer tile adjacent to factory
@@ -342,7 +342,7 @@ describe('tickProduction', () => {
     const harvesterCountBefore = state.harvesters.length;
 
     startProduction(state, 10, 10, 'harvester');
-    tickProduction(state, 26);
+    tickProduction(state, 21);
 
     expect(state.harvesters.length).toBe(harvesterCountBefore + 1);
     const newHarvester = state.harvesters[state.harvesters.length - 1]!;
@@ -355,7 +355,7 @@ describe('tickProduction', () => {
   it('removes item from queue after successful spawn', () => {
     const state = createStateWithFactory();
     startProduction(state, 10, 10, 'builder');
-    tickProduction(state, 21);
+    tickProduction(state, 16);
 
     expect(state.production.factories[0]!.queue).toHaveLength(0);
   });
@@ -365,8 +365,8 @@ describe('tickProduction', () => {
     startProduction(state, 10, 10, 'builder');
     startProduction(state, 10, 10, 'harvester');
 
-    // Advance enough to complete first item (builder 20s) and spawn it
-    tickProduction(state, 25);
+    // Advance enough to complete first item (builder 15s) and spawn it
+    tickProduction(state, 20);
     expect(state.production.factories[0]!.queue).toHaveLength(1);
 
     // Second item should now be active (but not yet progressed in this tick)
@@ -437,7 +437,7 @@ describe('tickProduction', () => {
     }
 
     startProduction(state, factoryTx, factoryTy, 'builder');
-    tickProduction(state, 21);
+    tickProduction(state, 16);
 
     // Item should be completed but still in queue
     const item = state.production.factories[0]!.queue[0]!;
@@ -466,7 +466,7 @@ describe('tickProduction', () => {
     }
 
     startProduction(state, factoryTx, factoryTy, 'builder');
-    tickProduction(state, 21);
+    tickProduction(state, 16);
 
     // Item completed but stuck
     expect(state.production.factories[0]!.queue[0]!.completed).toBe(true);
@@ -667,8 +667,7 @@ describe('control.used reservation across production', () => {
     expect(usedAfterEnqueue).toBe(usedInitial + PRODUCTION_COSTS.builder.control);
 
     // Complete production and spawn
-    tickProduction(state, 21);
-    // control.used must not change at spawn
+    tickProduction(state, 16);
     expect(state.control.used).toBe(usedAfterEnqueue);
 
     // Enqueue harvester
@@ -677,7 +676,7 @@ describe('control.used reservation across production', () => {
     expect(usedAfterSecond).toBe(usedAfterEnqueue + PRODUCTION_COSTS.harvester.control);
 
     // Complete and spawn harvester
-    tickProduction(state, 26);
+    tickProduction(state, 21);
     // Still unchanged after second spawn
     expect(state.control.used).toBe(usedAfterSecond);
   });

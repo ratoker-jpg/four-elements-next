@@ -54,7 +54,7 @@ describe('construction system', () => {
     const result = startConstruction(map, economy, 'separator');
 
     expect(result.ok).toBe(true);
-    expect(economy.resources.matter).toBe(20);
+    expect(economy.resources.matter).toBe(60); // 120 - 60 = 60
     expect(map.builders[0]!.busy).toBe(true);
     expect(map.constructionSites).toHaveLength(1);
     expect(map.constructionSites[0]!.type).toBe('separator');
@@ -63,7 +63,7 @@ describe('construction system', () => {
 
   it('rejects construction when matter is insufficient', () => {
     const { map, economy } = createBaseline();
-    economy.resources.matter = 79;
+    economy.resources.matter = 59;
 
     const result = startConstruction(map, economy, 'separator');
 
@@ -263,7 +263,7 @@ describe('multi-builder construction', () => {
   it('completing one construction frees only its assigned builder', () => {
     const { map, economy } = createMultiBuilderBaseline();
     // Start two constructions with different build times
-    startConstruction(map, economy, 'separator');    // 25s build time
+    startConstruction(map, economy, 'separator');    // 20s build time
     startConstruction(map, economy, 'command-relay'); // 18s build time
 
     expect(map.constructionSites[0]!.builderIndex).toBe(0);
@@ -294,8 +294,8 @@ describe('multi-builder construction', () => {
     // Force builders to arrive
     forceBuildersArrived(map);
 
-    // Complete both (25s build time)
-    tickConstruction(map, economy, 26);
+    // Complete both (20s build time)
+    tickConstruction(map, economy, 21);
 
     expect(map.constructionSites).toHaveLength(0);
     expect(map.builders[0]!.busy).toBe(false);
@@ -350,7 +350,7 @@ describe('multi-builder construction', () => {
 
     // Force builder to arrive and complete
     forceBuildersArrived(map);
-    tickConstruction(map, economy, 26);
+    tickConstruction(map, economy, 21);
     expect(map.builders[0]!.busy).toBe(false);
 
     // Builder 0 can start another construction
@@ -488,7 +488,7 @@ describe('building spacing — one-tile gap', () => {
     const map = createSpacingMap();
     map.constructionSites.push({
       tx: 8, ty: 4, type: 'separator',
-      elapsed: 0, duration: 25, progress: 0, builderIndex: 0,
+      elapsed: 0, duration: 20, progress: 0, builderIndex: 0,
       id: 1, pending: false,
     });
     const occupied = buildOccupiedTileSet(map);
@@ -834,7 +834,7 @@ describe('construction reachability', () => {
 
     const result = startConstruction(map, economy, 'separator');
     expect(result.ok).toBe(true);
-    expect(economy.resources.matter).toBe(20); // 100 - 80 = 20
+    expect(economy.resources.matter).toBe(40); // 100 - 60 = 40
     expect(map.builders[0]!.busy).toBe(true);
     expect(map.constructionSites).toHaveLength(1);
   });
@@ -1038,7 +1038,7 @@ describe('builder movement lifecycle', () => {
 
     expect(result.ok).toBe(true);
     const matterAfter = economy.resources.matter;
-    expect(matterAfter).toBe(matterBefore - 80);
+    expect(matterAfter).toBe(matterBefore - 60);
 
     // Tick a few times — matter should not change
     tickConstruction(map, economy, 5);
@@ -1092,8 +1092,8 @@ describe('builder movement lifecycle', () => {
       tickConstruction(map, economy, moveTime);
     }
 
-    // Now complete the construction (25s build time)
-    tickConstruction(map, economy, 26);
+    // Now complete the construction (20s build time)
+    tickConstruction(map, economy, 21);
 
     expect(map.constructionSites).toHaveLength(0);
     expect(map.buildings.some((b) => b.type === 'separator')).toBe(true);
@@ -1131,7 +1131,7 @@ describe('builder movement lifecycle', () => {
     }
 
     // Complete construction
-    tickConstruction(map, economy, 26);
+    tickConstruction(map, economy, 21);
 
     expect(builder.busy).toBe(false);
     expect(builder.phase).toBe('idle');
@@ -1275,7 +1275,7 @@ describe('builder movement lifecycle', () => {
 
     if (builder.phase === 'moving-to-site' && builder.path.length > 0) {
       // Set matter very close to cap so the refund would exceed it
-      const costMatter = 80; // separator cost
+      const costMatter = 60; // separator cost
       economy.resources.matter = economy.resources.matterCap - 10;
 
       // Block all paths to force repath failure

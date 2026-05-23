@@ -77,8 +77,8 @@ test.describe('NEXT-05 construction', () => {
     expect(started.builderBusy).toBe(true);
     expect(started.sites).toHaveLength(1);
     expect(started.sites[0]!.type).toBe('separator');
-    // Verify matter was spent: addMatter(500) capped at matterCap (200), minus separator cost (80) = 120
-    expect(started.matter).toBe(120);
+    // Verify matter was spent: addMatter(500) capped at matterCap (200), minus separator cost (60) = 140
+    expect(started.matter).toBe(140);
     // Builder should be assigned to the site
     expect(started.builderAssignedSiteId).toBe(started.sites[0]!.id);
     // Builder should be either moving-to-site or building (if already adjacent)
@@ -113,12 +113,12 @@ test.describe('NEXT-05 construction', () => {
       });
     }
 
-    // Fast-forward remaining build time (25 seconds for separator)
+    // Fast-forward remaining build time (20 seconds for separator)
     await page.evaluate(() => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
         advanceConstruction: (seconds: number) => void;
       };
-      debug.advanceConstruction(30);
+      debug.advanceConstruction(25);
     });
 
     await expect.poll(async () => {
@@ -155,7 +155,7 @@ test.describe('NEXT-05 construction', () => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
         setMatter: (value: number) => void;
       };
-      debug.setMatter(70);
+      debug.setMatter(50);
     });
 
     await page.getByRole('button', { name: 'Строительство (B)' }).click();

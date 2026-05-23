@@ -13,7 +13,7 @@ test.describe('NEXT-06C1 units factory building', () => {
     await navigateToGameScreen(page);
     await page.getByRole('button', { name: 'Строительство (B)' }).click();
     const button = page.getByRole('button', { name: /Фабрика юнитов/ });
-    await expect(button).toContainText('150');
+    await expect(button).toContainText('120');
     await expect(button).toContainText('30');
   });
 
@@ -25,7 +25,7 @@ test.describe('NEXT-06C1 units factory building', () => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
         setMatter: (value: number) => void;
       };
-      debug.setMatter(200);
+      debug.setMatter(150);
     });
 
     await page.getByRole('button', { name: 'Строительство (B)' }).click();
@@ -52,7 +52,7 @@ test.describe('NEXT-06C1 units factory building', () => {
       builderBusy: true,
       siteCount: 1,
       siteType: 'units-factory',
-      matter: 50, // 200 matter - 150 cost = 50 remaining
+      matter: 30, // 150 matter - 120 cost = 30 remaining
     });
 
     // Advance time to complete construction (30 seconds build time)
@@ -103,7 +103,7 @@ test.describe('NEXT-06C1 units factory building', () => {
       const debug = (window as Record<string, unknown>).__constructionTest as {
         setMatter: (value: number) => void;
       };
-      debug.setMatter(200);
+      debug.setMatter(150);
     });
 
     await page.getByRole('button', { name: 'Строительство (B)' }).click();
