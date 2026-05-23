@@ -12,7 +12,8 @@ import { RESOURCE_FOOTPRINTS } from '../game/map-types.js';
 import type { GameState } from '../game/game-state.js';
 import { HQ_FOOTPRINT } from '../core/constants.js';
 import { getBuildingFootprint } from '../config/buildings.js';
-import { buildPassabilityGrid, type PassabilityGrid } from './passability.js';
+import { type PassabilityGrid } from './passability.js';
+import { getPassabilityGrid } from './path-telemetry.js';
 import { findPathToAdjacent } from './pathfinding.js';
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -180,7 +181,9 @@ export function tickHarvesting(state: GameState, dt: number): void {
   // Build passability grid once per tick for all harvesters.
   // This ensures consistent blocking state within a single tick.
   // Pass resourceNodes so depleted finite resources don't block pathfinding.
-  const grid = buildPassabilityGrid(state.map, state.resourceNodes);
+  // Uses getPassabilityGrid for cache: grid is rebuilt only when passability
+  // state changed since the last build (construction, depletion, etc.).
+  const grid = getPassabilityGrid(state.map, state.resourceNodes);
 
   for (const harvester of state.harvesters) {
     switch (harvester.phase) {

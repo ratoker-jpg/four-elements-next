@@ -8,7 +8,8 @@ import type {
   MapData,
 } from '../game/map-types.js';
 import type { EconomyState } from './economy.js';
-import { buildPassabilityGrid, findAdjacentPassableTiles, isTileBlocked, type PassabilityGrid } from './passability.js';
+import { findAdjacentPassableTiles, isTileBlocked, clonePassabilityGrid, type PassabilityGrid } from './passability.js';
+import { getPassabilityGrid } from './path-telemetry.js';
 import { findPathToAdjacent } from './pathfinding.js';
 import type { ResourceNodeState } from './harvesting.js';
 
@@ -159,7 +160,7 @@ export function tickConstruction(map: MapData, economy: EconomyState, dt: number
       if (builder && builder.phase === 'moving-to-site' && builder.assignedSiteId === site.id) {
         // Check if next waypoint is still passable
         if (builder.pathIndex < builder.path.length) {
-          const grid = buildPassabilityGrid(map, resourceNodes);
+          const grid = getPassabilityGrid(map, resourceNodes);
           const waypoint = builder.path[builder.pathIndex]!;
           if (isTileBlocked(grid, waypoint.tx, waypoint.ty)) {
             // Try one immediate repath
@@ -262,7 +263,9 @@ function tryRepath(
   resourceNodes?: readonly ResourceNodeState[],
 ): boolean {
   const footprint = getBuildingFootprint(site.type);
-  const grid = buildPassabilityGrid(map, resourceNodes);
+  // Clone the cached grid before mutating it with markGridBlocked.
+  // This avoids contaminating the passability cache with temporary mutations.
+  const grid = clonePassabilityGrid(getPassabilityGrid(map, resourceNodes));
   // Temporarily block the site footprint on the grid
   markGridBlocked(grid, site.tx, site.ty, footprint);
 
@@ -413,7 +416,9 @@ export function findPathToSite(
   resourceNodes?: readonly ResourceNodeState[],
 ): PathToSiteResult {
   const footprint = getBuildingFootprint(buildingType);
-  const grid = buildPassabilityGrid(map, resourceNodes);
+  // Clone the cached grid before mutating it with markGridBlocked.
+  // This avoids contaminating the passability cache with temporary mutations.
+  const grid = clonePassabilityGrid(getPassabilityGrid(map, resourceNodes));
   // Temporarily block the candidate footprint on the grid
   markGridBlocked(grid, siteTx, siteTy, footprint);
 
@@ -467,7 +472,9 @@ export function isSiteReachableByBuilder(
   siteFootprint: number,
   resourceNodes?: readonly ResourceNodeState[],
 ): boolean {
-  const grid = buildPassabilityGrid(map, resourceNodes);
+  // Clone the cached grid before mutating it with markGridBlocked.
+  // This avoids contaminating the passability cache with temporary mutations.
+  const grid = clonePassabilityGrid(getPassabilityGrid(map, resourceNodes));
   // Temporarily block the candidate footprint on the grid
   markGridBlocked(grid, siteTx, siteTy, siteFootprint);
 
