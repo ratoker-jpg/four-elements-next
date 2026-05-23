@@ -1,9 +1,9 @@
 /** Terrain tile rendering with sprite support and geometric fallback. */
 
 import { TILE_W, TILE_H, TERRAIN_COLORS, GRID_COLOR } from '../core/constants.js';
+import { resolveTerrainAsset } from '../core/asset-variants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { MapData, TerrainType } from '../game/map-types.js';
-import { TERRAIN_ASSET_KEYS } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
 
@@ -13,6 +13,7 @@ export function renderTerrain(
   map: MapData,
   camera: Camera,
   assets: AssetStore,
+  visualSeed: number,
 ): void {
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
@@ -29,7 +30,8 @@ export function renderTerrain(
       if (cv.y < -margin || cv.y > canvasH + margin) continue;
 
       const terrainType: TerrainType = map.terrain[ty]?.[tx] ?? 'sand';
-      const assetKey = TERRAIN_ASSET_KEYS[terrainType];
+      const resolved = resolveTerrainAsset(terrainType, tx, ty, visualSeed);
+      const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
       const sprite = assets.get(assetKey);
 
       if (sprite) {

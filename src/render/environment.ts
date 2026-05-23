@@ -1,9 +1,13 @@
 /** Environment rendering: resource nodes, obstacles, and decor. */
 
 import { SPRITE_PROFILES } from '../core/constants.js';
+import {
+  resolveDecorAsset,
+  resolveObstacleAsset,
+  resolveResourceAsset,
+} from '../core/asset-variants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { ResourcePlacement, ObstaclePlacement, DecorPlacement, ResourceType, ObstacleType } from '../game/map-types.js';
-import { RESOURCE_ASSET_KEYS, OBSTACLE_ASSET_KEYS, DECOR_ASSET_KEYS } from '../game/map-types.js';
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
 import { containFit } from './contain-fit.js';
@@ -16,14 +20,16 @@ export function renderResourceNode(
   node: ResourcePlacement,
   camera: Camera,
   assets: AssetStore,
+  visualSeed: number,
 ): void {
   const halfFp = node.footprint / 2;
   const scr = tileToScreen(node.tx + halfFp, node.ty + halfFp);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  const assetKey = RESOURCE_ASSET_KEYS[node.type];
+  const resolved = resolveResourceAsset(node.type, node.tx, node.ty, visualSeed);
+  const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+  const profile = SPRITE_PROFILES[resolved.profileKey];
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;
@@ -46,14 +52,16 @@ export function renderObstacle(
   obstacle: ObstaclePlacement,
   camera: Camera,
   assets: AssetStore,
+  visualSeed: number,
 ): void {
   const halfFp = obstacle.footprint / 2;
   const scr = tileToScreen(obstacle.tx + halfFp, obstacle.ty + halfFp);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  const assetKey = OBSTACLE_ASSET_KEYS[obstacle.type];
+  const resolved = resolveObstacleAsset(obstacle.type, obstacle.tx, obstacle.ty, visualSeed);
+  const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+  const profile = SPRITE_PROFILES[resolved.profileKey];
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;
@@ -76,13 +84,15 @@ export function renderDecor(
   item: DecorPlacement,
   camera: Camera,
   assets: AssetStore,
+  visualSeed: number,
 ): void {
   const scr = tileToScreen(item.tx + 0.5, item.ty + 0.5);
   const cv = camera.toCanvas(scr.x, scr.y, ctx.canvas.width, ctx.canvas.height);
   const z = camera.zoom;
-  const assetKey = DECOR_ASSET_KEYS[item.type];
+  const resolved = resolveDecorAsset(item.type, item.tx, item.ty, visualSeed);
+  const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[assetKey as keyof typeof SPRITE_PROFILES];
+  const profile = SPRITE_PROFILES[resolved.profileKey];
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;

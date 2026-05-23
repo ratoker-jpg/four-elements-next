@@ -110,6 +110,7 @@ function renderUnitShadow(
 export function render(
   ctx: CanvasRenderingContext2D,
   map: MapData,
+  visualSeed: number,
   camera: Camera,
   assets: AssetStore,
   economy: ReadonlyEconomyState,
@@ -127,7 +128,7 @@ export function render(
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  renderTerrain(ctx, map, camera, assets);
+  renderTerrain(ctx, map, camera, assets, visualSeed);
 
   // Territory overlay: after terrain, before entities
   renderTerritory(ctx, territory, camera);
@@ -225,21 +226,21 @@ export function render(
     entities.push({
       sortKey: r.tx + r.ty + (r.footprint - 1) * 2,
       shadow: () => renderTileShadow(ctx, camera, r.tx, r.ty, r.footprint, 'resource'),
-      render: () => renderResourceNode(ctx, r, camera, assets),
+      render: () => renderResourceNode(ctx, r, camera, assets, visualSeed),
     });
   }
   for (const o of map.obstacles) {
     entities.push({
       sortKey: o.tx + o.ty + (o.footprint - 1) * 2,
       shadow: () => renderTileShadow(ctx, camera, o.tx, o.ty, o.footprint, 'obstacle'),
-      render: () => renderObstacle(ctx, o, camera, assets),
+      render: () => renderObstacle(ctx, o, camera, assets, visualSeed),
     });
   }
   for (const d of map.decor) {
     entities.push({
       sortKey: d.tx + d.ty,
       shadow: () => renderTileShadow(ctx, camera, d.tx, d.ty, 1, 'decor'),
-      render: () => renderDecor(ctx, d, camera, assets),
+      render: () => renderDecor(ctx, d, camera, assets, visualSeed),
     });
   }
 
