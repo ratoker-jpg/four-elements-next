@@ -139,8 +139,9 @@ describe('shouldComputeAlphaMeta', () => {
     }
   });
 
-  it('returns false for terrain_sand', () => {
-    expect(shouldComputeAlphaMeta('terrain_sand')).toBe(false);
+  it('returns true for terrain manifest keys', () => {
+    expect(shouldComputeAlphaMeta('terrain_sand')).toBe(true);
+    expect(shouldComputeAlphaMeta('sand_tile_09')).toBe(true);
   });
 
   it('returns false for mineral_small', () => {
