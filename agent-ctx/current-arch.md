@@ -59,6 +59,12 @@ Agent context files: state.md, workflow.md, current-arch.md, pr-checklist.md.
 Consolidation of workflow docs, prompt templates, conflict resolution with docs/AI_WORKFLOW_CONTRACT.md.
 **Status:** Done.
 
+## In Progress
+
+### ASSET-PIPELINE-ARCH-01
+- PR1: Docs/spec only — asset pipeline spec for map/environment assets (`docs/project/ASSET_PIPELINE_ARCH_01.md`), generation prompt templates (`docs/project/ASSET_GENERATION_PROMPTS.md`), no code/tests/assets
+**Status:** PR1 in review.
+
 ## Likely Next Candidates
 
 | ID | Description | Priority |
