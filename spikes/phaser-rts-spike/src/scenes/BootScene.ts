@@ -1,5 +1,6 @@
 /**
- * Boot scene — loads spike assets, creates Phaser animations, then starts GameScene.
+ * Boot scene — loads spike assets, creates Phaser animations, generates
+ * runtime textures, then starts GameScene.
  */
 import Phaser from 'phaser';
 import { DIRECTION_NAMES } from '../iso/DirectionUtils.js';
@@ -63,8 +64,31 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.generateDustTexture();
     this.createHarvesterAnimations();
     this.scene.start('GameScene');
+  }
+
+  /**
+   * Generate a small soft-circle dust texture at runtime.
+   * No external asset needed — creates an 8×8 canvas texture with
+   * a sand-colored radial gradient that fades to transparent.
+   */
+  private generateDustTexture(): void {
+    const size = 8;
+    const canvas = this.textures.createCanvas('dust_particle', size, size);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    const half = size / 2;
+
+    // Radial gradient: sand-colored center fading to transparent
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, 'rgba(217, 198, 122, 0.9)');
+    gradient.addColorStop(1, 'rgba(217, 198, 122, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    canvas.refresh();
   }
 
   /**
