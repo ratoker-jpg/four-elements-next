@@ -184,10 +184,10 @@ describe('formatConfigSnippet', () => {
 
   it('formats base profile with no overrides', () => {
     const snippet = formatConfigSnippet('dry_bush_01');
-    // dry_bush_01 base: { size: [34, 28], groundOffset: -8 }
+    // dry_bush_01 base: { size: [66, 68], groundOffset: -12 }
     expect(snippet).toContain('dry_bush_01:');
-    expect(snippet).toContain('size: [34, 28]');
-    expect(snippet).toContain('groundOffset: -8');
+    expect(snippet).toContain('size: [66, 68]');
+    expect(snippet).toContain('groundOffset: -12');
     expect(snippet).not.toContain('screenOffsetX');
     expect(snippet).not.toContain('screenOffsetY');
   });
@@ -197,7 +197,7 @@ describe('formatConfigSnippet', () => {
     setOverride('dry_bush_01', 'groundOffset', -4);
     const snippet = formatConfigSnippet('dry_bush_01');
     expect(snippet).toContain('dry_bush_01:');
-    expect(snippet).toContain('size: [48, 28]');
+    expect(snippet).toContain('size: [48, 68]');
     expect(snippet).toContain('groundOffset: -4');
   });
 
@@ -337,8 +337,8 @@ describe('no-override identity', () => {
   it('getEffectiveProfile returns base values when no overrides are active', () => {
     const profile = getEffectiveProfile('dry_bush_01');
     expect(profile).toBeDefined();
-    expect(profile!.size).toEqual([34, 28]);
-    expect(profile!.groundOffset).toBe(-8);
+    expect(profile!.size).toEqual([66, 68]);
+    expect(profile!.groundOffset).toBe(-12);
   });
 
   it('getEffectiveProfile with override applied reflects the override', () => {
@@ -346,7 +346,7 @@ describe('no-override identity', () => {
     setOverride('dry_bush_01', 'groundOffset', -4);
     const profile = getEffectiveProfile('dry_bush_01');
     expect(profile).toBeDefined();
-    expect(profile!.size).toEqual([48, 28]);
+    expect(profile!.size).toEqual([48, 68]);
     expect(profile!.groundOffset).toBe(-4);
   });
 
