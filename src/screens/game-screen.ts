@@ -5,6 +5,7 @@ import { createEconomyHud } from '../render/economy-hud.js';
 import { createBuildMenu } from '../render/build-menu.js';
 import { createProductionPanel } from '../render/production-panel.js';
 import { isDevPanelAllowed, createDevPanel } from '../dev/dev-panel.js';
+import { createAssetTunerPanel, loadOverrides, isAssetTunerAllowed } from '../dev/asset-tuner.js';
 import { DEFAULT_PRESET_ID, type MapgenPresetId } from '../game/mapgen-presets.js';
 import type { FactionId } from '../game/map-types.js';
 
@@ -12,6 +13,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
   let buildMenuHotkey: ((event: KeyboardEvent) => void) | null = null;
   let devPanelDestroy: (() => void) | null = null;
+  let assetTunerDestroy: (() => void) | null = null;
 
   return {
     id: 'game-screen',
@@ -89,6 +91,15 @@ export function createGameScreen(navigate: NavigateFn): Screen {
           wrapper.appendChild(devPanel.element);
           world.onDevPanelUpdate = (state) => devPanel.update(state);
           devPanelDestroy = devPanel.destroy;
+        }
+
+        // Asset Tuner (dev-only)
+        if (isAssetTunerAllowed()) {
+          loadOverrides();
+          const tuner = createAssetTunerPanel();
+          tuner.element.id = 'fe-asset-tuner';
+          wrapper.appendChild(tuner.element);
+          assetTunerDestroy = tuner.destroy;
         }
 
         void world.init().then(() => {
@@ -169,6 +180,15 @@ export function createGameScreen(navigate: NavigateFn): Screen {
           devPanelDestroy = devPanel.destroy;
         }
 
+        // Asset Tuner (dev-only)
+        if (isAssetTunerAllowed()) {
+          loadOverrides();
+          const tuner = createAssetTunerPanel();
+          tuner.element.id = 'fe-asset-tuner';
+          wrapper.appendChild(tuner.element);
+          assetTunerDestroy = tuner.destroy;
+        }
+
         void world.init().then(() => {
           if (gameWorld !== world) return;
           world.start();
@@ -186,6 +206,11 @@ export function createGameScreen(navigate: NavigateFn): Screen {
       if (devPanelDestroy) {
         devPanelDestroy();
         devPanelDestroy = null;
+      }
+
+      if (assetTunerDestroy) {
+        assetTunerDestroy();
+        assetTunerDestroy = null;
       }
 
       if (gameWorld) {

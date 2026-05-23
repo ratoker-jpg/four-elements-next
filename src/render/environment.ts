@@ -1,6 +1,7 @@
 /** Environment rendering: resource nodes, obstacles, and decor. */
 
 import { SPRITE_PROFILES } from '../core/constants.js';
+import type { SpriteProfile } from '../core/constants.js';
 import {
   resolveDecorAsset,
   resolveObstacleAsset,
@@ -11,6 +12,18 @@ import type { ResourcePlacement, ObstaclePlacement, DecorPlacement, ResourceType
 import type { AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
 import { containFit } from './contain-fit.js';
+import { getEffectiveProfile } from '../dev/asset-tuner.js';
+
+/** Resolve profile for an environment profile key.
+ *  Checks Asset Tuner overrides first, then falls back to base SPRITE_PROFILES.
+ *  When no override is active, the result is identical to the base profile.
+ *  Returns as SpriteProfile (with optional screenOffsetX/Y) for uniform access. */
+function resolveEnvProfile(profileKey: string): SpriteProfile | undefined {
+  const effective = getEffectiveProfile(profileKey);
+  if (effective) return effective;
+  const base = SPRITE_PROFILES[profileKey as keyof typeof SPRITE_PROFILES];
+  return base as SpriteProfile | undefined;
+}
 
 // ── Resource rendering ───────────────────────────────────────────────
 
@@ -29,16 +42,18 @@ export function renderResourceNode(
   const resolved = resolveResourceAsset(node.type, node.tx, node.ty, visualSeed);
   const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[resolved.profileKey];
+  const profile = resolveEnvProfile(resolved.profileKey);
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;
     const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
+    const offX = (profile.screenOffsetX ?? 0) * z;
+    const offSY = (profile.screenOffsetY ?? 0) * z;
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2 + offX, cv.y - h - offY + offSY, w, h);
   } else {
     renderResourceFallback(ctx, node.type, cv.x, cv.y, z);
   }
@@ -61,16 +76,18 @@ export function renderObstacle(
   const resolved = resolveObstacleAsset(obstacle.type, obstacle.tx, obstacle.ty, visualSeed);
   const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[resolved.profileKey];
+  const profile = resolveEnvProfile(resolved.profileKey);
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;
     const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
+    const offX = (profile.screenOffsetX ?? 0) * z;
+    const offSY = (profile.screenOffsetY ?? 0) * z;
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2 + offX, cv.y - h - offY + offSY, w, h);
   } else {
     renderObstacleFallback(ctx, obstacle.type, cv.x, cv.y, z);
   }
@@ -92,16 +109,18 @@ export function renderDecor(
   const resolved = resolveDecorAsset(item.type, item.tx, item.ty, visualSeed);
   const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
   const sprite = assets.get(assetKey);
-  const profile = SPRITE_PROFILES[resolved.profileKey];
+  const profile = resolveEnvProfile(resolved.profileKey);
 
   if (sprite && profile) {
     const maxW = profile.size[0] * z;
     const maxH = profile.size[1] * z;
     const offY = profile.groundOffset * z;
+    const offX = (profile.screenOffsetX ?? 0) * z;
+    const offSY = (profile.screenOffsetY ?? 0) * z;
     const { drawWidth: w, drawHeight: h } = containFit(
       sprite.naturalWidth, sprite.naturalHeight, maxW, maxH,
     );
-    ctx.drawImage(sprite, cv.x - w / 2, cv.y - h - offY, w, h);
+    ctx.drawImage(sprite, cv.x - w / 2 + offX, cv.y - h - offY + offSY, w, h);
   } else {
     renderDecorFallback(ctx, cv.x, cv.y, z);
   }
