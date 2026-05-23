@@ -106,6 +106,29 @@ export const GRID_COLOR = 'rgba(0,0,0,0.06)';
 export const HQ_COLOR = '#d4a544';
 export const BG_COLOR = '#171008';
 
+// ── Procedural sand terrain feature flag ─────────────────────────────────
+
+/** When true, terrain is rendered procedurally with deterministic chunk-based
+ *  tint variation instead of PNG sand tile sprites. The PNG path is preserved
+ *  as fallback when false. Rollback: set to false. */
+export const FE_PROCEDURAL_SAND_ENABLED = true;
+
+/** Chunk size (in tiles) for procedural sand tint grouping.
+ *  Tiles within the same chunk share a base tint for visual coherence. */
+export const PROCEDURAL_SAND_CHUNK_SIZE = 4;
+
+/** Procedural sand hue variation range (±degrees). Soft warm shift only. */
+export const PROC_SAND_HUE_RANGE = 3;
+
+/** Procedural sand saturation variation range (±fraction). */
+export const PROC_SAND_SAT_RANGE = 0.08;
+
+/** Procedural sand lightness variation range (±fraction) at chunk level. */
+export const PROC_SAND_LIGHT_RANGE = 0.06;
+
+/** Procedural sand per-tile micro-brightness variation range (±fraction). */
+export const PROC_SAND_MICRO_RANGE = 0.02;
+
 // Territory spread
 export const TERRITORY_TILE_FILL_SECONDS = 15; // Seconds to fill one footprint tile
 export const TERRITORY_MAX_RADIUS = 5; // Max expansion rings from footprint edge
