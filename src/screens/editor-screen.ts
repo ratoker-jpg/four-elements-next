@@ -607,15 +607,24 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       editorStatusEl.dataset.visible = 'false';
       overlay.appendChild(editorStatusEl);
 
-      // ── PR9: Saved maps list ────────────────────────────────────────
+      // ── PR9: Saved maps list (collapsible) ─────────────────────────────
       const savedMapsSection = document.createElement('div');
       savedMapsSection.className = 'editor-saved-maps';
       savedMapsSection.id = 'editor-saved-maps';
+      savedMapsSection.dataset.expanded = 'false'; // Start collapsed
 
-      const savedMapsHeading = document.createElement('p');
-      savedMapsHeading.className = 'editor-saved-maps__heading';
-      savedMapsHeading.textContent = 'Сохранённые карты';
-      savedMapsSection.appendChild(savedMapsHeading);
+      const savedMapsToggle = document.createElement('button');
+      savedMapsToggle.className = 'editor-saved-maps__toggle';
+      savedMapsToggle.id = 'editor-saved-maps-toggle';
+      savedMapsToggle.textContent = 'Сохранённые карты ▾';
+      savedMapsToggle.addEventListener('click', () => {
+        const isExpanded = savedMapsSection.dataset.expanded === 'true';
+        savedMapsSection.dataset.expanded = isExpanded ? 'false' : 'true';
+        savedMapsToggle.textContent = isExpanded
+          ? 'Сохранённые карты ▾'
+          : 'Сохранённые карты ▴';
+      });
+      savedMapsSection.appendChild(savedMapsToggle);
 
       savedMapsListEl = document.createElement('div');
       savedMapsListEl.className = 'editor-saved-maps__list';

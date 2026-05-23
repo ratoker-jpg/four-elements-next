@@ -14,6 +14,10 @@ import { test, expect } from '@playwright/test';
  * - Validation runs after loading
  * - No game launch button is added
  * - Normal editor placement/removal works after save/load round trip
+ *
+ * NOTE: The saved maps panel starts collapsed. Tests that interact with
+ * the saved maps list must expand it first by clicking the toggle button.
+ * Tests that need canvas clicks rely on the panel being collapsed (default).
  */
 
 /** Navigate to the editor screen from main menu. */
@@ -22,6 +26,18 @@ async function navigateToEditor(page: import('@playwright/test').Page): Promise<
   await expect(page.locator('.screen--main-menu')).toBeVisible();
   await page.getByRole('button', { name: 'Редактор карты' }).click();
   await expect(page.locator('.screen--editor')).toBeVisible();
+}
+
+/** Expand the saved maps panel. */
+async function expandSavedMaps(page: import('@playwright/test').Page): Promise<void> {
+  await page.locator('#editor-saved-maps-toggle').click();
+  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'true');
+}
+
+/** Collapse the saved maps panel. */
+async function collapseSavedMaps(page: import('@playwright/test').Page): Promise<void> {
+  await page.locator('#editor-saved-maps-toggle').click();
+  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'false');
 }
 
 test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
@@ -53,13 +69,13 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
   test('saved entry appears in editor list', async ({ page }) => {
     await navigateToEditor(page);
 
-    // Initially no entries
-    await expect(page.locator('.editor-saved-maps__empty')).toBeVisible();
-
     // Save the current map
     await page.getByRole('button', { name: 'Сохранить карту' }).click();
 
-    // Entry should appear with auto-name "Карта 1"
+    // Expand the saved maps panel to see the list
+    await expandSavedMaps(page);
+
+    // Initially should show the saved entry (not empty)
     const entry = page.locator('.editor-saved-map-entry').first();
     await expect(entry).toBeVisible();
     await expect(entry.locator('.editor-saved-map-entry__name')).toHaveText('Карта 1');
@@ -74,12 +90,15 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
   test('loading saved map replaces current editor MapData', async ({ page }) => {
     await navigateToEditor(page);
 
-    // Place an obstacle first (modify the map)
+    // Place an obstacle first (modify the map) — panel is collapsed by default, canvas is accessible
     await page.getByRole('button', { name: 'Размещение' }).click();
     await page.getByRole('button', { name: 'Скалы' }).click();
-    // Click somewhere on the canvas to place
+    // Click somewhere on the canvas to place — use center-right to avoid overlay
     const canvasEl = page.locator('#editor-canvas');
-    await canvasEl.click({ position: { x: 300, y: 300 } });
+    const box = await canvasEl.boundingBox();
+    const clickX1 = box!.width * 0.5;
+    const clickY1 = box!.height * 0.4;
+    await canvasEl.click({ position: { x: clickX1, y: clickY1 } });
 
     // Save
     await page.getByRole('button', { name: 'Сохранить карту' }).click();
@@ -89,8 +108,11 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     const obstacleMatch = infoText?.match(/Препятствия: (\d+)/);
     const savedObstacles = obstacleMatch ? parseInt(obstacleMatch[1]!, 10) : 0;
 
-    // Place more obstacles (modify map again)
-    await canvasEl.click({ position: { x: 350, y: 350 } });
+    // Place more obstacles (modify map again) — panel still collapsed
+    // Use a well-separated position to ensure a different tile
+    const clickX2 = box!.width * 0.65;
+    const clickY2 = box!.height * 0.55;
+    await canvasEl.click({ position: { x: clickX2, y: clickY2 } });
 
     // Obstacle count should have changed
     const infoText2 = await page.locator('#editor-info').textContent();
@@ -98,7 +120,10 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     const currentObstacles = obstacleMatch2 ? parseInt(obstacleMatch2[1]!, 10) : 0;
     expect(currentObstacles).toBeGreaterThan(savedObstacles);
 
-    // Now load the saved map by clicking on the entry name
+    // Expand saved maps to load the saved map
+    await expandSavedMaps(page);
+
+    // Load the saved map by clicking on the entry name
     await page.locator('.editor-saved-map-entry__name').first().click();
 
     // Obstacle count should revert to saved value
@@ -113,6 +138,9 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
 
     // Save a map
     await page.getByRole('button', { name: 'Сохранить карту' }).click();
+
+    // Expand to see the entry
+    await expandSavedMaps(page);
     await expect(page.locator('.editor-saved-map-entry')).toHaveCount(1);
 
     // Click delete button
@@ -128,7 +156,6 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
 
     // Save a map
     await page.getByRole('button', { name: 'Сохранить карту' }).click();
-    await expect(page.locator('.editor-saved-map-entry')).toHaveCount(1);
 
     // Navigate back to main menu
     await page.getByRole('button', { name: 'В меню' }).click();
@@ -138,7 +165,8 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     await page.getByRole('button', { name: 'Редактор карты' }).click();
     await expect(page.locator('.screen--editor')).toBeVisible();
 
-    // Saved map should still be there
+    // Expand saved maps — the entry should still be there
+    await expandSavedMaps(page);
     await expect(page.locator('.editor-saved-map-entry')).toHaveCount(1);
     await expect(page.locator('.editor-saved-map-entry__name').first()).toHaveText('Карта 1');
   });
@@ -153,7 +181,9 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
 
     // Editor should load without crashing
     await expect(page.locator('.screen--editor')).toBeVisible();
-    // Should show empty state (corrupt data ignored)
+
+    // Expand saved maps — should show empty state (corrupt data ignored)
+    await expandSavedMaps(page);
     await expect(page.locator('.editor-saved-maps__empty')).toBeVisible();
   });
 
@@ -176,7 +206,9 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
 
     // Editor should load without crashing
     await expect(page.locator('.screen--editor')).toBeVisible();
-    // Invalid entry should be ignored — show empty state
+
+    // Expand saved maps — invalid entry should be ignored, show empty state
+    await expandSavedMaps(page);
     await expect(page.locator('.editor-saved-maps__empty')).toBeVisible();
   });
 
@@ -189,7 +221,8 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     // Validation should show OK
     await expect(page.locator('.editor-validation__status--ok')).toBeVisible();
 
-    // Load the saved map (click entry name)
+    // Expand saved maps and load the saved map
+    await expandSavedMaps(page);
     await page.locator('.editor-saved-map-entry__name').first().click();
 
     // Validation should still run and show OK
@@ -209,14 +242,21 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     // Save the initial map
     await page.getByRole('button', { name: 'Сохранить карту' }).click();
 
-    // Load it back
+    // Expand saved maps and load the saved map back
+    await expandSavedMaps(page);
     await page.locator('.editor-saved-map-entry__name').first().click();
+
+    // Collapse the panel so canvas clicks are not intercepted
+    await collapseSavedMaps(page);
 
     // Place an obstacle (normal editor functionality)
     await page.getByRole('button', { name: 'Размещение' }).click();
     await page.getByRole('button', { name: 'Скалы' }).click();
     const canvasEl = page.locator('#editor-canvas');
-    await canvasEl.click({ position: { x: 300, y: 300 } });
+    const box = await canvasEl.boundingBox();
+    const clickX = box!.width * 0.5;
+    const clickY = box!.height * 0.4;
+    await canvasEl.click({ position: { x: clickX, y: clickY } });
 
     // Obstacle count should increase
     const infoText = await page.locator('#editor-info').textContent();
@@ -227,7 +267,7 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
 
     // Switch to erase tool and remove it
     await page.getByRole('button', { name: 'Удаление' }).click();
-    await canvasEl.click({ position: { x: 300, y: 300 } });
+    await canvasEl.click({ position: { x: clickX, y: clickY } });
 
     // Obstacle count should decrease
     const infoText2 = await page.locator('#editor-info').textContent();

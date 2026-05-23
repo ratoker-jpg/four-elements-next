@@ -990,23 +990,45 @@ html, body {
 
 .editor-saved-maps {
   margin-top: calc(0.3rem * var(--ui-scale));
-  pointer-events: auto;
   max-width: min(calc(320px * var(--ui-scale)), 55vw);
 }
 
-.editor-saved-maps__heading {
-  font-size: calc(0.85rem * var(--ui-scale));
-  font-weight: 800;
+.editor-saved-maps__toggle {
+  display: block;
+  width: 100%;
+  padding: calc(0.3rem * var(--ui-scale)) calc(0.5rem * var(--ui-scale));
+  border: 1px solid rgba(240, 201, 106, 0.25);
+  border-radius: 6px;
+  background: rgba(23, 16, 8, 0.7);
   color: var(--text-muted);
-  margin-bottom: calc(0.3rem * var(--ui-scale));
+  font-size: calc(0.82rem * var(--ui-scale));
+  font-weight: 800;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.editor-saved-maps__toggle:hover {
+  background: rgba(50, 35, 18, 0.85);
+  border-color: rgba(240, 201, 106, 0.4);
+  color: var(--text);
 }
 
 .editor-saved-maps__list {
-  display: flex;
+  display: none; /* Hidden by default (collapsed) */
   flex-direction: column;
   gap: calc(0.3rem * var(--ui-scale));
   max-height: calc(10rem * var(--ui-scale));
   overflow-y: auto;
+  margin-top: calc(0.3rem * var(--ui-scale));
+  pointer-events: auto;
+}
+
+/* When expanded, show the list */
+.editor-saved-maps[data-expanded="true"] .editor-saved-maps__list {
+  display: flex;
 }
 
 .editor-saved-maps__empty {
