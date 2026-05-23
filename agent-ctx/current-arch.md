@@ -75,17 +75,50 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 
 (None currently.)
 
-## Likely Next Candidates
+## Planned Architecture Sequence
+
+Ordered after CIVIL-BASELINE-01. Each requires Full Audit before implementation.
+
+### Block 1 — MAPGEN-RESOURCE-BALANCE-01
+- **Status:** immediate next focus. Not yet started.
+- Stage 1: Symmetric starter resource templates
+- Stage 2: Center resource cluster cleanup
+- Stage 3: Edge obstacle/resource/decor tuning
+
+### Block 2 — SAVE-LOAD-MVP-01
+- **Status:** planned. Not yet started.
+- Stage 1: GameState serialization contract
+- Stage 2: localStorage save/load MVP
+- Stage 3: minimal UI/dev integration
+
+### Block 3 — VISUAL-MOTION-FEEDBACK-01
+- **Status:** planned. Not yet started.
+- Rules: Idle = no body motion; Movement = render-only inertia; Action = specific effect
+- Stage 1: render-only unit inertia
+- Stage 2: speed/mass-based dust
+- Stage 3: active building/construction feedback
+
+### Block 4 — UI-SHELL-ARCH-01
+- **Status:** planned. Not yet started.
+- Stage 1: Esc menu shell
+- Stage 2: Continue/save slot screen
+- Stage 3: HUD/UI scale/readability pass
+
+### Block 5 — GAMEWORLD-SPLIT-01
+- **Status:** planned. Not yet started.
+- Stage 1: TestBridge extraction
+- Stage 2: DevController extraction
+- Stage 3: InputHandler extraction
+
+### Block 6 — COMBAT-READINESS-01
+- **Status:** not immediate. Only after blocks 1–3 are merged and playtested.
+- Full Audit when unblocked.
+
+## Likely Next Candidates (lower priority)
 
 | ID | Description | Priority |
 |---|---|---|
-| MAPGEN-RESOURCE-BALANCE-01 | Refine map resource distribution and balance for first 10+ minutes | High |
 | MAP-EDITOR-ARCH-01 (future) | Export/import, map sharing, undo/redo, map rename/duplicate, advanced sliders, custom preset editor | Low |
-| UI-SHELL-01 | Esc menu / save / continue shell | Medium |
-| SAVE-LOAD-01 | Save/load system (GameState persistence) | Medium |
-| HARVESTER-VIDEO-MOVE-01 | Harvester movement video/visual polish | Medium |
-| HARVESTER-ANIMATION-PIPELINE-01 | Harvester animation pipeline improvements | Medium |
-| COMBAT-ARCH-01 | Combat system architecture | Low |
 
 ## Rule
 

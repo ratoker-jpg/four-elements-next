@@ -31,6 +31,15 @@ Civil baseline is functional:
 
 **MAPGEN-RESOURCE-BALANCE-01** — refine map resource distribution and balance for the first 10+ minutes of civil gameplay. Requires a Full Audit first.
 
+## Planned architecture sequence
+
+1. **MAPGEN-RESOURCE-BALANCE-01** (immediate next) — symmetric starter templates, center cluster cleanup, edge tuning
+2. **SAVE-LOAD-MVP-01** — serialization contract, localStorage MVP, UI/dev integration
+3. **VISUAL-MOTION-FEEDBACK-01** — render-only inertia, speed/mass dust, active building feedback
+4. **UI-SHELL-ARCH-01** — Esc menu, save slots, HUD readability
+5. **GAMEWORLD-SPLIT-01** — TestBridge, DevController, InputHandler extraction
+6. **COMBAT-READINESS-01** — blocked until blocks 1–3 are merged and playtested
+
 ## Do-not-touch list
 
 - Do not start combat yet
