@@ -167,3 +167,139 @@ export function createGameState(
     territory,
   };
 }
+
+/**
+ * Deep-clone a MapData object through JSON round-trip.
+ * This ensures runtime mutations never reach the original editor MapData
+ * or saved localStorage maps.
+ * Returns null if the value cannot be serialized/parsed.
+ */
+export function deepCloneMapData(map: MapData): MapData | null {
+  try {
+    return JSON.parse(JSON.stringify(map)) as MapData;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a full initial GameState from a custom MapData (editor-launched game).
+ *
+ * The input MapData is deep-cloned before use so that runtime mutations
+ * never affect the editor's MapData or saved localStorage maps.
+ *
+ * If map.builders exists and contains valid builder data, those builders
+ * are preserved. If map.builders is missing or empty, one starting builder
+ * is created near HQ.
+ *
+ * The faction is taken from mapData.hq.faction (not hardcoded).
+ */
+export function createGameStateFromMap(mapData: MapData, faction: FactionId): GameState {
+  // Deep-clone to prevent runtime mutations from reaching editor/saved map
+  const cloned = deepCloneMapData(mapData);
+  if (cloned === null) {
+    throw new Error('Failed to deep-clone custom MapData');
+  }
+  const map = cloned;
+
+  // Ensure gameplay arrays exist (defensive — normalize like custom-map-storage does)
+  map.buildings = Array.isArray(map.buildings) ? map.buildings : [];
+  map.constructionSites = Array.isArray(map.constructionSites) ? map.constructionSites : [];
+
+  // Builder handling: preserve if valid, otherwise create one near HQ
+  if (!Array.isArray(map.builders) || map.builders.length === 0) {
+    // Create one starting builder near HQ
+    const occupied = buildOccupiedSet(map);
+    const tile = findFreeTileNearHq(map, occupied);
+    if (tile) {
+      map.builders = [{
+        tx: tile.tx,
+        ty: tile.ty,
+        busy: false,
+        phase: 'idle',
+        path: [],
+        pathIndex: 0,
+        ftx: tile.tx + 0.5,
+        fty: tile.ty + 0.5,
+        targetTx: tile.tx,
+        targetTy: tile.ty,
+        assignedSiteId: -1,
+      }];
+    } else {
+      // Fallback: place builder at HQ center (should not happen on valid maps)
+      map.builders = [{
+        tx: map.hq.tx,
+        ty: map.hq.ty,
+        busy: false,
+        phase: 'idle',
+        path: [],
+        pathIndex: 0,
+        ftx: map.hq.tx + 0.5,
+        fty: map.hq.ty + 0.5,
+        targetTx: map.hq.tx,
+        targetTy: map.hq.ty,
+        assignedSiteId: -1,
+      }];
+    }
+  }
+
+  // Initialize subsystems using the same logic as createGameState
+  const separatorPositions = getSeparatorPositions(map.buildings);
+  const rawStorageCount = getRawStorageCount(map.buildings);
+  const matterStorageCount = getMatterStorageCount(map.buildings);
+  const economy = createEconomyState(separatorPositions, rawStorageCount, matterStorageCount, faction);
+
+  const power = createPowerState(map.hq, map.buildings);
+
+  const relayOnlineCount = power.buildings.filter(
+    (b) => b.type === 'command-relay' && b.online,
+  ).length;
+
+  const occupied = buildOccupiedSet(map);
+  const harvesters = createInitialHarvesters(map.hq, occupied);
+  const resourceNodes = createResourceNodeStates(map.resources);
+
+  const control = createControlState(
+    map.buildings.filter((b) => b.type === 'command-relay').length,
+    relayOnlineCount,
+    map.builders.length * BUILDER_CONTROL_COST + harvesters.length * HARVESTER_CONTROL_COST,
+  );
+
+  const production = createProductionState();
+
+  const territory = createTerritoryState(map.width, map.height);
+  initTerritoryFromHq(territory, map.hq.tx, map.hq.ty, faction);
+
+  return {
+    map,
+    economy,
+    power,
+    control,
+    constructionStatusMessage: 'Строитель готов к строительству.',
+    constructionCancelledCount: 0,
+    harvesters,
+    resourceNodes,
+    production,
+    territory,
+  };
+}
+
+/**
+ * Find a free tile in the ring around HQ using the occupied-tile set.
+ * Used by createGameStateFromMap when builders are missing.
+ */
+function findFreeTileNearHq(
+  map: MapData,
+  occupied: Set<string>,
+): { tx: number; ty: number } | null {
+  const hq = map.hq;
+  for (let ty = hq.ty - 1; ty <= hq.ty + HQ_FOOTPRINT; ty++) {
+    for (let tx = hq.tx - 1; tx <= hq.tx + HQ_FOOTPRINT; tx++) {
+      // Skip tiles inside HQ footprint
+      if (tx >= hq.tx && tx < hq.tx + HQ_FOOTPRINT && ty >= hq.ty && ty < hq.ty + HQ_FOOTPRINT) continue;
+      if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) continue;
+      if (!occupied.has(`${tx},${ty}`)) return { tx, ty };
+    }
+  }
+  return null;
+}

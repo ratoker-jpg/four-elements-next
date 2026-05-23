@@ -229,11 +229,11 @@ test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {
     await expect(page.locator('.editor-validation__status')).toBeVisible();
   });
 
-  test('no game launch button is added', async ({ page }) => {
+  test('game launch button exists in editor (PR10)', async ({ page }) => {
     await navigateToEditor(page);
 
-    // There should be no "Начать игру" button in the editor
-    await expect(page.getByRole('button', { name: 'Начать игру' })).toHaveCount(0);
+    // PR10 adds "Начать игру" button
+    await expect(page.getByRole('button', { name: 'Начать игру' })).toBeVisible();
   });
 
   test('normal editor placement/removal still works after save/load round trip', async ({ page }) => {

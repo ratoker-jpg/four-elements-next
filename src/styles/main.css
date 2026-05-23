@@ -962,6 +962,22 @@ html, body {
   pointer-events: auto;
 }
 
+/* ── Editor Launch Game Button (PR10) ─────────────────────────────── */
+
+.editor-overlay__launch-btn {
+  width: auto;
+  min-width: calc(140px * var(--ui-scale));
+  pointer-events: auto;
+  border-color: rgba(94, 232, 154, 0.42);
+  color: #5ee89a;
+}
+
+.editor-overlay__launch-btn:hover:not(:disabled) {
+  border-color: rgba(94, 232, 154, 0.72);
+  color: #a0f5c8;
+  background: linear-gradient(180deg, #2a4a30, #1a2e1e);
+}
+
 /* ── Editor Map Status Feedback (PR9) ─────────────────────────────── */
 
 .editor-map-status {
