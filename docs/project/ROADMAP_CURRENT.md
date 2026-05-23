@@ -338,194 +338,130 @@ Target:
 
 This belongs to movement/visual QA, not mapgen.
 
-## 6. Immediate priority order
+## 6. Ordered architecture sequence after CIVIL-BASELINE-01
 
-### Priority 0 — Roadmap/doc consolidation
+The following blocks are planned in this order. Each requires a Full Audit before implementation unless already completed. Implementation is split into up to 3 stage PRs per block.
 
-Status: done (this document + `docs/QUICKSTART_FOR_AI.md`).
+### Block 1 — MAPGEN-RESOURCE-BALANCE-01
 
-### Priority 1 — TERRITORY-TUNING-01
+Status: **immediate next focus.** Not yet started.
 
-Status: done.
-
-Merged in earlier work. Territory spreads slowly and does not block construction or pathfinding.
-
-### Priority 2 — MAPGEN-RESOURCE-BALANCE-01
-
-Type: Big Audit, likely implementation in two or three stage PRs.
+Type: Full Audit, then 3 stage PRs.
 
 Goal:
 
 - refine map resource distribution and balance for the first 10+ minutes of civil gameplay;
-- ensure starter resource pockets are adequate and well-positioned;
+- ensure starter resource pockets are adequate, well-positioned, and symmetric;
 - verify finite/infinite resource ratios support sustainable economy;
 - address manual QA observations in sections 5.1–5.3;
-- make the map look and play closer to target RTS feel before further civil expansion.
-
-This replaces the earlier MAPGEN-QA-ARCH-01 scope with a more focused resource-balance mandate.
-
-Stages:
-
-#### Stage A — Starter resource pockets
-
-- push starter resource pockets closer to player start/HQ/corner;
-- increase small resources near HQ;
-- add some medium resources nearby;
-- preserve route safety for current straight-line harvester movement;
-- keep center/infinite rules.
-
-#### Stage B — Edge obstacle biome
-
-- create edge/border mountain zones;
-- use small and medium mountains near edges;
-- standard map avoids large mountain by default;
-- large map may allow larger landmarks sparingly;
-- preserve center/start reachability.
-
-#### Stage C — Environment/resource profile tuning
-
-- tune `groundOffset`, profile size, and footprint assumptions for resources/decor/obstacles;
-- validate 1x1, 2x2, 3x3 environment objects;
-- make `mineral_infinite` a 3x3 central deposit;
-- do not touch accepted building profile block.
-
-#### Stage D — Map visual variation pass
-
-- use existing decor/rocks/sand bumps more effectively;
-- reduce repetition;
-- avoid visual clutter;
-- do not add new assets unless explicitly scoped.
-
-Recommended PR grouping:
-
-- PR 1: Stage A+B if compact;
-- PR 2: Stage C+D if visual/profile risk is higher;
-- or one PR if GLM confirms diff is compact and tests are clear.
-
-### Priority 3 — ECONOMY-BASELINE-01
-
-Status: done (CIVIL-BASELINE-01 / PR #114 ECONOMY-PACE-01).
-
-Economy pacing baseline is merged. First 5–8 minutes are tuned with specific start values, building costs, and production durations. Further balance tuning may happen as part of MAPGEN-RESOURCE-BALANCE-01 playtesting.
-
-### Priority 4 — CIVIL-UX-01
-
-Goal:
-
-- make builder/construction loop understandable.
-
-Targets:
-
-- build menu is clear;
-- disabled state explains missing resources;
-- construction status is clear;
-- builder auto-placement works in normal cases;
-- `builder cannot reach` / `cannot find place` is not shown for normal player flow;
-- construction does not require exact cell selection.
-
-### Priority 5 — DEV-SANDBOX-ARCH-01
-
-Goal:
-
-- create fast test/debug tools before bot/combat.
-
-Current existing pieces:
-
-- test hooks for economy/power/control/construction/harvesters/production/territory;
-- asset preview sandbox with `0` key;
-- dev panel (DEV-SANDBOX-ARCH-01, DEV-SANDBOX-TOOLS-01, DEV-SANDBOX-TOOLS-02);
-- map editor screen with preview, palette, validation, save/load, game launch (MAP-EDITOR-ARCH-01 PR1–PR10).
-
-Missing:
-
-- fast-forward time;
-- show map seed/validation report/resource counts;
-- toggle territory/grid/obstacles/resource debug.
+- clean up center resource cluster;
+- tune edge obstacle/resource/decor distribution.
 
 Stages:
 
-- Stage A — dev overlay panel;
-- Stage B — resource/time test actions;
-- Stage C — spawn/building test tools;
-- Stage D — visual QA toggles.
+- **Stage 1 — Symmetric starter resource templates**: define and implement symmetric starter resource placement templates so both players get equivalent starting economies; push starter pockets closer to HQ; increase small/medium resources near start.
+- **Stage 2 — Center resource cluster cleanup**: clean up center resource cluster logic; ensure `mineral_infinite` placement and surrounding finite resources are consistent, reachable, and strategically meaningful.
+- **Stage 3 — Edge obstacle/resource/decor tuning**: tune edge/border mountain zones, obstacle density, decor distribution; create natural terrain boundaries instead of empty map cutoffs; use small and medium mountains near edges.
 
-### Priority 6 — UI-SHELL-ARCH-01
+### Block 2 — SAVE-LOAD-MVP-01
+
+Status: planned. Not yet started.
+
+Type: Full Audit, then 3 stage PRs.
 
 Goal:
 
-- make menu/save/settings shell usable.
-
-Current state:
-
-- main menu exists;
-- map size screen exists;
-- seed screen exists (seed input, "Случайный сид", 4 mapgen presets);
-- faction select exists;
-- settings has UI scale buttons;
-- editor screen exists (dev-only, preview/palette/validation/save/load/game launch);
-- seed screen has saved seeds (load/delete, collapsible panel);
-- Continue is disabled;
-- no save slot shell;
-- no Esc pause menu.
+- add minimal GameState persistence so players can save and resume a game session.
 
 Stages:
 
-- Stage A — update menu text and map-size labels;
-- Stage B — Continue opens save list shell;
-- Stage C — Esc menu: Continue / Save / Settings / Main menu;
-- Stage D — HUD/UI scale/readability pass.
+- **Stage 1 — GameState serialization contract**: define the serialization schema for `GameState`; version the format; handle backward compatibility; ensure deep-clone round-trip works.
+- **Stage 2 — localStorage save/load MVP**: implement save/load to localStorage using the serialization contract; slot-based saves; basic error handling.
+- **Stage 3 — minimal UI/dev integration**: wire save/load into the game shell; Continue button on main menu; save on Esc menu; dev panel save/load hooks for testing.
 
-### Priority 7 — PATHFINDING-ARCH-01
+### Block 3 — VISUAL-MOTION-FEEDBACK-01
+
+Status: planned. Not yet started.
+
+Type: Full Audit, then 3 stage PRs.
 
 Goal:
 
-- stop straight-line movement from undermining obstacles/mapgen.
+- improve unit and building visual feedback so the game feels grounded instead of floaty/sliding.
+
+Rules:
+
+- Idle = no body motion. Stationary units do not bob or sway.
+- Movement = render-only inertia based on speed/acceleration. No gameplay state change; visual interpolation only.
+- Action = specific effect. Harvesting, building, etc. get distinct visual feedback.
 
 Stages:
 
-- Stage A — grid/path model;
-- Stage B — builder movement to construction approach cell;
-- Stage C — harvester movement to resource/dropoff;
-- Stage D — RTS click indicator: green accepted / red unavailable.
+- **Stage 1 — render-only unit inertia**: implement render-layer inertia/easing for unit movement; units accelerate and decelerate visually without changing gameplay speed; no idle animation for stationary units.
+- **Stage 2 — speed/mass-based dust**: add dust/particle feedback scaled to unit speed and mass; heavier units produce more visible ground interaction; stationary units produce nothing.
+- **Stage 3 — active building/construction feedback**: add visual feedback for active construction progress, harvester delivery, and separator processing; distinguish active buildings from idle ones.
 
-Important:
+### Block 4 — UI-SHELL-ARCH-01
 
-- do not start enemy bot before this has at least an MVP.
+Status: planned. Not yet started.
 
-### Priority 8 — VISUAL-QA-ARCH-01
+Type: Full Audit, then 3 stage PRs.
 
 Goal:
 
-- reduce flying/sliding/ungrounded visual feel.
+- make the outer game shell usable: Esc menu, save slots, HUD readability.
 
 Stages:
 
-- Stage A — civil unit grounding/profile review;
-- Stage B — no idle bobbing for stationary units;
-- Stage C — movement visual weight pass;
-- Stage D — resource/obstacle readability and profile QA.
+- **Stage 1 — Esc menu shell**: implement in-game Esc menu with Continue / Save / Settings / Main Menu options; pause game while menu is open.
+- **Stage 2 — Continue/save slot screen**: wire Continue button on main menu to save slot list; load selected save; display save metadata (map size, faction, tick count).
+- **Stage 3 — HUD/UI scale/readability pass**: tune HUD layout, resource display, build menu labels, and UI scale for readability across common screen sizes.
 
-### Priority 9 — COMBAT-VISUAL-ARCH-01
+### Block 5 — GAMEWORLD-SPLIT-01
 
-Not immediate.
+Status: planned. Not yet started.
+
+Type: Full Audit, then 3 stage PRs.
 
 Goal:
 
-- future light tank / combat visual system based on body/turret/effects.
+- split `GameWorld` into focused modules to reduce coupling and improve testability.
 
-Do only after civil sandbox is stable.
+Stages:
 
-### Priority 10 — ENEMY-BOT-ARCH-01
+- **Stage 1 — TestBridge extraction**: extract test hook bridge from GameWorld into a dedicated `TestBridge` module; game-world no longer contains test-only logic inline.
+- **Stage 2 — DevController extraction**: extract dev panel controller logic from GameWorld into a dedicated `DevController` module; game-world delegates dev actions instead of owning them.
+- **Stage 3 — InputHandler extraction**: extract input handling from GameWorld into a dedicated `InputHandler` module; game-world receives processed commands instead of raw events.
 
-Not immediate.
+### Block 6 — COMBAT-READINESS-01
 
-Start only after:
+Status: **not immediate.** Only after mapgen, save/load, and motion feedback checkpoints are acceptable.
 
-- map/resource/territory baseline is playable;
-- economy loop works;
-- construction loop works;
-- dev/test tools exist;
-- movement/pathfinding MVP exists.
+Type: Full Audit when unblocked.
+
+Goal:
+
+- prepare the architecture foundation for combat: unit roles, health, damage, faction opposition.
+
+Do not start until:
+
+- MAPGEN-RESOURCE-BALANCE-01 is merged and playtested;
+- SAVE-LOAD-MVP-01 is merged;
+- VISUAL-MOTION-FEEDBACK-01 is merged;
+- civil loop playtesting is satisfactory.
+
+### Previously completed blocks
+
+These are listed for reference; they are done and should not be restarted without a scoped decision.
+
+| Block | PRs | Description |
+|---|---|---|
+| TERRITORY-TUNING-01 | earlier | Territory spreads slowly, does not block construction/pathfinding |
+| ECONOMY-BASELINE-01 | PR #114 | Economy pacing for first 5–8 minutes (CIVIL-BASELINE-01 Stage 1) |
+| CIVIL-UX-01 | earlier | Builder/construction loop UX feedback |
+| DEV-SANDBOX-ARCH-01 | earlier | Dev panel, overlays, spawn tools |
+| PATHFINDING-ARCH-01 | earlier | Passability grid, BFS pathfinder, harvester/builder movement |
+| VISUAL-QA-ARCH-01 | earlier | Civil unit scale, shadows, sprite debug |
 
 ## 7. Do not do yet
 
@@ -551,6 +487,8 @@ Do not use Codex by default for small fixes.
 ## 8. Next recommended action
 
 1. Run **MAPGEN-RESOURCE-BALANCE-01** Full Audit.
-2. Implement in up to 3 stage PRs following the audit plan.
-3. After mapgen balance is validated, reassess priority for remaining items (UI shell, dev tools expansion, visual QA pass).
-4. Combat and enemy bot remain blocked until civil loop playtesting is satisfactory.
+2. Implement in 3 stage PRs following the audit plan.
+3. After MAPGEN-RESOURCE-BALANCE-01 is merged, proceed to **SAVE-LOAD-MVP-01** Full Audit.
+4. Continue through the ordered sequence: VISUAL-MOTION-FEEDBACK-01 → UI-SHELL-ARCH-01 → GAMEWORLD-SPLIT-01.
+5. COMBAT-READINESS-01 remains blocked until blocks 1–3 are merged and playtested.
+6. Reassess sequence if priorities change, but do not skip ahead to combat.

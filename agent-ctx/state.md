@@ -232,3 +232,11 @@ Editor MapData → `validateEditorMap(mapData)` → `customMapData` field in `Ga
 ## Next Focus
 
 **MAPGEN-RESOURCE-BALANCE-01** — refine map resource distribution and balance for the first 10+ minutes of civil gameplay. Requires Full Audit.
+
+Planned sequence after CIVIL-BASELINE-01:
+1. MAPGEN-RESOURCE-BALANCE-01 (immediate next)
+2. SAVE-LOAD-MVP-01
+3. VISUAL-MOTION-FEEDBACK-01
+4. UI-SHELL-ARCH-01
+5. GAMEWORLD-SPLIT-01
+6. COMBAT-READINESS-01 (blocked until 1–3 merged and playtested)
