@@ -502,6 +502,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       mapWidth = mapData.width;
       mapHeight = mapData.height;
 
+      // Test hook: expose editor MapData for E2E tests
+      (window as any).__editorMapData = mapData;
+
       // Create wrapper
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--editor';
@@ -878,6 +881,7 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       keys.clear();
       isPanning = false;
       camera = null;
+      delete (window as any).__editorMapData;
       assets = null;
       mapData = null;
       resourceNodes = null;

@@ -28,16 +28,22 @@ async function navigateToEditor(page: import('@playwright/test').Page): Promise<
   await expect(page.locator('.screen--editor')).toBeVisible();
 }
 
-/** Expand the saved maps panel. */
+/** Expand the saved maps panel (idempotent — no-op if already expanded). */
 async function expandSavedMaps(page: import('@playwright/test').Page): Promise<void> {
-  await page.locator('#editor-saved-maps-toggle').click();
-  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'true');
+  const expanded = await page.locator('#editor-saved-maps').getAttribute('data-expanded');
+  if (expanded !== 'true') {
+    await page.locator('#editor-saved-maps-toggle').click();
+    await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'true');
+  }
 }
 
-/** Collapse the saved maps panel. */
+/** Collapse the saved maps panel (idempotent — no-op if already collapsed). */
 async function collapseSavedMaps(page: import('@playwright/test').Page): Promise<void> {
-  await page.locator('#editor-saved-maps-toggle').click();
-  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'false');
+  const expanded = await page.locator('#editor-saved-maps').getAttribute('data-expanded');
+  if (expanded !== 'false') {
+    await page.locator('#editor-saved-maps-toggle').click();
+    await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'false');
+  }
 }
 
 test.describe('MAP-EDITOR-ARCH-01 PR9 — Editor custom map save/load', () => {

@@ -23,16 +23,22 @@ async function navigateToEditor(page: import('@playwright/test').Page): Promise<
   await expect(page.locator('.screen--editor')).toBeVisible();
 }
 
-/** Expand the saved maps panel. */
+/** Expand the saved maps panel (idempotent — no-op if already expanded). */
 async function expandSavedMaps(page: import('@playwright/test').Page): Promise<void> {
-  await page.locator('#editor-saved-maps-toggle').click();
-  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'true');
+  const expanded = await page.locator('#editor-saved-maps').getAttribute('data-expanded');
+  if (expanded !== 'true') {
+    await page.locator('#editor-saved-maps-toggle').click();
+    await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'true');
+  }
 }
 
-/** Collapse the saved maps panel. */
+/** Collapse the saved maps panel (idempotent — no-op if already collapsed). */
 async function collapseSavedMaps(page: import('@playwright/test').Page): Promise<void> {
-  await page.locator('#editor-saved-maps-toggle').click();
-  await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'false');
+  const expanded = await page.locator('#editor-saved-maps').getAttribute('data-expanded');
+  if (expanded !== 'false') {
+    await page.locator('#editor-saved-maps-toggle').click();
+    await expect(page.locator('#editor-saved-maps')).toHaveAttribute('data-expanded', 'false');
+  }
 }
 
 test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
@@ -77,8 +83,8 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
     await page.getByRole('button', { name: 'Начать игру' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();
 
-    // Wait for game to initialize
-    await page.waitForTimeout(1000);
+    // Wait for game to initialize and test hooks to be published
+    await page.waitForFunction(() => (window as any).__economyState != null, { timeout: 5000 });
 
     // Verify game state via test hooks
     const mapState = await page.evaluate(() => {
@@ -110,8 +116,8 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
     await page.getByRole('button', { name: 'Начать игру' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();
 
-    // Wait for game to initialize
-    await page.waitForTimeout(1000);
+    // Wait for game to initialize and test hooks to be published
+    await page.waitForFunction(() => (window as any).__harvesterState != null, { timeout: 5000 });
 
     // Verify resource nodes count via test hooks
     const harvesterState = await page.evaluate(() => {
@@ -153,8 +159,8 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
     await page.getByRole('button', { name: 'Начать игру' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();
 
-    // Game should be running
-    await page.waitForTimeout(1000);
+    // Game should be running — wait for test hooks
+    await page.waitForFunction(() => (window as any).__economyState != null, { timeout: 5000 });
     const mapState = await page.evaluate(() => {
       const eco = (window as any).__economyState;
       return { faction: eco?.faction };
@@ -165,42 +171,28 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
   test('invalid editor map does not launch and shows status', async ({ page }) => {
     await navigateToEditor(page);
 
-    // Erase all resources to make the map invalid
-    await page.getByRole('button', { name: 'Удаление' }).click();
+    // Programmatically remove all resources via test hook to make map invalid
+    // (validateEditorMap reports "Нет ресурсов на карте" when resources is empty)
+    await page.evaluate(() => {
+      const md = (window as any).__editorMapData;
+      if (md) md.resources = [];
+    });
 
-    // Click multiple times on canvas to erase resources
-    const canvasEl = page.locator('#editor-canvas');
-    const box = await canvasEl.boundingBox();
-
-    // Erase many times at different positions to try to remove resources
-    for (let i = 0; i < 30; i++) {
-      const x = box!.width * (0.3 + (i % 7) * 0.08);
-      const y = box!.height * (0.25 + Math.floor(i / 7) * 0.1);
-      await canvasEl.click({ position: { x, y } });
-    }
-
-    // Switch back to select tool
-    await page.getByRole('button', { name: 'Выбор' }).click();
-
-    // Validate to check if map became invalid (may or may not be depending on what was erased)
-    // The key test: clicking "Начать игру" on an invalid map should NOT navigate
+    // Trigger validation to update the UI
     await page.getByRole('button', { name: 'Проверить карту' }).click();
 
-    // If the validation shows errors, then launch should fail
-    const hasErrors = await page.locator('.editor-validation__status--error').isVisible();
+    // Validation should show errors (no resources)
+    await expect(page.locator('.editor-validation__status--error')).toBeVisible();
 
-    if (hasErrors) {
-      // Try to launch — should stay on editor
-      await page.getByRole('button', { name: 'Начать игру' }).click();
+    // Try to launch — should stay on editor
+    await page.getByRole('button', { name: 'Начать игру' }).click();
 
-      // Should still be on editor screen (not navigated to game)
-      await expect(page.locator('.screen--editor')).toBeVisible();
+    // Should still be on editor screen (not navigated to game)
+    await expect(page.locator('.screen--editor')).toBeVisible();
 
-      // Status should show error
-      await expect(page.locator('.editor-map-status')).toHaveAttribute('data-visible', 'true');
-      await expect(page.locator('.editor-map-status')).toHaveAttribute('data-tone', 'error');
-    }
-    // If map is still valid after erasing, the test passes trivially
+    // Status should show error
+    await expect(page.locator('.editor-map-status')).toHaveAttribute('data-visible', 'true');
+    await expect(page.locator('.editor-map-status')).toHaveAttribute('data-tone', 'error');
   });
 
   test('normal New Game seed/preset flow still works', async ({ page }) => {
@@ -238,8 +230,9 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
     await page.getByRole('button', { name: 'Начать игру' }).click();
     await expect(page.locator('.screen--game')).toBeVisible();
 
-    // Wait for some game ticks to run (which may mutate GameState.map)
-    await page.waitForTimeout(2000);
+    // Wait for game to run some ticks (which may mutate GameState.map)
+    await page.waitForFunction(() => (window as any).__economyState != null, { timeout: 5000 });
+    await page.waitForTimeout(500); // Let a few ticks run
 
     // Go back to main menu
     await page.getByRole('button', { name: 'В главное меню' }).click();
