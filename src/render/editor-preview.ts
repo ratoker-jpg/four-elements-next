@@ -332,6 +332,7 @@ function getFootprintSortKey(tx: number, ty: number, footprint: number): number 
 export function editorPreviewRender(
   ctx: CanvasRenderingContext2D,
   map: MapData,
+  visualSeed: number,
   camera: Camera,
   assets: AssetStore,
   resourceNodes?: readonly ResourceNodeState[],
@@ -344,7 +345,7 @@ export function editorPreviewRender(
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  renderTerrain(ctx, map, camera, assets);
+  renderTerrain(ctx, map, camera, assets, visualSeed);
 
   // Build sorted entity list — same pattern as main renderer but editor-only subset
   const entities: SortedEntity[] = [];
@@ -367,7 +368,7 @@ export function editorPreviewRender(
     entities.push({
       sortKey: r.tx + r.ty + (r.footprint - 1) * 2,
       shadow: () => renderTileShadow(ctx, camera, r.tx, r.ty, r.footprint, 'resource'),
-      render: () => renderResourceNode(ctx, r, camera, assets),
+      render: () => renderResourceNode(ctx, r, camera, assets, visualSeed),
     });
   }
 
@@ -376,7 +377,7 @@ export function editorPreviewRender(
     entities.push({
       sortKey: o.tx + o.ty + (o.footprint - 1) * 2,
       shadow: () => renderTileShadow(ctx, camera, o.tx, o.ty, o.footprint, 'obstacle'),
-      render: () => renderObstacle(ctx, o, camera, assets),
+      render: () => renderObstacle(ctx, o, camera, assets, visualSeed),
     });
   }
 
@@ -385,7 +386,7 @@ export function editorPreviewRender(
     entities.push({
       sortKey: d.tx + d.ty,
       shadow: () => renderTileShadow(ctx, camera, d.tx, d.ty, 1, 'decor'),
-      render: () => renderDecor(ctx, d, camera, assets),
+      render: () => renderDecor(ctx, d, camera, assets, visualSeed),
     });
   }
 

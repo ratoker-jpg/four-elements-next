@@ -19,6 +19,7 @@
 import type { Screen, ScreenTransitionData, EditorScreenData, GameScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 import { MAP_SIZE_STANDARD, MAP_SIZE_LARGE, ASSET_MANIFEST } from '../core/constants.js';
+import { computeMapVisualSeed } from '../core/asset-variants.js';
 import { canvasToTile, tileToScreen } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
 import { generateMap } from '../game/mapgen.js';
@@ -846,7 +847,15 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
         const hover = computeHoverState();
 
         // Render editor preview
-        editorPreviewRender(ctx, mapData, camera, assets, resourceNodes ?? undefined, hover);
+        editorPreviewRender(
+          ctx,
+          mapData,
+          computeMapVisualSeed(mapData),
+          camera,
+          assets,
+          resourceNodes ?? undefined,
+          hover,
+        );
 
         animFrameId = requestAnimationFrame(loop);
       };

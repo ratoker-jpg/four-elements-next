@@ -1,6 +1,7 @@
 /** Aggregated game simulation state. Extracted from GameWorld for system-runner consumption. */
 
 import { MAP_SIZE_STANDARD, MAP_SIZE_LARGE, HQ_FOOTPRINT } from '../core/constants.js';
+import { computeMapVisualSeed } from '../core/asset-variants.js';
 import { generateMap } from './mapgen.js';
 import type { MapgenPresetId } from './mapgen-presets.js';
 import { DEFAULT_PRESET_ID, resolveMapgenPresetConfig } from './mapgen-presets.js';
@@ -47,6 +48,7 @@ function resolveMapSize(mapSize: string): number {
 /** All mutable game simulation state in one object. Systems read/write this. */
 export interface GameState {
   readonly map: MapData;
+  readonly visualSeed: number;
   economy: EconomyState;
   power: PowerState;
   control: ControlState;
@@ -156,6 +158,7 @@ export function createGameState(
 
   return {
     map,
+    visualSeed: seed,
     economy,
     power,
     control,
@@ -272,6 +275,7 @@ export function createGameStateFromMap(mapData: MapData, faction: FactionId): Ga
 
   return {
     map,
+    visualSeed: computeMapVisualSeed(map),
     economy,
     power,
     control,

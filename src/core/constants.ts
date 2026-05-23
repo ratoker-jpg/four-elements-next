@@ -57,6 +57,20 @@ export interface SpriteProfile {
   readonly screenOffsetY?: number;
 }
 
+function numberedAssetEntries(
+  prefix: string,
+  start: number,
+  end: number,
+  directory: string,
+): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (let index = start; index <= end; index++) {
+    const suffix = String(index).padStart(2, '0');
+    entries[`${prefix}_${suffix}`] = `${directory}/${prefix}_${suffix}.png`;
+  }
+  return entries;
+}
+
 // Sprite rendering profiles (from Sandbox sprite_profiles.js, adapted)
 export const SPRITE_PROFILES = {
   hq_base: { size: [200, 200], groundOffset: 2, screenOffsetX: -2, screenOffsetY: -2 },
@@ -118,18 +132,29 @@ export const ASSET_MANIFEST: Record<string, string> = {
   terrain_sand: 'assets/tiles/sand_tile.png',
   terrain_sand_dark: 'assets/tiles/sand_tile_dark.png',
   terrain_sand_light: 'assets/tiles/sand_tile_light.png',
+  ...numberedAssetEntries('sand_tile', 1, 12, 'assets/tiles/sand_tile'),
   mineral_small: 'assets/environment/mineral_small.png',
   mineral_medium: 'assets/environment/mineral_medium.png',
   mineral_large: 'assets/environment/mineral_large.png',
-  mineral_infinite: 'assets/environment/mineral_infinite.png',
+  mineral_infinite: 'assets/environment/mineral_infinite_01.png',
+  mineral_infinite_legacy: 'assets/environment/mineral_infinite.png',
+  ...numberedAssetEntries('mineral_small', 2, 9, 'assets/environment'),
+  ...numberedAssetEntries('mineral_medium', 2, 9, 'assets/environment'),
+  ...numberedAssetEntries('mineral_large', 2, 9, 'assets/environment'),
   mountain_small_01: 'assets/environment/mountain_small_01.png',
   mountain_medium_01: 'assets/environment/mountain_medium_01.png',
   mountain_large_01: 'assets/environment/mountain_large_01.png',
+  ...numberedAssetEntries('mountain_small', 2, 9, 'assets/environment'),
+  ...numberedAssetEntries('mountain_medium', 2, 9, 'assets/environment'),
+  ...numberedAssetEntries('mountain_large', 2, 9, 'assets/environment'),
   volcano_small_01: 'assets/environment/volcano_small_01.png',
   volcano_medium_01: 'assets/environment/volcano_medium_01.png',
   rock_cluster_small_01: 'assets/environment/rock_cluster_small_01.png',
+  ...numberedAssetEntries('rock_cluster', 2, 9, 'assets/environment'),
   dry_bush_01: 'assets/environment/dry_bush_01.png',
   sand_bump_01: 'assets/environment/sand_bump_01.png',
+  ...numberedAssetEntries('dry_bush', 2, 9, 'assets/environment'),
+  ...numberedAssetEntries('sand_bump', 2, 9, 'assets/environment'),
   hq_cyan: 'assets/factions/cyan/buildings/hq_t1.png',
   hq_green: 'assets/factions/green/buildings/hq_t1.png',
   hq_yellow: 'assets/factions/yellow/buildings/hq_t1.png',

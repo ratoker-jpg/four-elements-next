@@ -508,7 +508,7 @@ export class GameWorld {
     const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
       ? this.prevHarvesterPositions
       : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
-    render(this.ctx, this.state.map, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory, this.state.resourceNodes);
+    render(this.ctx, this.state.map, this.state.visualSeed, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory, this.state.resourceNodes);
     // Snapshot current harvester positions for next frame's direction computation
     // only when the spritesheet flag is ON (no point burning cycles otherwise).
     if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
