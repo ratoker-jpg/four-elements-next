@@ -54,6 +54,7 @@ import {
   type SavedCustomMap,
 } from '../game/custom-map-storage.js';
 import { deepCloneMapData } from '../game/game-state.js';
+import { createAssetTunerPanel, loadOverrides, isAssetTunerAllowed } from '../dev/asset-tuner.js';
 
 function resolveMapSize(mapSize: string): number {
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
@@ -129,6 +130,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
   let boundWheel: ((e: WheelEvent) => void) | null = null;
   let boundResize: (() => void) | null = null;
   let boundContextMenu: ((e: Event) => void) | null = null;
+
+  // Asset Tuner (dev-only)
+  let assetTunerDestroy: (() => void) | null = null;
 
   /** Update the info panel with current map counts. */
   function updateInfo(): void {
@@ -748,6 +752,15 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       // PR9: Render saved maps list
       renderSavedMaps();
 
+      // Asset Tuner (dev-only — load persisted overrides, create panel)
+      if (isAssetTunerAllowed()) {
+        loadOverrides();
+        const tuner = createAssetTunerPanel();
+        tuner.element.id = 'fe-asset-tuner';
+        wrapper.appendChild(tuner.element);
+        assetTunerDestroy = tuner.destroy;
+      }
+
       // Setup event handlers
       boundKeyDown = (e: KeyboardEvent) => {
         keys.add(e.code);
@@ -892,6 +905,12 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       camera = null;
       delete (window as any).__editorMapData;
       assets = null;
+
+      // Asset Tuner cleanup
+      if (assetTunerDestroy) {
+        assetTunerDestroy();
+        assetTunerDestroy = null;
+      }
       mapData = null;
       resourceNodes = null;
       canvas = null;
