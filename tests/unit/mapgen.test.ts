@@ -501,9 +501,11 @@ describe('mapgen', () => {
     expect(mountainLarge.length).toBe(0);
   });
 
-  it('standard map has zero volcano-medium obstacles', () => {
+  it('standard map has zero volcano obstacles (volcano-small and volcano-medium)', () => {
     const map = generateMap(48, 48, 'cyan');
+    const volcanoSmall = map.obstacles.filter((o) => o.type === 'volcano-small');
     const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
+    expect(volcanoSmall.length).toBe(0);
     expect(volcanoMedium.length).toBe(0);
   });
 
@@ -513,19 +515,20 @@ describe('mapgen', () => {
     expect(mountainLarge.length).toBeLessThanOrEqual(2);
   });
 
-  it('large map has at most 2 volcano-medium obstacles', () => {
+  it('large map has zero volcano obstacles (volcano-small and volcano-medium)', () => {
     const map = generateMap(64, 64, 'cyan');
+    const volcanoSmall = map.obstacles.filter((o) => o.type === 'volcano-small');
     const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
-    expect(volcanoMedium.length).toBeLessThanOrEqual(2);
+    expect(volcanoSmall.length).toBe(0);
+    expect(volcanoMedium.length).toBe(0);
   });
 
-  it('no volcano-large obstacles exist on any map', () => {
+  it('generated maps have zero volcano obstacles of any type', () => {
     const std = generateMap(48, 48, 'cyan');
     const large = generateMap(64, 64, 'cyan');
-    // volcano-large is not even an ObstacleType, but verify it doesn't appear
     const allObstacles = [...std.obstacles, ...large.obstacles];
-    const volcanoLarge = allObstacles.filter((o) => o.type === 'volcano-large');
-    expect(volcanoLarge.length).toBe(0);
+    const volcanoAny = allObstacles.filter((o) => o.type.startsWith('volcano'));
+    expect(volcanoAny.length).toBe(0);
   });
 
   it('edge obstacles do not overlap resources or HQ', () => {
@@ -599,8 +602,10 @@ describe('mapgen', () => {
     for (const seed of seeds) {
       const map = generateMap(48, 48, 'cyan', seed);
       const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+      const volcanoSmall = map.obstacles.filter((o) => o.type === 'volcano-small');
       const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
       expect(mountainLarge.length).toBe(0);
+      expect(volcanoSmall.length).toBe(0);
       expect(volcanoMedium.length).toBe(0);
     }
   });
@@ -610,9 +615,11 @@ describe('mapgen', () => {
     for (const seed of seeds) {
       const map = generateMap(64, 64, 'cyan', seed);
       const mountainLarge = map.obstacles.filter((o) => o.type === 'mountain-large');
+      const volcanoSmall = map.obstacles.filter((o) => o.type === 'volcano-small');
       const volcanoMedium = map.obstacles.filter((o) => o.type === 'volcano-medium');
       expect(mountainLarge.length).toBeLessThanOrEqual(2);
-      expect(volcanoMedium.length).toBeLessThanOrEqual(2);
+      expect(volcanoSmall.length).toBe(0);
+      expect(volcanoMedium.length).toBe(0);
     }
   });
 

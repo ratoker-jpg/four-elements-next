@@ -78,7 +78,7 @@ export function generateMap(
     // Place interior obstacle clusters away from start zone
     const obstaclesResult = placeObstacles(
       width, height, hq, rand, occupied,
-      edgeResult.mountainLargeCount, edgeResult.volcanoMediumCount, cfg,
+      edgeResult.mountainLargeCount, cfg,
     );
 
     // Combine edge + interior obstacles
@@ -491,7 +491,6 @@ interface EdgeBiomeResult {
   obstacles: ObstaclePlacement[];
   rejectedClusters: number;
   mountainLargeCount: number;
-  volcanoMediumCount: number;
 }
 
 /** Place obstacle clusters in the edge/border band of the map.
@@ -518,9 +517,7 @@ function placeEdgeObstacleBiome(
 
   // Track rare obstacle types for limit enforcement
   let mountainLargeCount = 0;
-  let volcanoMediumCount = 0;
   const mountainLargeLimit = isLargeMap ? 2 : 0;
-  const volcanoMediumLimit = isLargeMap ? 2 : 0;
 
   // Collect starter resources for reachability checks
   const starterResources = resources.filter(
@@ -554,7 +551,7 @@ function placeEdgeObstacleBiome(
 
     // Choose main obstacle type for edge biome
     const mainType = getEdgeMainObstacleType(
-      isLargeMap, rand, mountainLargeCount, mountainLargeLimit, volcanoMediumCount, volcanoMediumLimit,
+      isLargeMap, rand, mountainLargeCount, mountainLargeLimit,
     );
     const mainFootprint = OBSTACLE_FOOTPRINTS[mainType];
     const mainResult = tryPlaceObstacle(cx, cy, mainType, mainFootprint, w, h, occupied);
@@ -566,7 +563,6 @@ function placeEdgeObstacleBiome(
     const beforeCount = obstacles.length;
     obstacles.push(mainResult);
     if (mainType === 'mountain-large') mountainLargeCount++;
-    if (mainType === 'volcano-medium') volcanoMediumCount++;
 
     // Place support obstacles around the main one
     const supportCount = EDGE_CLUSTER_SUPPORT_MIN
@@ -613,37 +609,31 @@ function placeEdgeObstacleBiome(
           }
         }
         if (obs.type === 'mountain-large') mountainLargeCount--;
-        if (obs.type === 'volcano-medium') volcanoMediumCount--;
       }
       rejectedClusters++;
     }
   }
 
-  return { obstacles, rejectedClusters, mountainLargeCount, volcanoMediumCount };
+  return { obstacles, rejectedClusters, mountainLargeCount };
 }
 
 /** Select main obstacle type for edge biome clusters.
- *  Respects per-map-size limits on mountain-large and volcano-medium. */
+ *  Respects per-map-size limits on mountain-large. Volcanoes are never selected. */
 function getEdgeMainObstacleType(
   isLargeMap: boolean,
   rand: () => number,
   mountainLargeCount: number,
   mountainLargeLimit: number,
-  volcanoMediumCount: number,
-  volcanoMediumLimit: number,
 ): ObstacleType {
   const r = rand();
   if (isLargeMap) {
-    // Large map: allow mountain-large and volcano-medium sparingly
+    // Large map: allow mountain-large sparingly
     if (mountainLargeCount < mountainLargeLimit && r < 0.05) return 'mountain-large';
-    if (volcanoMediumCount < volcanoMediumLimit && r < 0.10) return 'volcano-medium';
-    if (r < 0.25) return 'volcano-small';
-    if (r < 0.55) return 'mountain-medium';
-    if (r < 0.75) return 'rock-cluster';
+    if (r < 0.40) return 'mountain-medium';
+    if (r < 0.65) return 'rock-cluster';
     return 'mountain-small';
   } else {
-    // Standard map: no mountain-large, no volcano-medium
-    if (r < 0.05) return 'volcano-small';
+    // Standard map: no mountain-large
     if (r < 0.40) return 'mountain-medium';
     if (r < 0.60) return 'rock-cluster';
     return 'mountain-small';
@@ -660,7 +650,7 @@ function getEdgeSupportObstacleType(rand: () => number): ObstacleType {
 
 // ── Obstacle placement (interior clusters) ───────────────────────────
 
-type ObstacleTheme = 'mountain' | 'volcano' | 'rock';
+type ObstacleTheme = 'mountain' | 'rock';
 
 interface ClusterResult {
   obstacles: ObstaclePlacement[];
@@ -674,7 +664,6 @@ function placeObstacles(
   rand: () => number,
   occupied: Set<string>,
   initialMountainLargeCount: number = 0,
-  initialVolcanoMediumCount: number = 0,
   cfg: MapgenConfig = resolveMapgenConfig(),
 ): ClusterResult {
   const obstacles: ObstaclePlacement[] = [];
@@ -691,9 +680,7 @@ function placeObstacles(
 
   // Track rare obstacle types (combined with any already placed by edge biome)
   let mountainLargeCount = initialMountainLargeCount;
-  let volcanoMediumCount = initialVolcanoMediumCount;
   const mountainLargeLimit = isLargeMap ? 2 : 0;
-  const volcanoMediumLimit = isLargeMap ? 2 : 0;
 
   for (let c = 0; c < clusterCount; c++) {
     // Pick cluster center away from start core zone and center
@@ -715,12 +702,12 @@ function placeObstacles(
     }
 
     // Choose theme
-    const themes: ObstacleTheme[] = ['mountain', 'volcano', 'rock'];
+    const themes: ObstacleTheme[] = ['mountain', 'rock'];
     const theme = themes[Math.floor(rand() * themes.length)]!;
 
     // Place main obstacle (respects map-size type limits)
     const mainType = getMainObstacleType(
-      theme, rand, isLargeMap, mountainLargeCount, mountainLargeLimit, volcanoMediumCount, volcanoMediumLimit,
+      theme, rand, isLargeMap, mountainLargeCount, mountainLargeLimit,
     );
     const mainFootprint = OBSTACLE_FOOTPRINTS[mainType];
     const mainResult = tryPlaceObstacle(cx, cy, mainType, mainFootprint, w, h, occupied);
@@ -732,7 +719,6 @@ function placeObstacles(
     const beforeCount = obstacles.length;
     obstacles.push(mainResult);
     if (mainType === 'mountain-large') mountainLargeCount++;
-    if (mainType === 'volcano-medium') volcanoMediumCount++;
 
     // Place 1–5 supporting smaller obstacles around the main one
     const supportCount = 1 + Math.floor(rand() * 5);
@@ -764,7 +750,6 @@ function placeObstacles(
           }
         }
         if (obs.type === 'mountain-large') mountainLargeCount--;
-        if (obs.type === 'volcano-medium') volcanoMediumCount--;
       }
       rejectedClusters++;
     }
@@ -799,15 +784,13 @@ function tryPlaceObstacle(
 }
 
 /** Select main obstacle type for interior clusters.
- *  Respects per-map-size limits on mountain-large and volcano-medium. */
+ *  Respects per-map-size limits on mountain-large. Volcanoes are never selected. */
 function getMainObstacleType(
   theme: ObstacleTheme,
   rand: () => number,
   isLargeMap: boolean,
   mountainLargeCount: number,
   mountainLargeLimit: number,
-  volcanoMediumCount: number,
-  volcanoMediumLimit: number,
 ): ObstacleType {
   const r = rand();
   switch (theme) {
@@ -817,12 +800,6 @@ function getMainObstacleType(
       // Standard: mountain-large never selected (limit = 0)
       if (r < 0.50) return 'mountain-medium';
       return 'mountain-small';
-    }
-    case 'volcano': {
-      // Large map: allow volcano-medium up to limit
-      if (isLargeMap && volcanoMediumCount < volcanoMediumLimit && r < 0.35) return 'volcano-medium';
-      // Standard: volcano-medium never selected (limit = 0)
-      return 'volcano-small';
     }
     case 'rock':
       return 'rock-cluster';
@@ -834,8 +811,6 @@ function getSupportObstacleType(theme: ObstacleTheme, rand: () => number): Obsta
   switch (theme) {
     case 'mountain':
       return r < 0.6 ? 'mountain-small' : 'rock-cluster';
-    case 'volcano':
-      return r < 0.5 ? 'volcano-small' : 'rock-cluster';
     case 'rock':
       return 'rock-cluster';
   }
