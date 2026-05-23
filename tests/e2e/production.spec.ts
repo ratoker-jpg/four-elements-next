@@ -84,12 +84,12 @@ test.describe('NEXT-06C2 production system', () => {
 
     const panel = page.locator('#production-panel');
     const builderBtn = panel.getByRole('button', { name: /Строитель/ });
-    await expect(builderBtn).toContainText('50M');
-    await expect(builderBtn).toContainText('20');
+    await expect(builderBtn).toContainText('40M');
+    await expect(builderBtn).toContainText('15');
 
     const harvesterBtn = panel.getByRole('button', { name: /Сборщик/ });
-    await expect(harvesterBtn).toContainText('60M');
-    await expect(harvesterBtn).toContainText('25');
+    await expect(harvesterBtn).toContainText('50M');
+    await expect(harvesterBtn).toContainText('20');
   });
 
   test('produce buttons are disabled when resources are insufficient', async ({ page }) => {
