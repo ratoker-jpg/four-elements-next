@@ -1,6 +1,6 @@
 /**
- * MAP-EDITOR-ARCH-01 PR1+PR2+PR3+PR9 — Editor screen with tools, palette,
- * validation, and custom map save/load.
+ * MAP-EDITOR-ARCH-01 PR1+PR2+PR3+PR9+PR10 — Editor screen with tools, palette,
+ * validation, custom map save/load, and game launch.
  *
  * Dev-only screen for viewing and editing a generated map preview.
  * Camera pan/zoom works. PR2 adds: Select/Place/Erase tools,
@@ -10,11 +10,13 @@
  * placement rejection reasons, validation after edit, HQ/economy overlays.
  * PR9 adds: "Сохранить карту" button, saved custom maps list,
  * load saved map into editor, delete saved map, editor status feedback.
+ * PR10 adds: "Начать игру" button, launches Game Screen from current
+ * editor MapData when valid. Deep-clones MapData before runtime use.
  *
  * Availability: same guard as dev panel (DEV / test / ?devtools=1).
  */
 
-import type { Screen, ScreenTransitionData, EditorScreenData } from '../types/screens.js';
+import type { Screen, ScreenTransitionData, EditorScreenData, GameScreenData } from '../types/screens.js';
 import type { NavigateFn } from '../core/screen-manager.js';
 import { MAP_SIZE_STANDARD, MAP_SIZE_LARGE, ASSET_MANIFEST } from '../core/constants.js';
 import { canvasToTile, tileToScreen } from '../core/coordinates.js';
@@ -50,6 +52,7 @@ import {
   deleteSavedMap,
   type SavedCustomMap,
 } from '../game/custom-map-storage.js';
+import { deepCloneMapData } from '../game/game-state.js';
 
 function resolveMapSize(mapSize: string): number {
   return mapSize === 'large' ? MAP_SIZE_LARGE : MAP_SIZE_STANDARD;
@@ -499,6 +502,9 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       mapWidth = mapData.width;
       mapHeight = mapData.height;
 
+      // Test hook: expose editor MapData for E2E tests
+      (window as any).__editorMapData = mapData;
+
       // Create wrapper
       const wrapper = document.createElement('div');
       wrapper.className = 'screen screen--editor';
@@ -599,6 +605,41 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
         renderSavedMaps();
       });
       overlay.appendChild(btnSaveMap);
+
+      // ── PR10: Launch game button ────────────────────────────────────
+      const btnLaunchGame = document.createElement('button');
+      btnLaunchGame.className = 'btn btn--tool editor-overlay__launch-btn';
+      btnLaunchGame.id = 'editor-launch-game-btn';
+      btnLaunchGame.textContent = 'Начать игру';
+      btnLaunchGame.addEventListener('click', () => {
+        if (!mapData) return;
+        // Validate map before launch
+        const result = validateEditorMap(mapData);
+        if (!result.ok) {
+          // Show validation errors and do not navigate
+          lastValidation = result;
+          renderValidationPanel(result);
+          showEditorStatus('Карта невалидна — исправьте ошибки', true);
+          return;
+        }
+        // Deep-clone MapData to prevent runtime mutations from reaching editor/saved map
+        const cloned = deepCloneMapData(mapData);
+        if (cloned === null) {
+          showEditorStatus('Не удалось клонировать карту', true);
+          return;
+        }
+        // Navigate to game screen with custom map data
+        // Faction comes from mapData.hq.faction — NOT hardcoded
+        const gameScreenData: GameScreenData = {
+          mapSize: mapWidth === MAP_SIZE_LARGE ? 'large' : 'standard',
+          faction: mapData.hq.faction,
+          seed: 0,
+          mapgenPresetId: 'balanced' as import('../game/mapgen-presets.js').MapgenPresetId,
+          customMapData: cloned,
+        };
+        navigate('game-screen', gameScreenData);
+      });
+      overlay.appendChild(btnLaunchGame);
 
       // ── PR9: Editor status feedback ─────────────────────────────────
       editorStatusEl = document.createElement('div');
@@ -840,6 +881,7 @@ export function createEditorScreen(navigate: NavigateFn): Screen {
       keys.clear();
       isPanning = false;
       camera = null;
+      delete (window as any).__editorMapData;
       assets = null;
       mapData = null;
       resourceNodes = null;

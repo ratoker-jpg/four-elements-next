@@ -3,13 +3,13 @@
 import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED, BUILDING_ASSET_MANIFEST, FE_BUILDING_SPRITES_ENABLED, HQ_FOOTPRINT } from '../core/constants.js';
 import { tileToScreen, screenToTile } from '../core/coordinates.js';
 import { AssetStore } from '../core/assets.js';
-import type { FactionId, BuildingType, ConstructionSitePlacement, ResourceType, ObstacleType } from './map-types.js';
+import type { FactionId, BuildingType, ConstructionSitePlacement, ResourceType, ObstacleType, MapData } from './map-types.js';
 import type { MapgenPresetId } from './mapgen-presets.js';
 import { DEFAULT_PRESET_ID } from './mapgen-presets.js';
 import { RESOURCE_FOOTPRINTS, OBSTACLE_FOOTPRINTS } from './map-types.js';
 import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/production.js';
 import type { GameState } from './game-state.js';
-import { createGameState } from './game-state.js';
+import { createGameState, createGameStateFromMap } from './game-state.js';
 import { Camera } from '../render/camera.js';
 import { render } from '../render/renderer.js';
 import { toggleDebugOverlay } from '../render/debug-overlay.js';
@@ -100,6 +100,51 @@ export class GameWorld {
     this.boundWheel = this.onWheel.bind(this);
     this.boundMouseUp = this.onMouseUp.bind(this);
     this.boundResize = this.onResize.bind(this);
+  }
+
+  /** Create a GameWorld from a custom MapData (editor-launched game).
+   *  Uses createGameStateFromMap which deep-clones the input MapData.
+   *  The existing constructor path (seed/preset) remains unchanged. */
+  static fromCustomMap(canvas: HTMLCanvasElement, mapData: MapData, faction: FactionId): GameWorld {
+    const world = Object.create(GameWorld.prototype) as GameWorld;
+    world.canvas = canvas;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Cannot get 2D context');
+    world.ctx = ctx;
+
+    world.state = createGameStateFromMap(mapData, faction);
+    world.assets = new AssetStore();
+
+    const hqScreen = tileToScreen(world.state.map.hq.tx + 1.5, world.state.map.hq.ty + 1.5);
+    world.camera = new Camera(hqScreen.x, hqScreen.y);
+
+    world.animFrameId = null;
+    world.lastTime = 0;
+    world.keys = new Set<string>();
+    world.isPanning = false;
+    world.panStartX = 0;
+    world.panStartY = 0;
+    world.camPanStartX = 0;
+    world.camPanStartY = 0;
+    world.ticks = 0;
+    world.prevHarvesterPositions = new Map<number, { tx: number; ty: number }>();
+
+    world.onEconomyUpdate = undefined;
+    world.onPowerUpdate = undefined;
+    world.onControlUpdate = undefined;
+    world.onConstructionUpdate = undefined;
+    world.onProductionUpdate = undefined;
+    world.onDevPanelUpdate = undefined;
+
+    world.boundKeyDown = world.onKeyDown.bind(world);
+    world.boundKeyUp = world.onKeyUp.bind(world);
+    world.boundMouseDown = world.onMouseDown.bind(world);
+    world.boundMouseMove = world.onMouseMove.bind(world);
+    world.boundWheel = world.onWheel.bind(world);
+    world.boundMouseUp = world.onMouseUp.bind(world);
+    world.boundResize = world.onResize.bind(world);
+
+    return world;
   }
 
   async init(): Promise<void> {

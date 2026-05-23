@@ -34,6 +34,9 @@ export interface GameScreenData {
   readonly faction: 'cyan' | 'green' | 'yellow' | 'purple' | 'random';
   readonly seed: number;
   readonly mapgenPresetId: import('../game/mapgen-presets.js').MapgenPresetId;
+  /** PR10: Custom map data for launching from editor. When present, the game
+   *  uses this MapData instead of generating one from seed/preset. */
+  readonly customMapData?: import('../game/map-types.js').MapData;
 }
 
 export interface EditorScreenData {
