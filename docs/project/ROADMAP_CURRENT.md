@@ -167,7 +167,7 @@ Done:
 
 - PR #114 — ECONOMY-PACE-01: first 5–8 minutes economy pacing baseline. START_RAW=30, START_MATTER=120, SEP_RAW_COST=12, SEP_CYCLE_SECONDS=5, SEP_ELEMENT_YIELD=2; separator costMatter=60/buildTimeSeconds=20; power-plant costMatter=100; units-factory costMatter=120; builder matter=40/duration=15; harvester matter=50/duration=20.
 - PR #115 — VALIDATION-BFS-01: replaced/supplemented straight-line map reachability with BFS/flood-fill validation using `buildPassabilityGrid()`. `isStraightLineClearOfObstacles()` kept but deprecated.
-- PR #116 — PATH-TELEMETRY-CACHE-01: lightweight pathfinding/passability telemetry counters and safe passability grid cache. Cache reuses grid when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes. Telemetry: path/BFS calls per tick, grid builds, cache hits/misses, max/avg path time, passabilityVersion. Exposed via `window.__pathfindingTelemetry`.
+- PR #116 — PATH-TELEMETRY-CACHE-01: lightweight pathfinding/passability telemetry counters and safe passability grid cache. Cache reuses grid when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes. Telemetry: pathCalls, gridBuilds, cacheHits, cacheMisses, passabilityVersion. Exposed via `window.__pathfindingTelemetry`.
 
 ## 4. Current strategy
 
