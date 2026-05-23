@@ -146,13 +146,22 @@ Run a second audit only if one of these happens:
 - PR #96 — `MAP-EDITOR-ARCH-01 PR4`: seed selection flow, Seed Screen between Map Size and Faction Select.
 - PR #97 — `MAP-EDITOR-ARCH-01 PR5`: mapgen config foundation, `MapgenConfig`, `resolveMapgenConfig()`.
 - PR #98 — `MAP-EDITOR-ARCH-01 PR6`: mapgen preset selector, 4 presets on Seed Screen.
+- PR #99 — `MAP-EDITOR-ARCH-01 PR7`: docs sync after PR1–PR6.
+- PR #100 — `MAP-EDITOR-ARCH-01 PR8`: saved seeds, `SeedStorageAdapter`, seed list on Seed Screen.
+- PR #101 — `MAP-EDITOR-ARCH-01 PR9`: custom map localStorage slots, `CustomMapStorageAdapter`, save/load/delete in editor.
+- PR #102 — `MAP-EDITOR-ARCH-01 PR10`: launch game from custom map, `createGameStateFromMap()`, `GameWorld.fromCustomMap()`, "Начать игру" button.
 
 ### Current gameplay baseline
 
 - New Game flow: Main Menu → Map Size → Seed Screen → Faction Select → Game Screen
 - Seed Screen: seed input, "Случайный сид" button, 4 mapgen presets (balanced, more-resources, more-mountains, open-map)
+- Seed Screen: "Сохранить сид" button, saved seed list with load/delete (collapsible panel)
 - Back from Faction Select to Seed Screen preserves seed + preset
-- Map editor: dev-only screen with preview, pan/zoom, palette placement/removal, validation
+- Map editor: dev-only screen with preview, pan/zoom, palette placement/removal, validation, save/load custom maps, launch game from valid editor map
+- Custom map launch: "Начать игру" button → `createGameStateFromMap()` deep-clones MapData → `GameWorld.fromCustomMap()` → normal game loop
+- Custom map runtime: faction from `mapData.hq.faction`, builder logic preserves `map.builders` or creates one near HQ
+- Editor mutates editor MapData only; custom map launch deep-clones MapData; saved map data is not mutated by gameplay
+- Storage: seeds `four-elements-next.seeds.v1` (cap 20), custom maps `four-elements-next.custom-maps.v1` (cap 20, MapData only)
 - Start state: HQ/base only as the starting building.
 - Starting units: 2 harvesters + 1 builder.
 - No extra starting buildings: no separator, no raw-storage, no power-plant, no command-relay.
