@@ -272,7 +272,19 @@ If a PR diff includes already-merged previous-stage changes, do not merge it. Re
 
 ## Required checks for code PRs
 
-Run all unless the task is docs-only or assets-only:
+Run checks based on PR risk tier. See `agent-ctx/workflow.md` → "E2E Policy — Tiered by PR Risk" for full tiered policy.
+
+**Quick summary:**
+
+| PR type | type-check / build | Unit tests | Targeted E2E | Full E2E |
+|---|---|---|---|---|
+| Docs-only | — | — | — | — |
+| CSS / text / polish | If practical | — | If interaction changed | — |
+| Screen flow / editor | Yes | Yes | Affected specs | Optional |
+| Runtime / gameplay / systems | Yes | Yes | Affected specs | Recommended |
+| Final ARCH validation | Yes | Yes | Affected specs | Yes |
+
+When full E2E is required:
 
 ```bash
 npm run type-check
@@ -287,6 +299,7 @@ If E2E is flaky:
 - Re-run the specific failing test.
 - If it passes on retry and no related code changed, note it as flaky.
 - Do not hide real failures as flake.
+- Do not call a failure "flake" without targeted rerun proof.
 
 ## PR review checklist for ChatGPT
 

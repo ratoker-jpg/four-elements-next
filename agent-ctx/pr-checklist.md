@@ -28,22 +28,35 @@ For workflow modes, see `agent-ctx/workflow.md`.
 - [ ] Tests listed honestly (real count, real pass/fail)
 - [ ] Manual QA section reflects reality
 
-## Test Requirements
+## Test Requirements — Tiered by PR Risk
 
-| Task type | Required |
-|---|---|
-| Gameplay / UI change | Targeted E2E required |
-| Risky system change | Full E2E preferred, or honest timeout/spec-by-spec report |
-| Docs-only | No code tests needed |
+Full policy: `agent-ctx/workflow.md` → "E2E Policy — Tiered by PR Risk".
 
+| PR type | type-check / build | Unit tests | Targeted E2E | Full E2E |
+|---|---|---|---|---|
+| Docs-only | — | — | — | — |
+| CSS / text / polish | If practical | — | If interaction changed | — |
+| Screen flow / editor | Yes | Yes | Affected specs | Optional |
+| Runtime / gameplay / systems | Yes | Yes | Affected specs | Recommended |
+| Final ARCH validation | Yes | Yes | Affected specs | Yes |
+
+- [ ] PR risk tier identified correctly
+- [ ] Tests match the tier requirements above
 - [ ] Targeted E2E used for gameplay/UI changes
-- [ ] Full E2E status documented:
+- [ ] Full E2E status documented (if tier requires):
   - [ ] Full run passed, OR
   - [ ] Spec-by-spec fallback with results, OR
   - [ ] CI fallback (explain why)
 - [ ] No tests were weakened to accept broken gameplay
+- [ ] No E2E failure called "flake" without targeted rerun/proof
+- [ ] No failed checks hidden in PR body
 
-**Never weaken tests to accept broken gameplay.**
+### Never allowed
+
+- Skipping or weakening tests to make CI green.
+- Increasing timeouts as primary fix.
+- Calling an E2E failure "flake" without targeted rerun/proof.
+- Hiding failed checks in PR body.
 
 If E2E fails with infrastructure issue:
 1. Rerun targeted spec file only.

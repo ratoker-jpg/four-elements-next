@@ -73,16 +73,63 @@ Small fix requested after GPT/user review of an open PR.
 
 **Explicit rule: no 9-section audit unless FULL AUDIT.**
 
-## E2E Policy
+## E2E Policy — Tiered by PR Risk
 
-| Phase | What to run |
-|---|---|
-| During iteration | `type-check` + `build` + `unit tests` + relevant E2E spec files |
-| Before final PR | Full E2E if practical (`npm run test:e2e`) |
-| Full E2E times out | Run specs individually with `--workers=1`, or report CI fallback honestly |
-| Docs-only | No code tests required |
-| Gameplay / UI | Targeted E2E required |
-| Never | Weaken tests to accept broken gameplay |
+Not every PR needs full E2E. GitHub Actions remains the final CI gate.
+But GLM/Codex must run appropriate targeted checks based on PR risk.
+
+### Tier 1: Docs-only PR
+
+- **No tests required.**
+- Manual diff review is enough.
+- PR body must explicitly say no code/tests changed.
+
+### Tier 2: Small CSS / text / polish PR
+
+- Run `type-check` + `build` if practical.
+- Targeted E2E **only if** behavior or screen interaction changed.
+- Full E2E not required.
+
+### Tier 3: Screen flow / editor behavior PR
+
+- Run `type-check` + `build` + unit tests.
+- Run targeted E2E for affected spec files.
+- Full E2E optional unless shared navigation or runtime flow changed.
+
+### Tier 4: Runtime / gameplay / systems PR
+
+- Run unit tests.
+- Run targeted E2E for affected gameplay specs.
+- **Full E2E recommended** if any of these changed:
+  common game loop, GameState, GameWorld, save/load, combat,
+  pathfinding, economy, mapgen, or shared screen flow.
+
+### Tier 5: Full E2E
+
+- Not required for every PR.
+- Use for: final ARCH validation, risky cross-cutting changes,
+  or before merging broad runtime changes.
+- If full E2E times out or infra-flakes, run targeted specs
+  and report honestly.
+
+### Tier 6: Never allowed
+
+- Skipping or weakening tests to make CI green.
+- Increasing timeouts as primary fix.
+- Calling an E2E failure "flake" without targeted rerun/proof.
+- Hiding failed checks in PR body.
+
+### Quick reference
+
+| PR type | type-check / build | Unit tests | Targeted E2E | Full E2E |
+|---|---|---|---|---|
+| Docs-only | — | — | — | — |
+| CSS / text / polish | If practical | — | If interaction changed | — |
+| Screen flow / editor | Yes | Yes | Affected specs | Optional |
+| Runtime / gameplay / systems | Yes | Yes | Affected specs | Recommended |
+| Final ARCH validation | Yes | Yes | Affected specs | Yes |
+
+### Infrastructure failures
 
 If E2E fails with infrastructure issue (server not starting, browser not found):
 1. Rerun targeted spec file only.

@@ -3,6 +3,8 @@
 Copy-ready templates for each workflow mode.
 Source of truth for GLM prompt format.
 
+E2E testing requirements are tiered by PR risk. See `agent-ctx/workflow.md` → "E2E Policy — Tiered by PR Risk".
+
 ## FAST FIX
 
 ```text
