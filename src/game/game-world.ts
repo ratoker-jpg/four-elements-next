@@ -34,6 +34,7 @@ import {
 import { runSystems } from '../systems/system-runner.js';
 import { isDevPanelAllowed, buildDevPanelState, type DevPanelState, type DevPanelActions } from '../dev/dev-panel.js';
 import { getOverlayToggles, setOverlayToggle, type OverlayToggles } from '../dev/dev-overlays.js';
+import { createPathfindingTelemetryAPI, invalidatePassabilityCache } from '../systems/path-telemetry.js';
 
 /** Empty readonly map passed to render() when the spritesheet flag is OFF. */
 const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
@@ -90,6 +91,9 @@ export class GameWorld {
     this.state = createGameState(mapSize, faction, seed, mapgenPresetId);
     this.assets = new AssetStore();
 
+    // Invalidate passability cache on new game — fresh map means old grid is stale
+    invalidatePassabilityCache();
+
     const hqScreen = tileToScreen(this.state.map.hq.tx + 1.5, this.state.map.hq.ty + 1.5);
     this.camera = new Camera(hqScreen.x, hqScreen.y);
 
@@ -114,6 +118,9 @@ export class GameWorld {
 
     world.state = createGameStateFromMap(mapData, faction);
     world.assets = new AssetStore();
+
+    // Invalidate passability cache on custom map — fresh map means old grid is stale
+    invalidatePassabilityCache();
 
     const hqScreen = tileToScreen(world.state.map.hq.tx + 1.5, world.state.map.hq.ty + 1.5);
     world.camera = new Camera(hqScreen.x, hqScreen.y);
@@ -204,6 +211,7 @@ export class GameWorld {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__productionState;
     delete (window as any).__territoryState;
+    delete (window as any).__pathfindingTelemetry;
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -661,6 +669,8 @@ export class GameWorld {
         })),
       })),
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__pathfindingTelemetry = createPathfindingTelemetryAPI();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__territoryState = {
       width: this.state.territory.width,

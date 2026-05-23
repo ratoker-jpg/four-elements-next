@@ -98,6 +98,24 @@ export function buildPassabilityGrid(map: MapData, resourceNodes?: readonly Reso
   return { width, height, cells };
 }
 
+// ── Grid cloning ─────────────────────────────────────────────────────
+
+/**
+ * Create a mutable deep copy of a PassabilityGrid.
+ *
+ * Used by consumers that need to temporarily modify a grid (e.g., marking
+ * candidate footprints as blocked) without affecting the cached grid.
+ * The returned grid is fully independent — mutations to its cells do not
+ * affect the original.
+ */
+export function clonePassabilityGrid(grid: PassabilityGrid): PassabilityGrid {
+  return {
+    width: grid.width,
+    height: grid.height,
+    cells: new Uint8Array(grid.cells),
+  };
+}
+
 // ── Tile queries ──────────────────────────────────────────────────────
 
 /**

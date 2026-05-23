@@ -24,6 +24,7 @@
 
 import type { PassabilityGrid } from './passability.js';
 import { isTileBlocked, findAdjacentPassableTiles } from './passability.js';
+import { recordPathCall } from './path-telemetry.js';
 
 // ── Result types ──────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export function findPath(
   toTy: number,
   options?: PathfindingOptions,
 ): PathResult {
+  recordPathCall();
   // Start equals target
   if (fromTx === toTx && fromTy === toTy) {
     if (isTileBlocked(grid, fromTx, fromTy)) {
@@ -130,6 +132,7 @@ export function findPathToAdjacent(
   targetFootprint: number,
   options?: PathfindingOptions,
 ): PathResult {
+  recordPathCall();
   // Check start passable
   if (isTileBlocked(grid, fromTx, fromTy)) {
     return { found: false, path: [], reason: 'blocked-start', cost: 0 };
