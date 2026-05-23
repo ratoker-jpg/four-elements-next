@@ -1,7 +1,7 @@
 # Four Elements Next — Current Roadmap
 
 Status: living roadmap.
-Last updated: 2026-05-23.
+Last updated: 2026-05-24.
 
 This document is the current project roadmap for `ratoker-jpg/four-elements-next`.
 
@@ -13,6 +13,8 @@ It consolidates:
 - visual asset pipeline direction;
 - manual QA observations after WORLD-GEN-ARCH-01 PR #59/#60;
 - MAP-EDITOR-ARCH-01 PR1–PR10 (editor, seed flow, mapgen config/presets, saved seeds, custom maps, game launch);
+- ENV-ASSET-CALIBRATION-01 PR #111–#113 (volcano removal, asset tuner, asset profile calibration);
+- CIVIL-BASELINE-01 PR #114–#116 (economy pacing, BFS map validation, pathfinding telemetry/cache);
 - the order of work before combat and enemy bot development.
 
 ## 1. Current project rule
@@ -151,11 +153,37 @@ Done:
   - territory does not block construction;
   - territory does not affect movement/pathfinding.
 
-## 4. New manual QA observations to fix
+### ENV-ASSET-CALIBRATION-01
+
+Done:
+
+- PR #111 — ENV-NO-VOLCANO-01: removed volcanoes from active generation and editor; no volcano UI, no volcano presets, no volcano config fields.
+- PR #112 — ENV-ASSET-TUNER-01: dev-only environment asset calibration panel for visual tuning of groundOffset, scale, and profile values.
+- PR #113 — ENV-ASSET-PROFILE-APPLY-01: applied approved environment asset calibration values to resources, obstacles, and decor.
+
+### CIVIL-BASELINE-01
+
+Done:
+
+- PR #114 — ECONOMY-PACE-01: first 5–8 minutes economy pacing baseline. START_RAW=30, START_MATTER=120, SEP_RAW_COST=12, SEP_CYCLE_SECONDS=5, SEP_ELEMENT_YIELD=2; separator costMatter=60/buildTimeSeconds=20; power-plant costMatter=100; units-factory costMatter=120; builder matter=40/duration=15; harvester matter=50/duration=20.
+- PR #115 — VALIDATION-BFS-01: replaced/supplemented straight-line map reachability with BFS/flood-fill validation using `buildPassabilityGrid()`. `isStraightLineClearOfObstacles()` kept but deprecated.
+- PR #116 — PATH-TELEMETRY-CACHE-01: lightweight pathfinding/passability telemetry counters and safe passability grid cache. Cache reuses grid when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes. Telemetry: pathCalls, gridBuilds, cacheHits, cacheMisses, passabilityVersion. Exposed via `window.__pathfindingTelemetry`.
+
+## 4. Current strategy
+
+Civil loop before combat.
+
+The project rule remains: do not start combat, enemy AI, faction bonuses, or military systems until the civil baseline is playtested further.
+
+Current focus is mapgen and resource balance refinement — the civil economy works, pathfinding exists, map validation uses BFS, and telemetry tracks passability performance. The next step is ensuring map generation produces well-balanced resource distributions for the first 10+ minutes of gameplay.
+
+Next planned block: **MAPGEN-RESOURCE-BALANCE-01**.
+
+## 5. New manual QA observations to fix
 
 These items come from manual play/visual comparison with the older prototype.
 
-### 4.1 Resource placement near player start
+### 5.1 Resource placement near player start
 
 Current problem:
 
@@ -178,7 +206,7 @@ Important:
 - do not place resources under obstacles;
 - do not rely only on random scatter.
 
-### 4.2 Resource node readability / amounts
+### 5.2 Resource node readability / amounts
 
 Target from old prototype feel:
 
@@ -194,7 +222,7 @@ Possible future dev tool:
 
 - optional resource amount overlay in debug/test mode.
 
-### 4.3 Too few mountains/obstacles
+### 5.3 Too few mountains/obstacles
 
 Current problem:
 
@@ -223,7 +251,7 @@ Large map target:
 
 Note: volcanoes are deprecated for current visual direction. No volcano UI, no volcano presets, no volcano config fields. Use mountains and rock clusters for obstacles instead.
 
-### 4.4 Edge terrain boundary
+### 5.4 Edge terrain boundary
 
 Current map edge should not feel like an empty rectangular board.
 
@@ -238,7 +266,7 @@ Possible stage:
 
 - `MAPGEN-EDGE-BIOME-01`.
 
-### 4.5 Environment sprite offsets / grounding
+### 5.5 Environment sprite offsets / grounding
 
 Current problem:
 
@@ -262,7 +290,7 @@ Initial offset hypothesis to test, not final truth:
 
 These values must be validated visually in game/asset preview. Do not hard-code them as final without QA.
 
-### 4.6 Mineral infinite footprint/size
+### 5.6 Mineral infinite footprint/size
 
 Target:
 
@@ -272,7 +300,7 @@ Target:
 - visually large enough to read as central strategic deposit;
 - correctly anchored/grounded to the 3x3 footprint.
 
-### 4.7 Low visual variation for rocks/decor
+### 5.7 Low visual variation for rocks/decor
 
 Current problem:
 
@@ -294,7 +322,7 @@ Long-term:
 
 - add candidate decor/resource variants through asset pipeline.
 
-### 4.8 Unit movement feels like flying/sliding
+### 5.8 Unit movement feels like flying/sliding
 
 Current problem:
 
@@ -310,51 +338,31 @@ Target:
 
 This belongs to movement/visual QA, not mapgen.
 
-## 5. Immediate priority order
+## 6. Immediate priority order
 
 ### Priority 0 — Roadmap/doc consolidation
 
-Status: this document.
-
-Goal:
-
-- keep current plan in one place;
-- prevent jumping to unrelated features;
-- make next GLM/Codex prompts smaller and safer.
+Status: done (this document + `docs/QUICKSTART_FOR_AI.md`).
 
 ### Priority 1 — TERRITORY-TUNING-01
 
-Type: small tuning/fix PR.
+Status: done.
 
-Problem:
+Merged in earlier work. Territory spreads slowly and does not block construction or pathfinding.
 
-- territory still visually spreads too fast;
-- territory radius is too large for current gameplay readability.
+### Priority 2 — MAPGEN-RESOURCE-BALANCE-01
 
-Target:
-
-- max territory radius: `5`, not `10`;
-- footprint fill remains about 15 seconds per footprint tile;
-- outward spread delay depends on radius:
-  - radius 1: 45 seconds per tile;
-  - radius 2: 90 seconds per tile;
-  - radius 3: 180 seconds per tile;
-  - radius 4: 360 seconds per tile;
-  - radius 5: 720 seconds per tile;
-- formula: `45 * 2 ** (radius - 1)`;
-- one tile per spread event remains mandatory;
-- territory still does not block construction;
-- territory still does not affect movement/pathfinding.
-
-No new Big Audit needed.
-
-### Priority 2 — MAPGEN-QA-ARCH-01
-
-Type: Big Audit, likely implementation in one or two PRs depending on diff.
+Type: Big Audit, likely implementation in two or three stage PRs.
 
 Goal:
 
-- make the map look and play closer to target RTS map before bot/combat.
+- refine map resource distribution and balance for the first 10+ minutes of civil gameplay;
+- ensure starter resource pockets are adequate and well-positioned;
+- verify finite/infinite resource ratios support sustainable economy;
+- address manual QA observations in sections 5.1–5.3;
+- make the map look and play closer to target RTS feel before further civil expansion.
+
+This replaces the earlier MAPGEN-QA-ARCH-01 scope with a more focused resource-balance mandate.
 
 Stages:
 
@@ -396,27 +404,9 @@ Recommended PR grouping:
 
 ### Priority 3 — ECONOMY-BASELINE-01
 
-Type: Big Audit or targeted audit depending on code inspection.
+Status: done (CIVIL-BASELINE-01 / PR #114 ECONOMY-PACE-01).
 
-Goal:
-
-- stabilize the first 5–10 minutes of civil gameplay.
-
-Questions to verify:
-
-- why HUD can show `0/0` in manual QA;
-- whether start resources/caps are correct;
-- whether first building is affordable/reachable;
-- whether Raw/Matter/Element/Power/Control are understandable and stable;
-- whether harvester delivery to HQ works consistently;
-- whether player can avoid soft-lock.
-
-Expected stages:
-
-- Stage A — audit current economy/HUD/resource caps;
-- Stage B — fix starting values/caps/HUD display if needed;
-- Stage C — tune first-building costs and separator loop;
-- Stage D — tests/manual QA for first 5 minutes.
+Economy pacing baseline is merged. First 5–8 minutes are tuned with specific start values, building costs, and production durations. Further balance tuning may happen as part of MAPGEN-RESOURCE-BALANCE-01 playtesting.
 
 ### Priority 4 — CIVIL-UX-01
 
@@ -537,28 +527,30 @@ Start only after:
 - dev/test tools exist;
 - movement/pathfinding MVP exists.
 
-## 6. Do not do yet
+## 7. Do not do yet
 
 Do not start:
 
 - enemy AI/bot;
 - combat systems;
 - tank implementation;
+- faction bonuses;
 - runtime LLM AI;
 - big asset imports;
 - renderer rewrite;
-- Unity migration.
+- Unity migration;
+- pathfinding rewrite / A*;
+- re-enable procedural sand;
+- save/load schema changes;
+- delete assets without approval.
 
 Do not change accepted building assets unless separately approved.
 
 Do not use Codex by default for small fixes.
 
-## 7. Next recommended action
+## 8. Next recommended action
 
-After this roadmap is merged:
-
-1. Run `TERRITORY-TUNING-01` as a small focused PR.
-2. Run `MAPGEN-QA-ARCH-01` Big Audit.
-3. Use adaptive PR bundling for MAPGEN-QA stages.
-
-Do not combine territory tuning with the larger mapgen QA arch unless the diff is clearly tiny and safe.
+1. Run **MAPGEN-RESOURCE-BALANCE-01** Full Audit.
+2. Implement in up to 3 stage PRs following the audit plan.
+3. After mapgen balance is validated, reassess priority for remaining items (UI shell, dev tools expansion, visual QA pass).
+4. Combat and enemy bot remain blocked until civil loop playtesting is satisfactory.
