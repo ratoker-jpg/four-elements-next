@@ -1,8 +1,9 @@
-/** Terrain tile rendering with sprite support and geometric fallback. */
+/** Terrain tile rendering — procedural or PNG-based path with feature flag. */
 
-import { TILE_W, TILE_H, TERRAIN_COLORS, GRID_COLOR } from '../core/constants.js';
+import { TILE_W, TILE_H, TERRAIN_COLORS, GRID_COLOR, FE_PROCEDURAL_SAND_ENABLED } from '../core/constants.js';
 import { resolveTerrainAsset } from '../core/asset-variants.js';
 import { tileToScreen } from '../core/coordinates.js';
+import { renderProceduralTerrain } from './terrain-procedural.js';
 import type { MapData, TerrainType } from '../game/map-types.js';
 import type { AssetMeta, AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
@@ -32,6 +33,13 @@ export function renderTerrain(
   assets: AssetStore,
   visualSeed: number,
 ): void {
+  // PROC-SAND-01: procedural sand terrain path
+  if (FE_PROCEDURAL_SAND_ENABLED) {
+    renderProceduralTerrain(ctx, map, camera, visualSeed);
+    return;
+  }
+
+  // Fallback: original PNG-based terrain render path
   const canvasW = ctx.canvas.width;
   const canvasH = ctx.canvas.height;
   const hw = (TILE_W / 2) * camera.zoom;

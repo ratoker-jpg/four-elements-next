@@ -139,9 +139,11 @@ describe('shouldComputeAlphaMeta', () => {
     }
   });
 
-  it('returns true for terrain manifest keys', () => {
-    expect(shouldComputeAlphaMeta('terrain_sand')).toBe(true);
-    expect(shouldComputeAlphaMeta('sand_tile_09')).toBe(true);
+  it('returns false for terrain manifest keys when procedural sand is enabled', () => {
+    // PROC-SAND-01: When FE_PROCEDURAL_SAND_ENABLED is true, terrain alpha
+    // metadata is not needed for the active render path. Assets still load.
+    expect(shouldComputeAlphaMeta('terrain_sand')).toBe(false);
+    expect(shouldComputeAlphaMeta('sand_tile_09')).toBe(false);
   });
 
   it('returns false for mineral_small', () => {

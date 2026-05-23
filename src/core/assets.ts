@@ -1,6 +1,6 @@
 /** Manifest-based asset loader. Never throws; missing assets return null. */
 
-import { assetPath } from './constants.js';
+import { assetPath, FE_PROCEDURAL_SAND_ENABLED } from './constants.js';
 
 /** Alpha-bounds metadata for a loaded image asset. */
 export interface AssetMeta {
@@ -55,12 +55,17 @@ export function computeAlphaBounds(
  * Building/HQ sprites use it for alpha-tight placement, and terrain tiles use
  * it so transparent 256x256 sand canvases can be cropped to their visible
  * diamond before being fitted into a TILE_W x TILE_H map cell.
+ *
+ * When procedural sand terrain is active (FE_PROCEDURAL_SAND_ENABLED),
+ * terrain/sand_tile alpha metadata is not needed for the active render path
+ * since tiles are drawn procedurally. Assets still load for fallback/reference.
  */
 export function shouldComputeAlphaMeta(key: string): boolean {
+  const isTerrainKey = key.startsWith('terrain_') || key.startsWith('sand_tile_');
+  if (isTerrainKey && FE_PROCEDURAL_SAND_ENABLED) return false;
   return key.startsWith('building_')
     || key.startsWith('hq_')
-    || key.startsWith('terrain_')
-    || key.startsWith('sand_tile_');
+    || isTerrainKey;
 }
 
 export class AssetStore {
