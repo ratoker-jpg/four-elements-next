@@ -1,7 +1,8 @@
 /**
- * Boot scene — loads spike assets, shows progress, then starts GameScene.
+ * Boot scene — loads spike assets, creates Phaser animations, then starts GameScene.
  */
 import Phaser from 'phaser';
+import { DIRECTION_NAMES } from '../iso/DirectionUtils.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -37,7 +38,6 @@ export class BootScene extends Phaser.Scene {
 
     // --- Load spike assets ---
     // All paths relative to Vite dev server root or public/ dir.
-    // In dev, Vite serves ../../public/ (root repo assets) via server.fs.allow.
 
     // Terrain
     this.load.image('sand_tile', this.assetUrl('assets/tiles/sand_tile.png'));
@@ -63,7 +63,57 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.createHarvesterAnimations();
     this.scene.start('GameScene');
+  }
+
+  /**
+   * Create Phaser animations for the harvester spritesheet.
+   *
+   * Spritesheet layout: 8 rows (directions) × 8 columns (animation frames).
+   * Direction row order: 0=east, 1=SE, 2=south, 3=SW, 4=west, 5=NW, 6=north, 7=NE.
+   * Harvester column layout:
+   *   0=idle, 1-4=move, 5-7=unload
+   *
+   * Frame index = row * 8 + col.
+   * Animation key format: `harvester_{direction}_{phase}`
+   *   e.g. `harvester_south_move`, `harvester_se_idle`, `harvester_nw_unload`
+   */
+  private createHarvesterAnimations(): void {
+    for (let row = 0; row < DIRECTION_NAMES.length; row++) {
+      const dir = DIRECTION_NAMES[row]!;
+      const baseFrame = row * 8;
+
+      // Idle: single frame at col 0
+      this.anims.create({
+        key: `harvester_${dir}_idle`,
+        frames: [{ key: 'harvester', frame: baseFrame }],
+        frameRate: 1,
+        repeat: -1,
+      });
+
+      // Move: cols 1–4 cycling
+      this.anims.create({
+        key: `harvester_${dir}_move`,
+        frames: this.anims.generateFrameNumbers('harvester', {
+          start: baseFrame + 1,
+          end: baseFrame + 4,
+        }),
+        frameRate: 8,
+        repeat: -1,
+      });
+
+      // Unload: cols 5–7 cycling
+      this.anims.create({
+        key: `harvester_${dir}_unload`,
+        frames: this.anims.generateFrameNumbers('harvester', {
+          start: baseFrame + 5,
+          end: baseFrame + 7,
+        }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
   }
 
   /**
