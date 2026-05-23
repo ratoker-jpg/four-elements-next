@@ -4,8 +4,25 @@ import { TILE_W, TILE_H, TERRAIN_COLORS, GRID_COLOR } from '../core/constants.js
 import { resolveTerrainAsset } from '../core/asset-variants.js';
 import { tileToScreen } from '../core/coordinates.js';
 import type { MapData, TerrainType } from '../game/map-types.js';
-import type { AssetStore } from '../core/assets.js';
+import type { AssetMeta, AssetStore } from '../core/assets.js';
 import type { Camera } from './camera.js';
+
+function drawTerrainSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: HTMLImageElement,
+  meta: AssetMeta | null,
+  cx: number,
+  cy: number,
+  hw: number,
+  hh: number,
+): void {
+  const sx = meta?.visibleX ?? 0;
+  const sy = meta?.visibleY ?? 0;
+  const sw = meta?.visibleW ?? sprite.naturalWidth;
+  const sh = meta?.visibleH ?? sprite.naturalHeight;
+  if (sw <= 0 || sh <= 0) return;
+  ctx.drawImage(sprite, sx, sy, sw, sh, cx - hw, cy - hh, hw * 2, hh * 2);
+}
 
 /** Render the full terrain grid with viewport culling. */
 export function renderTerrain(
@@ -33,11 +50,12 @@ export function renderTerrain(
       const resolved = resolveTerrainAsset(terrainType, tx, ty, visualSeed);
       const assetKey = assets.get(resolved.preferredKey) ? resolved.preferredKey : resolved.fallbackKey;
       const sprite = assets.get(assetKey);
+      const fill = TERRAIN_COLORS[terrainType] ?? TERRAIN_COLORS.sand!;
+
+      drawDiamond(ctx, cv.x, cv.y, hw, hh, fill, GRID_COLOR);
 
       if (sprite) {
-        ctx.drawImage(sprite, cv.x - hw, cv.y - hh, hw * 2, hh * 2);
-      } else {
-        drawDiamond(ctx, cv.x, cv.y, hw, hh, TERRAIN_COLORS[terrainType] ?? TERRAIN_COLORS['sand']!, GRID_COLOR);
+        drawTerrainSprite(ctx, sprite, assets.getMeta(assetKey), cv.x, cv.y, hw, hh);
       }
     }
   }

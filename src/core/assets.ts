@@ -52,11 +52,15 @@ export function computeAlphaBounds(
 
 /**
  * Determine whether alpha-bounds metadata should be computed for a given asset key.
- * Only building and HQ sprites need alpha-bounds; terrain, environment, and
- * unit spritesheets do not consume metadata yet, so scanning them is wasteful.
+ * Building/HQ sprites use it for alpha-tight placement, and terrain tiles use
+ * it so transparent 256x256 sand canvases can be cropped to their visible
+ * diamond before being fitted into a TILE_W x TILE_H map cell.
  */
 export function shouldComputeAlphaMeta(key: string): boolean {
-  return key.startsWith('building_') || key.startsWith('hq_');
+  return key.startsWith('building_')
+    || key.startsWith('hq_')
+    || key.startsWith('terrain_')
+    || key.startsWith('sand_tile_');
 }
 
 export class AssetStore {
