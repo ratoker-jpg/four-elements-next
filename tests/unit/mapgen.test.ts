@@ -10,7 +10,7 @@ import {
   EDGE_BIOME_DEPTH,
 } from '../../src/core/constants.js';
 import { OBSTACLE_FOOTPRINTS, RESOURCE_FOOTPRINTS } from '../../src/game/map-types.js';
-import { isStraightLineClearOfObstacles } from '../../src/game/map-validation.js';
+import { isStraightLineClearOfObstacles, validateMap, buildPassabilityMap, computeReachableSet, isFootprintReachable } from '../../src/game/map-validation.js';
 
 describe('mapgen', () => {
   it('returns correct dimensions', () => {
@@ -595,6 +595,62 @@ describe('mapgen', () => {
     const centerX = Math.floor(map.width / 2);
     const centerY = Math.floor(map.height / 2);
     expect(isStraightLineClearOfObstacles(map.obstacles, hqCx, hqCy, centerX, centerY, map.width, map.height)).toBe(true);
+  });
+
+  // ── VALIDATION-BFS-01: BFS reachability tests ───────────────────────
+
+  it('generated standard map passes BFS validation', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const report = validateMap(map, 42);
+    expect(report.ok).toBe(true);
+    expect(report.reachabilityMethod).toBe('bfs');
+    expect(report.centerReachable).toBe(true);
+    expect(report.infiniteReachable).toBe(true);
+    expect(report.reachableStarterResources).toBeGreaterThan(0);
+  });
+
+  it('generated large map passes BFS validation', () => {
+    const map = generateMap(64, 64, 'cyan', 42);
+    const report = validateMap(map, 42);
+    expect(report.ok).toBe(true);
+    expect(report.reachabilityMethod).toBe('bfs');
+    expect(report.centerReachable).toBe(true);
+    expect(report.infiniteReachable).toBe(true);
+  });
+
+  it('starter resource reachability uses BFS/reachable-adjacent logic, not direct line', () => {
+    const map = generateMap(48, 48, 'cyan', 42);
+    const passability = buildPassabilityMap(map);
+    const reachable = computeReachableSet(map, passability);
+    const starterResources = map.resources.filter(
+      (r) => r.type === 'small' || r.type === 'medium',
+    );
+    // At least one starter resource must be reachable via BFS adjacent logic
+    let bfsReachable = 0;
+    for (const r of starterResources) {
+      if (isFootprintReachable(reachable, r.tx, r.ty, r.footprint, map.width, map.height, passability)) {
+        bfsReachable++;
+      }
+    }
+    expect(bfsReachable).toBeGreaterThan(0);
+  });
+
+  it('BFS validation passes across multiple seeds for standard maps', () => {
+    const seeds = [1, 7, 42, 100, 200, 300, 500, 777, 999, 1234];
+    for (const seed of seeds) {
+      const map = generateMap(48, 48, 'cyan', seed);
+      const report = validateMap(map, seed);
+      expect(report.ok).toBe(true);
+    }
+  });
+
+  it('BFS validation passes across multiple seeds for large maps', () => {
+    const seeds = [1, 7, 42, 100, 200, 300, 500, 777, 999, 1234];
+    for (const seed of seeds) {
+      const map = generateMap(64, 64, 'cyan', seed);
+      const report = validateMap(map, seed);
+      expect(report.ok).toBe(true);
+    }
   });
 
   it('standard map obstacle type limits are robust across multiple seeds', () => {
