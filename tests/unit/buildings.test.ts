@@ -31,7 +31,7 @@ describe('building definitions', () => {
     const def = BUILDING_DEFINITIONS['units-factory'];
     expect(def.label).toBe('Фабрика юнитов');
     expect(def.shortCode).toBe('FAC');
-    expect(def.costMatter).toBe(150);
+    expect(def.costMatter).toBe(120);
     expect(def.buildTimeSeconds).toBe(30);
     expect(def.footprint).toBe(2);
   });

@@ -18,8 +18,8 @@ test.describe('NEXT-03 economy baseline', () => {
   test('economy HUD shows correct starting resources (elementUnits displayed as elements)', async ({ page }) => {
     await navigateToGameScreen(page);
     const values = page.locator('.economy-hud__value');
-    await expect(values.nth(0)).toHaveText('0/200');
-    await expect(values.nth(1)).toHaveText('100/200');
+    await expect(values.nth(0)).toHaveText('30/200');
+    await expect(values.nth(1)).toHaveText('120/200');
     // Element display: 30 elementUnits → "3.0", 200 elementUnits cap → "20.0"
     await expect(values.nth(2)).toHaveText('3.0/20.0');
   });
@@ -48,8 +48,8 @@ test.describe('NEXT-03 economy baseline', () => {
     });
     expect(economyState).not.toBeNull();
     expect(economyState!.faction).toBe('cyan');
-    expect(economyState!.raw).toBe(0);
-    expect(economyState!.matter).toBe(100);
+    expect(economyState!.raw).toBe(30);
+    expect(economyState!.matter).toBe(120);
     // Elements stored in elementUnits: 30 units = 3.0 displayed elements
     expect(economyState!.elements).toEqual({ cyan: 30, green: 0, yellow: 0, purple: 0 });
     expect(economyState!.activeElement).toBe(30); // 30 elementUnits

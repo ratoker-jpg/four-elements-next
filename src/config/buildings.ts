@@ -13,8 +13,8 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
   separator: {
     type: 'separator',
     label: 'Сепаратор',
-    costMatter: 80,
-    buildTimeSeconds: 25,
+    costMatter: 60,
+    buildTimeSeconds: 20,
     shortCode: 'SEP',
     footprint: 2,
   },
@@ -37,7 +37,7 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
   'power-plant': {
     type: 'power-plant',
     label: 'Электростанция',
-    costMatter: 120,
+    costMatter: 100,
     buildTimeSeconds: 25,
     shortCode: 'PWR',
     footprint: 2,
@@ -53,7 +53,7 @@ export const BUILDING_DEFINITIONS: Record<BuildingType, BuildingDefinition> = {
   'units-factory': {
     type: 'units-factory',
     label: 'Фабрика юнитов',
-    costMatter: 150,
+    costMatter: 120,
     buildTimeSeconds: 30,
     shortCode: 'FAC',
     footprint: 2,

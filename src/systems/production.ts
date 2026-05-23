@@ -27,8 +27,8 @@ export const PRODUCTION_COSTS: Record<ProducibleUnitType, {
   control: number;
   duration: number;
 }> = {
-  builder: { matter: 50, element: 10, control: BUILDER_CONTROL_COST, duration: 20 },
-  harvester: { matter: 60, element: 10, control: HARVESTER_CONTROL_COST, duration: 25 },
+  builder: { matter: 40, element: 10, control: BUILDER_CONTROL_COST, duration: 15 },
+  harvester: { matter: 50, element: 10, control: HARVESTER_CONTROL_COST, duration: 20 },
 };
 
 // ── State types ──────────────────────────────────────────────────────

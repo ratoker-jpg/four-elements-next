@@ -99,7 +99,7 @@ test.describe('MAP-EDITOR-ARCH-01 PR10 — Launch game from custom map', () => {
 
     // Game should be running with cyan faction (default editor faction)
     expect(mapState.faction).toBe('cyan');
-    expect(mapState.matter).toBe(100); // Starting matter
+    expect(mapState.matter).toBe(120); // Starting matter
     expect(mapState.builderCount).toBeGreaterThanOrEqual(1);
   });
 
