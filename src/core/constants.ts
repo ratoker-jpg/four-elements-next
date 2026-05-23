@@ -109,9 +109,10 @@ export const BG_COLOR = '#171008';
 // ── Procedural sand terrain feature flag ─────────────────────────────────
 
 /** When true, terrain is rendered procedurally with deterministic chunk-based
- *  tint variation instead of PNG sand tile sprites. The PNG path is preserved
- *  as fallback when false. Rollback: set to false. */
-export const FE_PROCEDURAL_SAND_ENABLED = true;
+ *  tint variation instead of PNG sand tile sprites. Currently disabled —
+ *  legacy terrain assets (terrain_sand, terrain_sand_dark, terrain_sand_light)
+ *  are the active render path. Re-enable to test procedural sand. */
+export const FE_PROCEDURAL_SAND_ENABLED = false;
 
 /** Chunk size (in tiles) for procedural sand tint grouping.
  *  Tiles within the same chunk share a base tint for visual coherence. */

@@ -10,20 +10,25 @@ import {
   PROC_SAND_SAT_RANGE,
   PROC_SAND_LIGHT_RANGE,
   PROC_SAND_MICRO_RANGE,
-  TERRAIN_COLORS,
 } from '../../src/core/constants.js';
-import { shouldComputeAlphaMeta } from '../../src/core/assets.js';
 import type { TerrainType } from '../../src/game/map-types.js';
 
-describe('PROC-SAND-01: procedural sand terrain', () => {
+/**
+ * Tests for the procedural sand terrain module.
+ *
+ * NOTE: FE_PROCEDURAL_SAND_ENABLED is currently false (legacy terrain is active).
+ * These tests verify the procedural terrain logic itself remains correct
+ * for when the flag is re-enabled.
+ */
+describe('PROC-SAND-01: procedural sand terrain (module logic)', () => {
   beforeEach(() => {
     clearProceduralSandCache();
   });
 
-  // ── Feature flag ────────────────────────────────────────────────────
+  // ── Feature flag state ──────────────────────────────────────────────
 
-  it('FE_PROCEDURAL_SAND_ENABLED is true by default', () => {
-    expect(FE_PROCEDURAL_SAND_ENABLED).toBe(true);
+  it('FE_PROCEDURAL_SAND_ENABLED is currently false (legacy terrain active)', () => {
+    expect(FE_PROCEDURAL_SAND_ENABLED).toBe(false);
   });
 
   it('PROCEDURAL_SAND_CHUNK_SIZE is 4', () => {
@@ -65,10 +70,6 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
   // ── Different visualSeed can produce different output ────────────────
 
   it('different visualSeed can produce different colors', () => {
-    const color1 = proceduralSandColor('sand', 42, 10, 20);
-    const color2 = proceduralSandColor('sand', 999, 10, 20);
-    // Not guaranteed to be different for any specific tile, but likely different
-    // for at least one tile in a sample
     let foundDifferent = false;
     for (let tx = 0; tx < 20 && !foundDifferent; tx++) {
       for (let ty = 0; ty < 20 && !foundDifferent; ty++) {
@@ -90,12 +91,8 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
     for (let i = 0; i < sampleSize; i++) {
       const tx = i * 3;
       const ty = i * 7;
-      const lightColor = proceduralSandColor('sand-light', 42, tx, ty);
-      const sandColor = proceduralSandColor('sand', 42, tx, ty);
-
-      // Parse rgb(r,g,b) and compute perceived brightness
-      sandLightSum += parseRgbBrightness(lightColor);
-      sandSum += parseRgbBrightness(sandColor);
+      sandLightSum += parseRgbBrightness(proceduralSandColor('sand-light', 42, tx, ty));
+      sandSum += parseRgbBrightness(proceduralSandColor('sand', 42, tx, ty));
     }
 
     expect(sandLightSum / sampleSize).toBeGreaterThan(sandSum / sampleSize);
@@ -109,11 +106,8 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
     for (let i = 0; i < sampleSize; i++) {
       const tx = i * 3;
       const ty = i * 7;
-      const sandColor = proceduralSandColor('sand', 42, tx, ty);
-      const darkColor = proceduralSandColor('sand-dark', 42, tx, ty);
-
-      sandSum += parseRgbBrightness(sandColor);
-      sandDarkSum += parseRgbBrightness(darkColor);
+      sandSum += parseRgbBrightness(proceduralSandColor('sand', 42, tx, ty));
+      sandDarkSum += parseRgbBrightness(proceduralSandColor('sand-dark', 42, tx, ty));
     }
 
     expect(sandSum / sampleSize).toBeGreaterThan(sandDarkSum / sampleSize);
@@ -144,39 +138,30 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
   // ── Chunk coherence: tiles in same chunk have similar tint ───────────
 
   it('tiles in same chunk share chunk-level base tint', () => {
-    // Two tiles in the same chunk should differ only by micro-variation
     const chunkSize = PROCEDURAL_SAND_CHUNK_SIZE;
     const tx1 = 0;
     const ty1 = 0;
     const tx2 = 1;
     const ty2 = 1;
-    // Both should be in chunk (0,0)
     expect(Math.floor(tx1 / chunkSize)).toBe(Math.floor(tx2 / chunkSize));
     expect(Math.floor(ty1 / chunkSize)).toBe(Math.floor(ty2 / chunkSize));
 
     const color1 = proceduralSandColor('sand', 42, tx1, ty1);
     const color2 = proceduralSandColor('sand', 42, tx2, ty2);
 
-    // They should be close but not necessarily identical (micro-variation)
     const b1 = parseRgbBrightness(color1);
     const b2 = parseRgbBrightness(color2);
-    const diff = Math.abs(b1 - b2);
-    // Micro-variation is ±2%, so max difference should be small
-    expect(diff).toBeLessThan(0.06);
+    expect(Math.abs(b1 - b2)).toBeLessThan(0.06);
   });
 
   it('tiles in different chunks can have more variation', () => {
     const chunkSize = PROCEDURAL_SAND_CHUNK_SIZE;
-    const tx1 = 0;
-    const ty1 = 0;
-    const tx2 = chunkSize; // Next chunk over
-    const ty2 = 0;
+    const tx2 = chunkSize;
 
-    // Sample multiple visualSeeds to find at least one case with notable difference
     let foundVariation = false;
     for (let seed = 0; seed < 20; seed++) {
-      const color1 = proceduralSandColor('sand', seed, tx1, ty1);
-      const color2 = proceduralSandColor('sand', seed, tx2, ty2);
+      const color1 = proceduralSandColor('sand', seed, 0, 0);
+      const color2 = proceduralSandColor('sand', seed, tx2, 0);
       const b1 = parseRgbBrightness(color1);
       const b2 = parseRgbBrightness(color2);
       if (Math.abs(b1 - b2) > 0.01) {
@@ -184,7 +169,6 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
         break;
       }
     }
-    // Different chunks CAN have different tints (not guaranteed for every seed)
     expect(foundVariation).toBe(true);
   });
 
@@ -194,39 +178,17 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
     const color1 = proceduralSandColor('sand', 42, 10, 20);
     clearProceduralSandCache();
     const color2 = proceduralSandColor('sand', 42, 10, 20);
-    // After clear, recomputation should produce the same result (deterministic)
     expect(color1).toBe(color2);
-  });
-
-  // ── shouldComputeAlphaMeta respects procedural flag ──────────────────
-
-  it('shouldComputeAlphaMeta returns false for terrain keys when procedural is ON', () => {
-    // This test documents the current behavior; if FE_PROCEDURAL_SAND_ENABLED changes,
-    // the test should be updated accordingly
-    if (FE_PROCEDURAL_SAND_ENABLED) {
-      expect(shouldComputeAlphaMeta('terrain_sand')).toBe(false);
-      expect(shouldComputeAlphaMeta('terrain_sand_dark')).toBe(false);
-      expect(shouldComputeAlphaMeta('terrain_sand_light')).toBe(false);
-      expect(shouldComputeAlphaMeta('sand_tile_01')).toBe(false);
-      expect(shouldComputeAlphaMeta('sand_tile_12')).toBe(false);
-    }
-  });
-
-  it('shouldComputeAlphaMeta still returns true for building/HQ keys', () => {
-    expect(shouldComputeAlphaMeta('building_cyan_power_plant')).toBe(true);
-    expect(shouldComputeAlphaMeta('hq_cyan')).toBe(true);
   });
 
   // ── No chessboard/noisy look ────────────────────────────────────────
 
   it('adjacent tiles do not produce a chessboard pattern', () => {
-    // Check that horizontally adjacent tiles have similar brightness
     const colors: number[] = [];
     for (let tx = 0; tx < 10; tx++) {
       colors.push(parseRgbBrightness(proceduralSandColor('sand', 42, tx, 5)));
     }
 
-    // Count sign changes in brightness differences
     let signChanges = 0;
     for (let i = 1; i < colors.length - 1; i++) {
       const diff1 = colors[i]! - colors[i - 1]!;
@@ -234,8 +196,6 @@ describe('PROC-SAND-01: procedural sand terrain', () => {
       if (diff1 * diff2 < 0) signChanges++;
     }
 
-    // A chessboard pattern would cause ~9 sign changes in 10 tiles
-    // Normal variation should cause far fewer
     expect(signChanges).toBeLessThan(7);
   });
 });
@@ -247,6 +207,5 @@ function parseRgbBrightness(color: string): number {
   const r = parseInt(match[1]!, 10) / 255;
   const g = parseInt(match[2]!, 10) / 255;
   const b = parseInt(match[3]!, 10) / 255;
-  // Perceived brightness (ITU-R BT.601)
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
