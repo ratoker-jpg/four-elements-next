@@ -448,3 +448,130 @@ test.describe('Phaser renderer Stage 3 — performance smoke and acceptance', ()
     expect(runtimeErrors).toEqual([]);
   });
 });
+
+test.describe('Phaser renderer Stage 4 — VFX and visual feedback', () => {
+  test('VFX stats are exposed and enabled', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    // VFX should be enabled
+    expect(stats.vfxEnabled).toBe(true);
+    // Dust emitter count should be a non-negative number
+    const dustCount = stats.dustEmitterCount as number;
+    expect(dustCount).toBeGreaterThanOrEqual(0);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('VFX does not cause object count leaks', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount1 = stats1.totalObjectCount as number;
+
+    // Let harvesters move with VFX active for a while
+    await page.waitForTimeout(3000);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount2 = stats2.totalObjectCount as number;
+
+    // VFX should not cause object count to explode
+    expect(objectCount2).toBeLessThanOrEqual(objectCount1 * 2);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('VFX does not break renderer stats', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(1000);
+
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    // All stats should still be present and valid
+    expect(stats.kind).toBe('phaser');
+    expect(stats.renderCount as number).toBeGreaterThanOrEqual(1);
+    expect(stats.terrainCached).toBe(true);
+    expect(stats.vfxEnabled).toBe(true);
+    expect(stats.lastRenderDurationMs as number).toBeLessThan(1000);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('no console errors with VFX active during movement', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Interact while VFX (inertia, dust) should be active during harvester movement
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('KeyD');
+    await page.waitForTimeout(500);
+    await page.keyboard.down('KeyA');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('KeyA');
+    await page.waitForTimeout(1000);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+});
