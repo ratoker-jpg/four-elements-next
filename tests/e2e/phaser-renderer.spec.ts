@@ -1,0 +1,60 @@
+import { expect, test } from '@playwright/test';
+import { PHASER_RENDERER_FLAG } from '../../src/render-phaser/feature-flag.js';
+import { navigateToGameScreen } from './helpers/navigate.js';
+
+test.describe('Phaser renderer switch', () => {
+  test('boots a real game scene behind the runtime flag', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+    await expect(page.locator('#economy-hud')).toBeVisible();
+    const canvas = page.locator('#game-canvas[data-renderer="phaser"]');
+    await expect(canvas).toBeVisible();
+
+    const paintState = await canvas.evaluate((node) => {
+      const canvasElement = node as HTMLCanvasElement;
+      const ctx = canvasElement.getContext('2d');
+      if (!ctx) return { painted: false, reason: '2d context unavailable' };
+      const width = canvasElement.width;
+      const height = canvasElement.height;
+      if (width < 1 || height < 1) return { painted: false, reason: 'empty canvas' };
+
+      const sample = ctx.getImageData(0, 0, width, height).data;
+      for (let i = 0; i < sample.length; i += 4 * 97) {
+        const r = sample[i] ?? 0;
+        const g = sample[i + 1] ?? 0;
+        const b = sample[i + 2] ?? 0;
+        const a = sample[i + 3] ?? 0;
+        const isBackground = r === 23 && g === 16 && b === 8;
+        if (a > 0 && !isBackground) return { painted: true, reason: 'world pixels present' };
+      }
+      return { painted: false, reason: 'only background sampled' };
+    });
+    expect(paintState).toEqual({ painted: true, reason: 'world pixels present' });
+
+    const before = await page.evaluate(() => ({ ...(window as unknown as { __cameraPos: { x: number; y: number; zoom: number } }).__cameraPos }));
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(150);
+    await page.keyboard.up('KeyD');
+    const afterPan = await page.evaluate(() => ({ ...(window as unknown as { __cameraPos: { x: number; y: number; zoom: number } }).__cameraPos }));
+    expect(afterPan.x).toBeGreaterThan(before.x);
+
+    await page.mouse.wheel(0, -300);
+    await page.waitForTimeout(50);
+    const afterZoom = await page.evaluate(() => ({ ...(window as unknown as { __cameraPos: { x: number; y: number; zoom: number } }).__cameraPos }));
+    expect(afterZoom.zoom).toBeGreaterThan(afterPan.zoom);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+});

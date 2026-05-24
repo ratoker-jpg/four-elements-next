@@ -8,6 +8,8 @@ import { isDevPanelAllowed, createDevPanel } from '../dev/dev-panel.js';
 import { createAssetTunerPanel, loadOverrides, isAssetTunerAllowed } from '../dev/asset-tuner.js';
 import { DEFAULT_PRESET_ID, type MapgenPresetId } from '../game/mapgen-presets.js';
 import type { FactionId } from '../game/map-types.js';
+import { isPhaserRendererEnabled } from '../render-phaser/feature-flag.js';
+import type { WorldRendererKind } from '../render-phaser/types.js';
 
 export function createGameScreen(navigate: NavigateFn): Screen {
   let gameWorld: GameWorld | null = null;
@@ -21,6 +23,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
     async mount(container: HTMLElement, data: ScreenTransitionData): Promise<void> {
       const gameData = data as GameScreenData | null;
       const customMapData = gameData?.customMapData;
+      const rendererKind: WorldRendererKind = isPhaserRendererEnabled() ? 'phaser' : 'canvas';
 
       let world: GameWorld;
 
@@ -30,13 +33,15 @@ export function createGameScreen(navigate: NavigateFn): Screen {
         const canvas = document.createElement('canvas');
         canvas.className = 'screen__canvas';
         canvas.id = 'game-canvas';
+        canvas.dataset.renderer = rendererKind;
         canvas.style.cursor = 'grab';
 
-        world = GameWorld.fromCustomMap(canvas, customMapData, faction);
+        world = GameWorld.fromCustomMap(canvas, customMapData, faction, { rendererKind });
 
         // Build UI wrapper
         const wrapper = document.createElement('div');
         wrapper.className = 'screen screen--game';
+        wrapper.dataset.renderer = rendererKind;
         wrapper.appendChild(canvas);
 
         const hud = createEconomyHud();
@@ -116,10 +121,12 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'screen screen--game';
+        wrapper.dataset.renderer = rendererKind;
 
         const canvas = document.createElement('canvas');
         canvas.className = 'screen__canvas';
         canvas.id = 'game-canvas';
+        canvas.dataset.renderer = rendererKind;
         canvas.style.cursor = 'grab';
         wrapper.appendChild(canvas);
 
@@ -153,7 +160,7 @@ export function createGameScreen(navigate: NavigateFn): Screen {
 
         container.appendChild(wrapper);
 
-        world = new GameWorld(canvas, mapSize, faction, seed, mapgenPresetId);
+        world = new GameWorld(canvas, mapSize, faction, seed, mapgenPresetId, { rendererKind });
         gameWorld = world;
 
         world.onEconomyUpdate = (state) => hud.updateEconomy(state);
