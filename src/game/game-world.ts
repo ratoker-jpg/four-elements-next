@@ -228,11 +228,22 @@ export class GameWorld {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).__overlayToggles;
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__rendererStats;
   }
 
   getEconomyState(): ReadonlyEconomyState { return this.state.economy; }
   getPowerState(): ReadonlyPowerState { return this.state.power; }
   getControlState(): ReadonlyControlState { return this.state.control; }
+
+  /** Get renderer stats for debugging/E2E. Returns kind + phaser-specific registry stats if applicable. */
+  private getRendererStats(): { kind: WorldRendererKind; [key: string]: unknown } {
+    if (this.rendererKind === 'phaser' && this.renderer && 'getStats' in this.renderer) {
+      const stats = (this.renderer as unknown as { getStats: () => Record<string, unknown> }).getStats();
+      return { kind: this.rendererKind, ...stats };
+    }
+    return { kind: this.rendererKind };
+  }
 
   startConstruction(buildingType: BuildingType): ConstructionCommandResultType {
     const result = startConstructionSystem(this.state.map, this.state.economy, buildingType, this.state.resourceNodes);
@@ -733,6 +744,9 @@ export class GameWorld {
         footprintClaimed: s.footprintClaimed,
       })),
     };
+    // Renderer stats hook (Phaser renderer exposes richer stats; Canvas returns kind only)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__rendererStats = this.getRendererStats();
 
     if (import.meta.env.MODE === 'test') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -71,3 +71,32 @@ export function clamp(v: number, min: number, max: number): number {
 export function dist(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
+
+/** Axis-aligned bounding box of the isometric terrain for a map of given tile dimensions.
+ *
+ *  Each tile (tx, ty) is drawn as a diamond centred at tileToScreen(tx+0.5, ty+0.5)
+ *  with vertices offset by ±TILE_W/2 and ±TILE_H/2. The returned bounds cover the
+ *  outermost vertices of ALL tile diamonds in the map, so they include the full
+ *  visual extent of the terrain — including negative-X tiles that appear on the
+ *  left side of the isometric diamond.
+ *
+ *  Analytic derivation:
+ *    minX = -mapHeight * TILE_W / 2   (left vertex of tile (0, mapHeight-1))
+ *    maxX =  mapWidth  * TILE_W / 2   (right vertex of tile (mapWidth-1, 0))
+ *    minY =  0                         (top vertex of tile (0, 0))
+ *    maxY = (mapWidth + mapHeight) * TILE_H / 2  (bottom vertex of tile (mapWidth-1, mapHeight-1))
+ */
+export interface TerrainWorldBounds {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+export function terrainWorldBounds(mapWidth: number, mapHeight: number): TerrainWorldBounds {
+  const minX = -mapHeight * TILE_W / 2;
+  const maxX =  mapWidth  * TILE_W / 2;
+  const minY = 0;
+  const maxY = (mapWidth + mapHeight) * TILE_H / 2;
+  return { minX, minY, maxX, maxY };
+}
