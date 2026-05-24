@@ -26,19 +26,28 @@ Civil baseline is functional:
 | #114 | ECONOMY-PACE-01 | First 5-8 minutes economy pacing baseline |
 | #115 | VALIDATION-BFS-01 | BFS/flood-fill map reachability validation |
 | #116 | PATH-TELEMETRY-CACHE-01 | Pathfinding telemetry and passability grid cache |
+| #119 | PHASER-SPIKE-01 S1 | Phaser bootstrap, 48×48 isometric map, pan/zoom, static assets |
+| #120 | PHASER-SPIKE-01 S2 | Harvester movement, spritesheet animation, dynamic depth sorting |
+| #121 | PHASER-SPIKE-01 S3 | Render-only inertia, dust particles, active feedback |
 
 ## Current next focus
 
-**MAPGEN-RESOURCE-BALANCE-01** — refine map resource distribution and balance for the first 10+ minutes of civil gameplay. Requires a Full Audit first.
+**PHASER-MIGRATION-AUDIT-01** — immediate next decision step. Must compare options A/B/C before gameplay work continues:
+- **A** — keep Canvas 2D, port visual ideas from spike
+- **B** — replace only render/camera/animation/VFX layer with Phaser
+- **C** — full Phaser runtime migration
+
+MAPGEN-RESOURCE-BALANCE-01 remains the next gameplay block, paused until the audit decides.
 
 ## Planned architecture sequence
 
-1. **MAPGEN-RESOURCE-BALANCE-01** (immediate next) — symmetric starter templates, center cluster cleanup, edge tuning
-2. **SAVE-LOAD-MVP-01** — serialization contract, localStorage MVP, UI/dev integration
-3. **VISUAL-MOTION-FEEDBACK-01** — render-only inertia, speed/mass dust, active building feedback
-4. **UI-SHELL-ARCH-01** — Esc menu, save slots, HUD readability
-5. **GAMEWORLD-SPLIT-01** — TestBridge, DevController, InputHandler extraction
-6. **COMBAT-READINESS-01** — blocked until blocks 1–3 are merged and playtested
+1. **PHASER-MIGRATION-AUDIT-01** (immediate next) — decide renderer direction: A/B/C
+2. **MAPGEN-RESOURCE-BALANCE-01** (paused until audit decides) — symmetric starter templates, center cluster cleanup, edge tuning
+3. **SAVE-LOAD-MVP-01** — serialization contract, localStorage MVP, UI/dev integration
+4. **VISUAL-MOTION-FEEDBACK-01** — render-only inertia, speed/mass dust, active building feedback
+5. **UI-SHELL-ARCH-01** — Esc menu, save slots, HUD readability
+6. **GAMEWORLD-SPLIT-01** — TestBridge, DevController, InputHandler extraction
+7. **COMBAT-READINESS-01** — blocked until blocks 2–4 are merged and playtested
 
 ## Do-not-touch list
 
@@ -50,6 +59,7 @@ Civil baseline is functional:
 - Do not change `src/core/constants.ts` without explicit approval
 - Do not change accepted building assets without scoped approval
 - Do not add enemy AI, faction bonuses, or military systems
+- Do not migrate production renderer without PHASER-MIGRATION-AUDIT-01
 
 ## Required workflow
 
@@ -78,3 +88,4 @@ Docs-only PRs require no build or tests.
 - `agent-ctx/state.md` — project state quick reference
 - `docs/ARCHITECTURE_RULES.md` — architecture guardrails
 - `docs/ASSET_POLICY.md` — asset reuse rules
+- `docs/project/PHASER_SPIKE_RESULT_20260524.md` — Phaser spike result and migration decision gate

@@ -71,6 +71,12 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 - PR3 (PR #116): PATH-TELEMETRY-CACHE-01 — pathfinding telemetry and passability grid cache
 **Status:** Done.
 
+### PHASER-SPIKE-01 (research track)
+- PR #119: Stage 1 — Phaser bootstrap, 48×48 isometric map, pan/zoom, static assets
+- PR #120: Stage 2 — Harvester movement, spritesheet animation, dynamic depth sorting
+- PR #121: Stage 3 — Render-only inertia, dust particles, active feedback
+**Status:** Done. Phaser is useful for render/camera/animation/particles/VFX experiments. **This is not migration approval.** No production renderer migration has started. Do not migrate production renderer without PHASER-MIGRATION-AUDIT-01. Full result: `docs/project/PHASER_SPIKE_RESULT_20260524.md`. Immediate next step: run PHASER-MIGRATION-AUDIT-01 to decide A/B/C before gameplay work continues.
+
 ## In Progress
 
 (None currently.)
@@ -79,8 +85,12 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 
 Ordered after CIVIL-BASELINE-01. Each requires Full Audit before implementation.
 
+### Block 0 — PHASER-MIGRATION-AUDIT-01
+- **Status:** immediate next decision step. Must complete before Block 1.
+- Goal: decide whether production renderer stays Canvas 2D or migrates to Phaser; compare options A/B/C
+
 ### Block 1 — MAPGEN-RESOURCE-BALANCE-01
-- **Status:** immediate next focus. Not yet started.
+- **Status:** paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C. Not yet started.
 - Stage 1: Symmetric starter resource templates
 - Stage 2: Center resource cluster cleanup
 - Stage 3: Edge obstacle/resource/decor tuning

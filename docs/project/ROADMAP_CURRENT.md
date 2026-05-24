@@ -15,6 +15,7 @@ It consolidates:
 - MAP-EDITOR-ARCH-01 PR1–PR10 (editor, seed flow, mapgen config/presets, saved seeds, custom maps, game launch);
 - ENV-ASSET-CALIBRATION-01 PR #111–#113 (volcano removal, asset tuner, asset profile calibration);
 - CIVIL-BASELINE-01 PR #114–#116 (economy pacing, BFS map validation, pathfinding telemetry/cache);
+- PHASER-SPIKE-01 PR #119–#121 (isolated Phaser 3 research spike — not migration approval);
 - the order of work before combat and enemy bot development.
 
 ## 1. Current project rule
@@ -169,15 +170,29 @@ Done:
 - PR #115 — VALIDATION-BFS-01: replaced/supplemented straight-line map reachability with BFS/flood-fill validation using `buildPassabilityGrid()`. `isStraightLineClearOfObstacles()` kept but deprecated.
 - PR #116 — PATH-TELEMETRY-CACHE-01: lightweight pathfinding/passability telemetry counters and safe passability grid cache. Cache reuses grid when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes. Telemetry: pathCalls, gridBuilds, cacheHits, cacheMisses, passabilityVersion. Exposed via `window.__pathfindingTelemetry`.
 
+### PHASER-SPIKE-01 (research track)
+
+Done:
+
+- PR #119 — Stage 1: Phaser bootstrap, 48×48 isometric map rendering, pan/zoom, static assets.
+- PR #120 — Stage 2: Harvester movement, 8-direction spritesheet animation, dynamic depth sorting.
+- PR #121 — Stage 3: Render-only motion inertia, speed-based dust particles, gathering/unloading/HQ pulse feedback.
+
+Result: Phaser is useful for render/camera/animation/particles/VFX experiments. **This is not migration approval.** The production game still uses TypeScript strict + Vite + Canvas 2D + HTML overlay UI. No production renderer migration has started. Full result document: `docs/project/PHASER_SPIKE_RESULT_20260524.md`.
+
+Migration gate: no migration without PHASER-MIGRATION-AUDIT-01. The audit must compare three options: (1) keep Canvas 2D and port visual ideas, (2) replace only the render layer with Phaser, (3) full Phaser runtime migration.
+
 ## 4. Current strategy
 
 Civil loop before combat.
 
 The project rule remains: do not start combat, enemy AI, faction bonuses, or military systems until the civil baseline is playtested further.
 
-Current focus is mapgen and resource balance refinement — the civil economy works, pathfinding exists, map validation uses BFS, and telemetry tracks passability performance. The next step is ensuring map generation produces well-balanced resource distributions for the first 10+ minutes of gameplay.
+Current focus is the **PHASER-MIGRATION-AUDIT-01** decision gate. The civil economy works, pathfinding exists, map validation uses BFS, and telemetry tracks passability performance. The Phaser spike proved Phaser can handle render/camera/animation/particles/VFX. The project is still small enough that a renderer decision now avoids costly rewrites later.
 
-Next planned block: **MAPGEN-RESOURCE-BALANCE-01**.
+Immediate next decision step: **PHASER-MIGRATION-AUDIT-01**.
+
+MAPGEN-RESOURCE-BALANCE-01 remains the next gameplay block, but it should be paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C. If the audit picks option A (keep Canvas 2D), gameplay work resumes unchanged. If the audit picks option B or C, mapgen work should account for the new render architecture from the start.
 
 ## 5. New manual QA observations to fix
 
@@ -342,9 +357,27 @@ This belongs to movement/visual QA, not mapgen.
 
 The following blocks are planned in this order. Each requires a Full Audit before implementation unless already completed. Implementation is split into up to 3 stage PRs per block.
 
+### Block 0 — PHASER-MIGRATION-AUDIT-01
+
+Status: **immediate next decision step.** Must complete before Block 1.
+
+Type: Full Audit.
+
+Goal:
+
+- decide whether the production renderer stays Canvas 2D or migrates to Phaser;
+- compare three options with risk assessment, effort estimate, and rollback plan:
+  - **Option A** — keep Canvas 2D, port visual ideas from the spike (inertia, dust, feedback);
+  - **Option B** — replace only render/camera/animation/VFX layer with Phaser, keep GameWorld/GameState/systems/UI;
+  - **Option C** — full Phaser runtime migration (replace entire game loop with Phaser scenes/systems);
+- produce written recommendation;
+- MAPGEN-RESOURCE-BALANCE-01 pauses until this audit decides.
+
+Rationale: the project is still small enough that a renderer change is manageable now. Waiting makes migration exponentially harder. The spike proved Phaser can do the job; the audit decides whether it should.
+
 ### Block 1 — MAPGEN-RESOURCE-BALANCE-01
 
-Status: **immediate next focus.** Not yet started.
+Status: **paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C.** Not yet started.
 
 Type: Full Audit, then 3 stage PRs.
 
@@ -462,6 +495,7 @@ These are listed for reference; they are done and should not be restarted withou
 | DEV-SANDBOX-ARCH-01 | earlier | Dev panel, overlays, spawn tools |
 | PATHFINDING-ARCH-01 | earlier | Passability grid, BFS pathfinder, harvester/builder movement |
 | VISUAL-QA-ARCH-01 | earlier | Civil unit scale, shadows, sprite debug |
+| PHASER-SPIKE-01 | PR #119–#121 | Isolated Phaser 3 research spike (not migration approval) |
 
 ## 7. Do not do yet
 
@@ -475,6 +509,7 @@ Do not start:
 - big asset imports;
 - renderer rewrite;
 - Unity migration;
+- Phaser production migration (requires PHASER-MIGRATION-AUDIT-01 first);
 - pathfinding rewrite / A*;
 - re-enable procedural sand;
 - save/load schema changes;
@@ -486,9 +521,11 @@ Do not use Codex by default for small fixes.
 
 ## 8. Next recommended action
 
-1. Run **MAPGEN-RESOURCE-BALANCE-01** Full Audit.
-2. Implement in 3 stage PRs following the audit plan.
-3. After MAPGEN-RESOURCE-BALANCE-01 is merged, proceed to **SAVE-LOAD-MVP-01** Full Audit.
-4. Continue through the ordered sequence: VISUAL-MOTION-FEEDBACK-01 → UI-SHELL-ARCH-01 → GAMEWORLD-SPLIT-01.
-5. COMBAT-READINESS-01 remains blocked until blocks 1–3 are merged and playtested.
-6. Reassess sequence if priorities change, but do not skip ahead to combat.
+1. Run **PHASER-MIGRATION-AUDIT-01** Full Audit — compare options A/B/C with risk, effort, and rollback.
+2. After audit decides:
+   - If **A** (keep Canvas 2D): proceed to **MAPGEN-RESOURCE-BALANCE-01** Full Audit unchanged.
+   - If **B** (Phaser render layer): plan MAPGEN-RESOURCE-BALANCE-01 accounting for Phaser render integration.
+   - If **C** (full Phaser): plan MAPGEN-RESOURCE-BALANCE-01 as part of Phaser runtime migration.
+3. Continue through the ordered sequence: MAPGEN-RESOURCE-BALANCE-01 → SAVE-LOAD-MVP-01 → VISUAL-MOTION-FEEDBACK-01 → UI-SHELL-ARCH-01 → GAMEWORLD-SPLIT-01.
+4. COMBAT-READINESS-01 remains blocked until blocks 1–3 are merged and playtested.
+5. Reassess sequence if priorities change, but do not skip ahead to combat.
