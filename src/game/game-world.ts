@@ -1,8 +1,7 @@
 /** GameWorld: owns render loop, camera, assets, GameState, input, and UI callbacks. */
 
-import { ASSET_MANIFEST, CIVIL_8X8_256_MANIFEST, FE_CIVIL_8X8_256_SHEETS_ENABLED, BUILDING_ASSET_MANIFEST, FE_BUILDING_SPRITES_ENABLED, HQ_FOOTPRINT } from '../core/constants.js';
+import { FE_CIVIL_8X8_256_SHEETS_ENABLED, HQ_FOOTPRINT } from '../core/constants.js';
 import { tileToScreen, screenToTile } from '../core/coordinates.js';
-import { AssetStore } from '../core/assets.js';
 import type { FactionId, BuildingType, ConstructionSitePlacement, ResourceType, ObstacleType, MapData } from './map-types.js';
 import type { MapgenPresetId } from './mapgen-presets.js';
 import { DEFAULT_PRESET_ID } from './mapgen-presets.js';
@@ -11,7 +10,7 @@ import type { ProducibleUnitType, ReadonlyProductionState } from '../systems/pro
 import type { GameState } from './game-state.js';
 import { createGameState, createGameStateFromMap } from './game-state.js';
 import { Camera } from '../render/camera.js';
-import { render } from '../render/renderer.js';
+import { CanvasWorldRenderer } from '../render/canvas-renderer-adapter.js';
 import { toggleDebugOverlay } from '../render/debug-overlay.js';
 import { installAssetPreviewKey } from '../dev/asset-preview.js';
 import {
@@ -35,16 +34,21 @@ import { runSystems } from '../systems/system-runner.js';
 import { isDevPanelAllowed, buildDevPanelState, type DevPanelState, type DevPanelActions } from '../dev/dev-panel.js';
 import { getOverlayToggles, setOverlayToggle, type OverlayToggles } from '../dev/dev-overlays.js';
 import { createPathfindingTelemetryAPI, invalidatePassabilityCache } from '../systems/path-telemetry.js';
+import type { WorldRenderer, WorldRendererKind, WorldRenderSnapshot } from '../render-phaser/types.js';
 
 /** Empty readonly map passed to render() when the spritesheet flag is OFF. */
 const EMPTY_PREV_POSITIONS: ReadonlyMap<number, { tx: number; ty: number }> = new Map();
 
+interface GameWorldOptions {
+  readonly rendererKind?: WorldRendererKind;
+}
+
 export class GameWorld {
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
   private camera: Camera;
   private state: GameState;
-  private assets: AssetStore;
+  private rendererKind: WorldRendererKind;
+  private renderer: WorldRenderer | null = null;
   private animFrameId: number | null = null;
   private lastTime = 0;
   private keys = new Set<string>();
@@ -82,14 +86,18 @@ export class GameWorld {
   private boundWheel: (e: WheelEvent) => void;
   private boundResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, mapSize: string, faction: FactionId | 'random', seed: number = 42, mapgenPresetId: MapgenPresetId = DEFAULT_PRESET_ID) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    mapSize: string,
+    faction: FactionId | 'random',
+    seed: number = 42,
+    mapgenPresetId: MapgenPresetId = DEFAULT_PRESET_ID,
+    options: GameWorldOptions = {},
+  ) {
     this.canvas = canvas;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Cannot get 2D context');
-    this.ctx = ctx;
 
     this.state = createGameState(mapSize, faction, seed, mapgenPresetId);
-    this.assets = new AssetStore();
+    this.rendererKind = options.rendererKind ?? 'canvas';
 
     // Invalidate passability cache on new game — fresh map means old grid is stale
     invalidatePassabilityCache();
@@ -109,15 +117,13 @@ export class GameWorld {
   /** Create a GameWorld from a custom MapData (editor-launched game).
    *  Uses createGameStateFromMap which deep-clones the input MapData.
    *  The existing constructor path (seed/preset) remains unchanged. */
-  static fromCustomMap(canvas: HTMLCanvasElement, mapData: MapData, faction: FactionId): GameWorld {
+  static fromCustomMap(canvas: HTMLCanvasElement, mapData: MapData, faction: FactionId, options: GameWorldOptions = {}): GameWorld {
     const world = Object.create(GameWorld.prototype) as GameWorld;
     world.canvas = canvas;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Cannot get 2D context');
-    world.ctx = ctx;
 
     world.state = createGameStateFromMap(mapData, faction);
-    world.assets = new AssetStore();
+    world.rendererKind = options.rendererKind ?? 'canvas';
+    world.renderer = null;
 
     // Invalidate passability cache on custom map — fresh map means old grid is stale
     invalidatePassabilityCache();
@@ -155,16 +161,13 @@ export class GameWorld {
   }
 
   async init(): Promise<void> {
-    await this.assets.loadManifest(ASSET_MANIFEST);
-    if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
-      await this.assets.loadManifest(CIVIL_8X8_256_MANIFEST);
-    }
-    if (FE_BUILDING_SPRITES_ENABLED) {
-      await this.assets.loadManifest(BUILDING_ASSET_MANIFEST);
-    }
+    this.renderer = await this.createRenderer();
+    await this.renderer.init();
   }
 
   start(): void {
+    if (!this.renderer) throw new Error('GameWorld renderer is not initialized');
+
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
     this.canvas.addEventListener('mousedown', this.boundMouseDown);
@@ -195,6 +198,8 @@ export class GameWorld {
     this.canvas.removeEventListener('wheel', this.boundWheel);
     window.removeEventListener('resize', this.boundResize);
     this.keys.clear();
+    this.renderer?.destroy();
+    this.renderer = null;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).__cameraPos;
@@ -536,7 +541,7 @@ export class GameWorld {
     const prevPositions = FE_CIVIL_8X8_256_SHEETS_ENABLED
       ? this.prevHarvesterPositions
       : (EMPTY_PREV_POSITIONS as ReadonlyMap<number, { tx: number; ty: number }>);
-    render(this.ctx, this.state.map, this.state.visualSeed, this.camera, this.assets, this.state.economy, this.state.power, this.state.harvesters, this.ticks, prevPositions, this.state.territory, this.state.resourceNodes);
+    this.renderer?.render(this.createRenderSnapshot(prevPositions));
     // Snapshot current harvester positions for next frame's direction computation
     // only when the spritesheet flag is ON (no point burning cycles otherwise).
     if (FE_CIVIL_8X8_256_SHEETS_ENABLED) {
@@ -547,6 +552,32 @@ export class GameWorld {
       }
     }
     this.animFrameId = requestAnimationFrame(this.loop.bind(this));
+  }
+
+  private async createRenderer(): Promise<WorldRenderer> {
+    this.canvas.dataset.renderer = this.rendererKind;
+    if (this.rendererKind === 'phaser') {
+      const { PhaserWorldRenderer } = await import('../render-phaser/phaser-world-renderer.js');
+      return new PhaserWorldRenderer(this.canvas);
+    }
+    return new CanvasWorldRenderer(this.canvas);
+  }
+
+  private createRenderSnapshot(
+    prevHarvesterPositions: ReadonlyMap<number, { tx: number; ty: number }>,
+  ): WorldRenderSnapshot {
+    return {
+      map: this.state.map,
+      visualSeed: this.state.visualSeed,
+      camera: this.camera,
+      economy: this.state.economy,
+      power: this.state.power,
+      harvesters: this.state.harvesters,
+      ticks: this.ticks,
+      prevHarvesterPositions,
+      territory: this.state.territory,
+      resourceNodes: this.state.resourceNodes,
+    };
   }
 
   private update(dt: number): void {
@@ -591,7 +622,7 @@ export class GameWorld {
 
   private publishTestHooks(): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y };
+    (window as any).__cameraPos = { x: this.camera.x, y: this.camera.y, zoom: this.camera.zoom };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__economyState = {
       faction: this.state.economy.faction,
@@ -801,7 +832,6 @@ export class GameWorld {
   }
 
   private onResize(): void {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    this.renderer?.resize(window.innerWidth, window.innerHeight);
   }
 }
