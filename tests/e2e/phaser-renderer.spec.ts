@@ -58,3 +58,143 @@ test.describe('Phaser renderer switch', () => {
     expect(runtimeErrors).toEqual([]);
   });
 });
+
+test.describe('Phaser renderer Stage 2 — persistent registry and live state', () => {
+  test('reports renderer stats with registry sizes', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Check renderer stats are available
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    expect(stats).toBeDefined();
+    expect(stats.kind).toBe('phaser');
+
+    // Registry sizes should be present
+    const sizes = stats.registrySizes as Record<string, number>;
+    expect(sizes).toBeDefined();
+    expect(sizes.hq).toBeGreaterThanOrEqual(1);
+    expect(sizes.resources).toBeGreaterThanOrEqual(0);
+    expect(sizes.obstacles).toBeGreaterThanOrEqual(0);
+    expect(sizes.harvesters).toBeGreaterThanOrEqual(2);
+
+    // Terrain should be cached
+    expect(stats.terrainCached).toBe(true);
+    expect(stats.terrainBuildCount as number).toBeGreaterThanOrEqual(1);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('Canvas remains default when Phaser flag is off', async ({ page }) => {
+    await page.goto('/');
+    // Make sure Phaser flag is NOT set
+    await page.evaluate((flag) => {
+      window.localStorage.removeItem(flag);
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="canvas"][data-ready="true"]')).toBeVisible();
+
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    expect(stats.kind).toBe('canvas');
+  });
+
+  test('harvester positions change over time under Phaser', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Get initial harvester positions
+    const beforePositions = await page.evaluate(() => {
+      const hs = (window as unknown as { __harvesterState: { harvesters: Array<{ tx: number; ty: number }> } }).__harvesterState;
+      return hs.harvesters.map((h) => ({ tx: h.tx, ty: h.ty }));
+    });
+
+    // Wait for harvesters to move
+    await page.waitForTimeout(2000);
+
+    // Check positions changed
+    const afterPositions = await page.evaluate(() => {
+      const hs = (window as unknown as { __harvesterState: { harvesters: Array<{ tx: number; ty: number }> } }).__harvesterState;
+      return hs.harvesters.map((h) => ({ tx: h.tx, ty: h.ty }));
+    });
+
+    // At least one harvester should have moved
+    const anyMoved = beforePositions.some((before, i) => {
+      const after = afterPositions[i];
+      return after && (Math.abs(after.tx - before.tx) > 0.01 || Math.abs(after.ty - before.ty) > 0.01);
+    });
+    expect(anyMoved).toBe(true);
+
+    // Phaser renderer stats should still be healthy
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    expect(stats.kind).toBe('phaser');
+    const sizes = stats.registrySizes as Record<string, number>;
+    expect(sizes.harvesters).toBeGreaterThanOrEqual(2);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('construction site appears under Phaser after build action', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Give matter and start construction
+    await page.evaluate(() => {
+      const dev = (window as unknown as { __devActions: { addMatter: (n: number) => void } }).__devActions;
+      dev.addMatter(500);
+    });
+
+    await page.getByRole('button', { name: 'Строительство (B)' }).click();
+    await page.getByRole('button', { name: /Сепаратор/ }).click();
+
+    // Wait for construction site to appear
+    await expect.poll(async () => {
+      const stats = await page.evaluate(() => {
+        return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+      });
+      const sizes = stats.registrySizes as Record<string, number>;
+      return sizes.constructionSites;
+    }, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+});
