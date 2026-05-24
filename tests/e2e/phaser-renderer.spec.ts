@@ -575,3 +575,75 @@ test.describe('Phaser renderer Stage 4 — VFX and visual feedback', () => {
     expect(runtimeErrors).toEqual([]);
   });
 });
+
+test.describe('Phaser renderer Stage 4A — terrain asset parity', () => {
+  test('terrain asset parity flag is true when terrain PNGs are loaded', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    // Terrain PNG sprites should be overlaid (asset parity with Canvas)
+    expect(stats.terrainAssetParity).toBe(true);
+    // Terrain should still be cached and stable
+    expect(stats.terrainCached).toBe(true);
+    expect(stats.terrainBuildCount as number).toBeGreaterThanOrEqual(1);
+    // Terrain bounds should still cover negative-X
+    const bounds = stats.terrainBounds as { minX: number } | null;
+    expect(bounds).not.toBeNull();
+    expect(bounds!.minX).toBeLessThan(0);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('terrain asset parity does not cause object count leaks', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount1 = stats1.totalObjectCount as number;
+
+    // Let game run
+    await page.waitForTimeout(2000);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount2 = stats2.totalObjectCount as number;
+
+    // Temporary sprite pool should be fully cleaned up — no object leaks
+    expect(objectCount2).toBeLessThanOrEqual(objectCount1 * 1.5);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+});
