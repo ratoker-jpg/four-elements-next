@@ -5,7 +5,7 @@ Status: Research complete. Not migration approval.
 
 ## Summary
 
-PHASER-SPIKE-01 was a three-stage isolated research spike evaluating Phaser 3 as a render/VFX layer for the Four Elements Next isometric RTS. The spike lived entirely inside `spikes/phaser-rts-spike/` and touched no production source code.
+PHASER-SPIKE-01 was a three-stage isolated research spike evaluating Phaser 3 as a render/VFX layer for the Four Elements Next isometric RTS. The spike implementation itself lived in `spikes/phaser-rts-spike/`. PR #121 also included a small test-only CI stabilization change outside the spike (`src/game/game-world.ts` and `tests/e2e/dev-panel-tools.spec.ts`) that added/exposed `findFreeTile` through `__devActions` for deterministic E2E placement tests. That change did not start a production renderer migration.
 
 **Phaser is useful for render/camera/animation/particles/VFX experiments.** This spike proved that Phaser can handle the core rendering tasks for a small isometric RTS scene. It did not prove that Phaser should replace the current production renderer.
 
@@ -32,7 +32,7 @@ The spike did not address these questions, which must be resolved before any mig
 - **Performance at production scale** — The spike tested one harvester on a 48×48 map. Production runs 2+ factions, dozens of harvesters, buildings, resources, obstacles, territory overlay, and construction sites simultaneously. No performance benchmarking was done.
 - **Integration with production subsystems** — The spike hardcoded a harvester loop. Production uses `GameWorld`, `GameState`, `SystemRunner`, mapgen, editor, economy, construction, harvesting, territory, and pathfinding. No integration path was explored.
 - **Testing strategy with Phaser runtime** — Production uses Vitest + Playwright with Canvas 2D. Phaser runtime would require a different testing approach. No strategy was evaluated.
-- **Asset sharing without copying binaries** — The spike referenced production `public/` assets via Vite `server.fs.allow`. Production integration would need a build-time asset pipeline that avoids duplicating PNGs.
+- **Asset sharing without copying binaries** — The spike copied a minimal asset subset into `spikes/phaser-rts-spike/public/assets/`. A future production integration needs an asset-sharing strategy that avoids binary duplication.
 - **Production UI/devtools integration** — The spike used a minimal HTML overlay. Production has a full dev panel, economy HUD, build menu, territory overlay, sprite debug, construction feedback, and game screens. No integration was tested.
 
 ## Decision gate
