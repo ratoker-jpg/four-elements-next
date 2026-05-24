@@ -230,3 +230,221 @@ test.describe('Phaser renderer Stage 2 — persistent registry and live state', 
     expect(runtimeErrors).toEqual([]);
   });
 });
+
+test.describe('Phaser renderer Stage 3 — performance smoke and acceptance', () => {
+  test('render count increments over time', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Wait for game to render a few frames
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const renderCount1 = stats1.renderCount as number;
+    expect(renderCount1).toBeGreaterThanOrEqual(1);
+
+    // Wait for more frames
+    await page.waitForTimeout(500);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const renderCount2 = stats2.renderCount as number;
+    expect(renderCount2).toBeGreaterThan(renderCount1);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('terrain cache does not rebuild every frame', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Wait for initial terrain build
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const buildCount1 = stats1.terrainBuildCount as number;
+    const renderCount1 = stats1.renderCount as number;
+    expect(buildCount1).toBeGreaterThanOrEqual(1);
+
+    // Wait for more frames
+    await page.waitForTimeout(500);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const buildCount2 = stats2.terrainBuildCount as number;
+    const renderCount2 = stats2.renderCount as number;
+
+    // Terrain should have been built once and not rebuilt despite many renders
+    expect(buildCount2).toBe(buildCount1);
+    expect(renderCount2).toBeGreaterThan(renderCount1);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('total object count stays stable over short observation window', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount1 = stats1.totalObjectCount as number;
+    // Must have at least HQ + harvesters
+    expect(objectCount1).toBeGreaterThanOrEqual(3);
+
+    // Short wait — object count should be stable (no leaks)
+    await page.waitForTimeout(1000);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const objectCount2 = stats2.totalObjectCount as number;
+
+    // Object count should not grow unboundedly — allow small variance for territory/animation
+    // but it should not double or grow by more than 50%
+    expect(objectCount2).toBeLessThanOrEqual(objectCount1 * 1.5);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('last render duration is measurable and sub-second', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    await page.waitForTimeout(500);
+
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    // Duration should be measurable and reasonable (sub-second sanity bound)
+    const duration = stats.lastRenderDurationMs as number;
+    expect(duration).toBeGreaterThanOrEqual(0);
+    expect(duration).toBeLessThan(1000);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('harvester movement updates do not cause object count to explode', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Record harvester count and total object count
+    await page.waitForTimeout(500);
+
+    const stats1 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const harvesterCount1 = (stats1.registrySizes as Record<string, number>).harvesters;
+    const objectCount1 = stats1.totalObjectCount as number;
+
+    // Wait for harvesters to move
+    await page.waitForTimeout(2000);
+
+    const stats2 = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+    const harvesterCount2 = (stats2.registrySizes as Record<string, number>).harvesters;
+    const objectCount2 = stats2.totalObjectCount as number;
+
+    // Harvester count should be stable (no duplicate objects created per frame)
+    expect(harvesterCount2).toBe(harvesterCount1);
+    // Total object count should not explode
+    expect(objectCount2).toBeLessThanOrEqual(objectCount1 * 1.5);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('no console errors during Phaser renderer session', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Let the game run for a bit with interactions
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(200);
+    await page.keyboard.up('KeyD');
+    await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(300);
+    await page.keyboard.down('KeyW');
+    await page.waitForTimeout(200);
+    await page.keyboard.up('KeyW');
+
+    await page.waitForTimeout(500);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+});

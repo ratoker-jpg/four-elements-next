@@ -87,6 +87,12 @@ export interface PhaserRendererStats {
   readonly terrainCached: boolean;
   /** World-space bounds of the terrain RenderTexture (includes negative-X isometric area). */
   readonly terrainBounds: TerrainWorldBounds | null;
+  /** Total renderSnapshot() calls since scene creation. */
+  readonly renderCount: number;
+  /** Sum of all registry sizes (excludes terrain RenderTexture). */
+  readonly totalObjectCount: number;
+  /** Approximate wall-clock duration of the last renderSnapshot() call in milliseconds. */
+  readonly lastRenderDurationMs: number;
 }
 
 class PhaserProductionScene extends Phaser.Scene {
@@ -109,6 +115,10 @@ class PhaserProductionScene extends Phaser.Scene {
 
   // Shadow layer — redrawn each frame (lightweight, position-based)
   private shadowGraphics: Phaser.GameObjects.Graphics | null = null;
+
+  // Performance counters
+  private renderCount = 0;
+  private lastRenderDurationMs = 0;
 
   private readonly readyPromise: Promise<void>;
   private resolveReady: (() => void) | null = null;
@@ -167,6 +177,18 @@ class PhaserProductionScene extends Phaser.Scene {
       terrainBuildCount: this.terrainBuildCount,
       terrainCached: this.cachedMapIdentity !== '',
       terrainBounds: this.cachedTerrainBounds,
+      renderCount: this.renderCount,
+      totalObjectCount:
+        this.hqRegistry.size +
+        this.buildingRegistry.size +
+        this.constructionRegistry.size +
+        this.resourceRegistry.size +
+        this.obstacleRegistry.size +
+        this.decorRegistry.size +
+        this.builderRegistry.size +
+        this.harvesterRegistry.size +
+        this.territoryRegistry.size,
+      lastRenderDurationMs: this.lastRenderDurationMs,
     };
   }
 
@@ -175,6 +197,8 @@ class PhaserProductionScene extends Phaser.Scene {
       this.pendingSnapshot = snapshot;
       return;
     }
+
+    const t0 = performance.now();
 
     this.syncCamera(snapshot);
     this.shadowGraphics.clear();
@@ -188,6 +212,9 @@ class PhaserProductionScene extends Phaser.Scene {
     this.syncDecor(snapshot);
     this.syncBuilders(snapshot);
     this.syncHarvesters(snapshot);
+
+    this.renderCount++;
+    this.lastRenderDurationMs = performance.now() - t0;
   }
 
   // ── Terrain ──────────────────────────────────────────────────
@@ -875,6 +902,8 @@ class PhaserProductionScene extends Phaser.Scene {
     this.terrainRenderTexture = null;
     this.cachedMapIdentity = '';
     this.cachedTerrainBounds = null;
+    this.renderCount = 0;
+    this.lastRenderDurationMs = 0;
   }
 }
 
