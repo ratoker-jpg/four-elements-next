@@ -16,7 +16,7 @@ import {
 } from '../core/constants.js';
 import { resolveDecorAsset, resolveObstacleAsset, resolveResourceAsset } from '../core/asset-variants.js';
 import { tileToScreen, terrainWorldBounds, type TerrainWorldBounds } from '../core/coordinates.js';
-import { RESOURCE_FOOTPRINTS, type BuildingType, type FactionId, type TerrainType } from '../game/map-types.js';
+import { RESOURCE_FOOTPRINTS, TERRAIN_ASSET_KEYS, type BuildingType, type FactionId, type TerrainType } from '../game/map-types.js';
 import { isBuildingOnline } from '../systems/power.js';
 import { builderAnimColumn, directionToRow, harvesterAnimColumn } from '../render/spritesheet.js';
 import { containFit } from '../render/contain-fit.js';
@@ -100,6 +100,8 @@ export interface PhaserRendererStats {
   readonly vfxEnabled: boolean;
   /** Number of active dust emitters (emitters that are currently emitting). */
   readonly dustEmitterCount: number;
+  /** Whether terrain PNG sprite overlay is active (asset parity with Canvas renderer). */
+  readonly terrainAssetParity: boolean;
 }
 
 /** Per-harvester VFX state tracked across frames. */
@@ -147,6 +149,7 @@ class PhaserProductionScene extends Phaser.Scene {
   private terrainBuildCount = 0;
   private cachedMapIdentity: string = '';
   private cachedTerrainBounds: TerrainWorldBounds | null = null;
+  private terrainAssetParity = false;
 
   // Shadow layer — redrawn each frame (lightweight, position-based)
   private shadowGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -242,6 +245,7 @@ class PhaserProductionScene extends Phaser.Scene {
       lastRenderDurationMs: this.lastRenderDurationMs,
       vfxEnabled: true,
       dustEmitterCount,
+      terrainAssetParity: this.terrainAssetParity,
     };
   }
 
@@ -292,6 +296,7 @@ class PhaserProductionScene extends Phaser.Scene {
     const rtWidth = Math.max(1, Math.ceil(bounds.maxX - bounds.minX));
     const rtHeight = Math.max(1, Math.ceil(bounds.maxY - bounds.minY));
 
+    // Layer 1: filled diamond underlay with grid stroke (same as Canvas)
     const graphics = this.add.graphics();
     const halfW = TILE_W / 2;
     const halfH = TILE_H / 2;
@@ -329,10 +334,53 @@ class PhaserProductionScene extends Phaser.Scene {
 
     graphics.destroy();
 
+    // Layer 2: terrain PNG sprite overlay (parity with Canvas renderer)
+    // Canvas renders: drawImage(sprite, cv.x - hw, cv.y - hh, hw * 2, hh * 2)
+    // We create one Image per terrain type, reposition per tile, draw into RT.
+    let spriteOverlayUsed = false;
+    const terrainTypes: TerrainType[] = ['sand', 'sand-dark', 'sand-light'];
+    const spritePool = new Map<TerrainType, Phaser.GameObjects.Image>();
+
+    for (const tt of terrainTypes) {
+      const key = TERRAIN_ASSET_KEYS[tt];
+      if (key && this.textureExists(key)) {
+        const img = this.add.image(0, 0, key);
+        img.setOrigin(0.5);
+        img.setVisible(false);
+        spritePool.set(tt, img);
+        spriteOverlayUsed = true;
+      }
+    }
+
+    if (spriteOverlayUsed) {
+      for (let ty = 0; ty < snapshot.map.height; ty++) {
+        for (let tx = 0; tx < snapshot.map.width; tx++) {
+          const terrainType: TerrainType = snapshot.map.terrain[ty]?.[tx] ?? 'sand';
+          const img = spritePool.get(terrainType);
+          if (!img) continue;
+
+          const center = tileToScreen(tx + 0.5, ty + 0.5);
+          // Match Canvas: ctx.drawImage(sprite, cv.x - hw, cv.y - hh, hw * 2, hh * 2)
+          // In RT-local coords: center + shift
+          img.setPosition(center.x + shiftX, center.y + shiftY);
+          img.setDisplaySize(TILE_W, TILE_H);
+          img.setVisible(true);
+          rt.draw(img);
+          img.setVisible(false);
+        }
+      }
+    }
+
+    // Clean up temporary sprite pool
+    for (const img of spritePool.values()) {
+      img.destroy();
+    }
+
     this.terrainRenderTexture = rt;
     this.cachedMapIdentity = identity;
     this.cachedTerrainBounds = bounds;
     this.terrainBuildCount++;
+    this.terrainAssetParity = spriteOverlayUsed;
   }
 
   // ── Territory ────────────────────────────────────────────────
