@@ -162,6 +162,38 @@ test.describe('Phaser renderer Stage 2 — persistent registry and live state', 
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('terrain bounds cover negative-X isometric area', async ({ page }) => {
+    const runtimeErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => runtimeErrors.push(error.message()));
+
+    await page.goto('/');
+    await page.evaluate((flag) => {
+      window.localStorage.setItem(flag, '1');
+    }, PHASER_RENDERER_FLAG);
+
+    await navigateToGameScreen(page);
+    await expect(page.locator('.screen--game[data-renderer="phaser"][data-ready="true"]')).toBeVisible();
+
+    // Check terrain bounds are exposed and include negative X
+    const stats = await page.evaluate(() => {
+      return (window as unknown as { __rendererStats: Record<string, unknown> }).__rendererStats;
+    });
+
+    const bounds = stats.terrainBounds as { minX: number; minY: number; maxX: number; maxY: number } | null;
+    expect(bounds).toBeDefined();
+    expect(bounds).not.toBeNull();
+    // Isometric maps always have negative X on the left side
+    expect(bounds!.minX).toBeLessThan(0);
+    // Bounds should be non-empty
+    expect(bounds!.maxX).toBeGreaterThan(bounds!.minX);
+    expect(bounds!.maxY).toBeGreaterThan(bounds!.minY);
+
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('construction site appears under Phaser after build action', async ({ page }) => {
     const runtimeErrors: string[] = [];
     page.on('console', (message) => {

@@ -15,7 +15,7 @@ import {
   type SpriteProfile,
 } from '../core/constants.js';
 import { resolveDecorAsset, resolveObstacleAsset, resolveResourceAsset } from '../core/asset-variants.js';
-import { tileToScreen } from '../core/coordinates.js';
+import { tileToScreen, terrainWorldBounds, type TerrainWorldBounds } from '../core/coordinates.js';
 import { RESOURCE_FOOTPRINTS, type BuildingType, type FactionId, type TerrainType } from '../game/map-types.js';
 import { isBuildingOnline } from '../systems/power.js';
 import { builderAnimColumn, directionToRow, harvesterAnimColumn } from '../render/spritesheet.js';
@@ -85,6 +85,8 @@ export interface PhaserRendererStats {
   };
   readonly terrainBuildCount: number;
   readonly terrainCached: boolean;
+  /** World-space bounds of the terrain RenderTexture (includes negative-X isometric area). */
+  readonly terrainBounds: TerrainWorldBounds | null;
 }
 
 class PhaserProductionScene extends Phaser.Scene {
@@ -103,6 +105,7 @@ class PhaserProductionScene extends Phaser.Scene {
   private terrainRenderTexture: Phaser.GameObjects.RenderTexture | null = null;
   private terrainBuildCount = 0;
   private cachedMapIdentity: string = '';
+  private cachedTerrainBounds: TerrainWorldBounds | null = null;
 
   // Shadow layer — redrawn each frame (lightweight, position-based)
   private shadowGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -163,6 +166,7 @@ class PhaserProductionScene extends Phaser.Scene {
       },
       terrainBuildCount: this.terrainBuildCount,
       terrainCached: this.cachedMapIdentity !== '',
+      terrainBounds: this.cachedTerrainBounds,
     };
   }
 
@@ -206,45 +210,58 @@ class PhaserProductionScene extends Phaser.Scene {
       this.terrainRenderTexture = null;
     }
 
-    const width = snapshot.map.width * TILE_W;
-    const height = snapshot.map.height * TILE_H;
+    // Compute full isometric terrain world bounds.
+    // The isometric diamond has negative X on the left side (tiles with large ty, small tx)
+    // so we must account for that when sizing and positioning the RenderTexture.
+    const bounds = terrainWorldBounds(snapshot.map.width, snapshot.map.height);
+    const rtWidth = Math.max(1, Math.ceil(bounds.maxX - bounds.minX));
+    const rtHeight = Math.max(1, Math.ceil(bounds.maxY - bounds.minY));
 
-    // Create a temporary Graphics object for terrain drawing
+    // Create a temporary Graphics object for terrain drawing.
+    // We draw at shifted coordinates so all positions are non-negative within the RT.
     const graphics = this.add.graphics();
     const halfW = TILE_W / 2;
     const halfH = TILE_H / 2;
     const strokeAlpha = alphaFromRgba(GRID_COLOR);
+    const shiftX = -bounds.minX;
+    const shiftY = -bounds.minY;
 
     for (let ty = 0; ty < snapshot.map.height; ty++) {
       for (let tx = 0; tx < snapshot.map.width; tx++) {
         const terrainType: TerrainType = snapshot.map.terrain[ty]?.[tx] ?? 'sand';
         const fill = colorNumber(TERRAIN_COLORS[terrainType] ?? TERRAIN_COLORS.sand!);
         const center = tileToScreen(tx + 0.5, ty + 0.5);
+        const sx = center.x + shiftX;
+        const sy = center.y + shiftY;
 
         graphics.fillStyle(fill, 1);
         graphics.lineStyle(1, TERRAIN_STROKE, strokeAlpha);
         graphics.beginPath();
-        graphics.moveTo(center.x, center.y - halfH);
-        graphics.lineTo(center.x + halfW, center.y);
-        graphics.lineTo(center.x, center.y + halfH);
-        graphics.lineTo(center.x - halfW, center.y);
+        graphics.moveTo(sx, sy - halfH);
+        graphics.lineTo(sx + halfW, sy);
+        graphics.lineTo(sx, sy + halfH);
+        graphics.lineTo(sx - halfW, sy);
         graphics.closePath();
         graphics.fillPath();
         graphics.strokePath();
       }
     }
 
-    // Bake into RenderTexture
-    const rt = this.add.renderTexture(0, 0, Math.max(1, width), Math.max(1, height));
+    // Bake into RenderTexture at (0,0) with shifted coords, then reposition to world bounds.
+    const rt = this.add.renderTexture(0, 0, rtWidth, rtHeight);
     rt.setDepth(0);
     rt.setOrigin(0, 0);
     rt.draw(graphics);
     rt.setVisible(true);
+    // Position the RT so its top-left corner is at (minX, minY) in world coordinates.
+    // This makes the shifted drawing align correctly with the isometric world.
+    rt.setPosition(bounds.minX, bounds.minY);
 
     graphics.destroy();
 
     this.terrainRenderTexture = rt;
     this.cachedMapIdentity = identity;
+    this.cachedTerrainBounds = bounds;
     this.terrainBuildCount++;
   }
 
@@ -857,6 +874,7 @@ class PhaserProductionScene extends Phaser.Scene {
     this.terrainRenderTexture?.destroy();
     this.terrainRenderTexture = null;
     this.cachedMapIdentity = '';
+    this.cachedTerrainBounds = null;
   }
 }
 
