@@ -143,51 +143,26 @@ test.describe('DEV-SANDBOX-TOOLS-01 dev panel tools', () => {
     const beforeMatch = beforeText?.match(/Obstacles:\s*(\d+)/);
     const beforeCount = beforeMatch ? parseInt(beforeMatch[1]!, 10) : -1;
 
-    // Find a free tile by scanning the map using test hooks
+    // Use findFreeTile to get a guaranteed free tile (scans edges inward)
     const freeTile = await page.evaluate(() => {
-      // Return a tile in the bottom-left corner — usually sand with nothing
-      const mapH = 48;
-      return { tx: 1, ty: mapH - 2 };
-    });
-
-    // Move camera to the free tile
-    await page.evaluate((tile) => {
       const dev = (window as Record<string, unknown>).__devActions as {
+        findFreeTile: () => { tx: number; ty: number } | null;
         moveCameraToTile: (tx: number, ty: number) => void;
+        addObstacle: () => void;
       };
+      const tile = dev.findFreeTile();
+      if (!tile) throw new Error('No free tile found on map');
       dev.moveCameraToTile(tile.tx, tile.ty);
-    }, freeTile);
-    await page.waitForTimeout(200);
+      dev.addObstacle();
+      return tile;
+    });
+    await page.waitForTimeout(100);
 
-    // Add obstacle — try multiple tiles in the corner area if the first is occupied
-    let added = false;
-    for (const offset of [0, 1, 2, -1, -2]) {
-      await page.evaluate((ofs) => {
-        const dev = (window as Record<string, unknown>).__devActions as {
-          moveCameraToTile: (tx: number, ty: number) => void;
-        };
-        dev.moveCameraToTile(1 + ofs, 46);
-      }, offset);
-      await page.waitForTimeout(100);
-
-      await page.evaluate(() => {
-        const dev = (window as Record<string, unknown>).__devActions as {
-          addObstacle: () => void;
-        };
-        dev.addObstacle();
-      });
-
-      // Check if obstacle count changed
-      const currentText = await page.locator('.fe-dev-panel__info').textContent();
-      const currentMatch = currentText?.match(/Obstacles:\s*(\d+)/);
-      const currentCount = currentMatch ? parseInt(currentMatch[1]!, 10) : -1;
-      if (currentCount === beforeCount + 1) {
-        added = true;
-        break;
-      }
-    }
-
-    expect(added).toBe(true);
+    // Verify obstacle count increased
+    const currentText = await page.locator('.fe-dev-panel__info').textContent();
+    const currentMatch = currentText?.match(/Obstacles:\s*(\d+)/);
+    const currentCount = currentMatch ? parseInt(currentMatch[1]!, 10) : -1;
+    expect(currentCount).toBe(beforeCount + 1);
   });
 
   test('+ Resource at camera center increases resource count and resourceNodes count if free', async ({ page }) => {
@@ -200,38 +175,28 @@ test.describe('DEV-SANDBOX-TOOLS-01 dev panel tools', () => {
       return hs.resourceNodes.length;
     });
 
-    // Try multiple tiles in the corner area until we find a free one
-    let added = false;
-    for (const offset of [0, 1, 2, 3, 4, -1, -2]) {
-      await page.evaluate((ofs) => {
-        const dev = (window as Record<string, unknown>).__devActions as {
-          moveCameraToTile: (tx: number, ty: number) => void;
-        };
-        dev.moveCameraToTile(1 + ofs, 45);
-      }, offset);
-      await page.waitForTimeout(100);
+    // Use findFreeTile to get a guaranteed free tile (scans edges inward)
+    await page.evaluate(() => {
+      const dev = (window as Record<string, unknown>).__devActions as {
+        findFreeTile: () => { tx: number; ty: number } | null;
+        moveCameraToTile: (tx: number, ty: number) => void;
+        addResource: () => void;
+      };
+      const tile = dev.findFreeTile();
+      if (!tile) throw new Error('No free tile found on map');
+      dev.moveCameraToTile(tile.tx, tile.ty);
+      dev.addResource();
+    });
+    await page.waitForTimeout(100);
 
-      await page.evaluate(() => {
-        const dev = (window as Record<string, unknown>).__devActions as {
-          addResource: () => void;
-        };
-        dev.addResource();
-      });
-
-      // Check if resourceNodes count increased
-      const currentCount = await page.evaluate(() => {
-        const hs = (window as Record<string, unknown>).__harvesterState as {
-          resourceNodes: Array<unknown>;
-        };
-        return hs.resourceNodes.length;
-      });
-      if (currentCount === beforeResources + 1) {
-        added = true;
-        break;
-      }
-    }
-
-    expect(added).toBe(true);
+    // Verify resourceNodes count increased
+    const currentCount = await page.evaluate(() => {
+      const hs = (window as Record<string, unknown>).__harvesterState as {
+        resourceNodes: Array<unknown>;
+      };
+      return hs.resourceNodes.length;
+    });
+    expect(currentCount).toBe(beforeResources + 1);
   });
 
   test('Clear Sites removes construction sites and resets builders idle', async ({ page }) => {
