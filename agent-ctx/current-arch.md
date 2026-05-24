@@ -71,6 +71,12 @@ Consolidation of workflow docs, prompt templates, conflict resolution with docs/
 - PR3 (PR #116): PATH-TELEMETRY-CACHE-01 — pathfinding telemetry and passability grid cache
 **Status:** Done.
 
+### PHASER-SPIKE-01 (research track)
+- PR #119: Stage 1 — Phaser bootstrap, 48×48 isometric map, pan/zoom, static assets
+- PR #120: Stage 2 — Harvester movement, spritesheet animation, dynamic depth sorting
+- PR #121: Stage 3 — Render-only inertia, dust particles, active feedback
+**Status:** Done. Phaser is useful for render/camera/animation/particles/VFX experiments. **This is not migration approval.** No production renderer migration has started. Do not migrate production renderer without PHASER-MIGRATION-AUDIT-01. Full result: `docs/project/PHASER_SPIKE_RESULT_20260524.md`.
+
 ## In Progress
 
 (None currently.)

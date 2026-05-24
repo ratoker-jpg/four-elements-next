@@ -15,6 +15,7 @@ It consolidates:
 - MAP-EDITOR-ARCH-01 PR1–PR10 (editor, seed flow, mapgen config/presets, saved seeds, custom maps, game launch);
 - ENV-ASSET-CALIBRATION-01 PR #111–#113 (volcano removal, asset tuner, asset profile calibration);
 - CIVIL-BASELINE-01 PR #114–#116 (economy pacing, BFS map validation, pathfinding telemetry/cache);
+- PHASER-SPIKE-01 PR #119–#121 (isolated Phaser 3 research spike — not migration approval);
 - the order of work before combat and enemy bot development.
 
 ## 1. Current project rule
@@ -168,6 +169,18 @@ Done:
 - PR #114 — ECONOMY-PACE-01: first 5–8 minutes economy pacing baseline. START_RAW=30, START_MATTER=120, SEP_RAW_COST=12, SEP_CYCLE_SECONDS=5, SEP_ELEMENT_YIELD=2; separator costMatter=60/buildTimeSeconds=20; power-plant costMatter=100; units-factory costMatter=120; builder matter=40/duration=15; harvester matter=50/duration=20.
 - PR #115 — VALIDATION-BFS-01: replaced/supplemented straight-line map reachability with BFS/flood-fill validation using `buildPassabilityGrid()`. `isStraightLineClearOfObstacles()` kept but deprecated.
 - PR #116 — PATH-TELEMETRY-CACHE-01: lightweight pathfinding/passability telemetry counters and safe passability grid cache. Cache reuses grid when blockers unchanged; invalidates on construction events, resource depletion, map replacement, editor changes. Telemetry: pathCalls, gridBuilds, cacheHits, cacheMisses, passabilityVersion. Exposed via `window.__pathfindingTelemetry`.
+
+### PHASER-SPIKE-01 (research track)
+
+Done:
+
+- PR #119 — Stage 1: Phaser bootstrap, 48×48 isometric map rendering, pan/zoom, static assets.
+- PR #120 — Stage 2: Harvester movement, 8-direction spritesheet animation, dynamic depth sorting.
+- PR #121 — Stage 3: Render-only motion inertia, speed-based dust particles, gathering/unloading/HQ pulse feedback.
+
+Result: Phaser is useful for render/camera/animation/particles/VFX experiments. **This is not migration approval.** The production game still uses TypeScript strict + Vite + Canvas 2D + HTML overlay UI. No production renderer migration has started. Full result document: `docs/project/PHASER_SPIKE_RESULT_20260524.md`.
+
+Migration gate: no migration without PHASER-MIGRATION-AUDIT-01. The audit must compare three options: (1) keep Canvas 2D and port visual ideas, (2) replace only the render layer with Phaser, (3) full Phaser runtime migration.
 
 ## 4. Current strategy
 
@@ -462,6 +475,7 @@ These are listed for reference; they are done and should not be restarted withou
 | DEV-SANDBOX-ARCH-01 | earlier | Dev panel, overlays, spawn tools |
 | PATHFINDING-ARCH-01 | earlier | Passability grid, BFS pathfinder, harvester/builder movement |
 | VISUAL-QA-ARCH-01 | earlier | Civil unit scale, shadows, sprite debug |
+| PHASER-SPIKE-01 | PR #119–#121 | Isolated Phaser 3 research spike (not migration approval) |
 
 ## 7. Do not do yet
 
@@ -475,6 +489,7 @@ Do not start:
 - big asset imports;
 - renderer rewrite;
 - Unity migration;
+- Phaser production migration (requires PHASER-MIGRATION-AUDIT-01 first);
 - pathfinding rewrite / A*;
 - re-enable procedural sand;
 - save/load schema changes;

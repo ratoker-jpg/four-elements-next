@@ -26,6 +26,9 @@ Civil baseline is functional:
 | #114 | ECONOMY-PACE-01 | First 5-8 minutes economy pacing baseline |
 | #115 | VALIDATION-BFS-01 | BFS/flood-fill map reachability validation |
 | #116 | PATH-TELEMETRY-CACHE-01 | Pathfinding telemetry and passability grid cache |
+| #119 | PHASER-SPIKE-01 S1 | Phaser bootstrap, 48×48 isometric map, pan/zoom, static assets |
+| #120 | PHASER-SPIKE-01 S2 | Harvester movement, spritesheet animation, dynamic depth sorting |
+| #121 | PHASER-SPIKE-01 S3 | Render-only inertia, dust particles, active feedback |
 
 ## Current next focus
 
@@ -50,6 +53,7 @@ Civil baseline is functional:
 - Do not change `src/core/constants.ts` without explicit approval
 - Do not change accepted building assets without scoped approval
 - Do not add enemy AI, faction bonuses, or military systems
+- Do not migrate production renderer without PHASER-MIGRATION-AUDIT-01
 
 ## Required workflow
 
@@ -78,3 +82,4 @@ Docs-only PRs require no build or tests.
 - `agent-ctx/state.md` — project state quick reference
 - `docs/ARCHITECTURE_RULES.md` — architecture guardrails
 - `docs/ASSET_POLICY.md` — asset reuse rules
+- `docs/project/PHASER_SPIKE_RESULT_20260524.md` — Phaser spike result and migration decision gate
