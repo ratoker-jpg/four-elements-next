@@ -447,6 +447,26 @@ export class GameWorld {
     return { tx, ty };
   }
 
+  /** Dev panel: find a guaranteed free tile on the map. Scans from edges inward. Returns null if map is full. */
+  debugFindFreeTile(): { tx: number; ty: number } | null {
+    const map = this.state.map;
+    const occupied = buildOccupiedTileSet(map, this.state.resourceNodes);
+    for (const h of this.state.harvesters) {
+      occupied.add(`${Math.floor(h.tx)},${Math.floor(h.ty)}`);
+    }
+    // Scan from map edges inward — edges are least likely to be occupied
+    for (let ring = 0; ring < Math.max(map.width, map.height); ring++) {
+      for (let ty = ring; ty < map.height - ring; ty++) {
+        for (let tx = ring; tx < map.width - ring; tx++) {
+          // Only check the ring border, not interior tiles already checked
+          if (ty !== ring && ty !== map.height - ring - 1 && tx !== ring && tx !== map.width - ring - 1) continue;
+          if (!occupied.has(`${tx},${ty}`)) return { tx, ty };
+        }
+      }
+    }
+    return null;
+  }
+
   /** Dev panel: move camera to a specific tile coordinate. */
   debugMoveCameraToTile(tx: number, ty: number): void {
     const screen = tileToScreen(tx + 0.5, ty + 0.5);
@@ -713,6 +733,7 @@ export class GameWorld {
         prepareBuilderTest: () => this.debugPrepareBuilderTest(),
         prepareEconomyTest: () => this.debugPrepareEconomyTest(),
         moveCameraToTile: (tx: number, ty: number) => this.debugMoveCameraToTile(tx, ty),
+        findFreeTile: () => this.debugFindFreeTile(),
       };
       // Overlay toggle access for E2E tests
       (window as any).__overlayToggles = {
