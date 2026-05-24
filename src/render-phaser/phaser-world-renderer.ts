@@ -23,6 +23,9 @@ import { containFit } from '../render/contain-fit.js';
 import type { ConstructionSitePlacement, ResourcePlacement } from '../game/map-types.js';
 import type { WorldRenderer, WorldRenderSnapshot } from './types.js';
 import { ObjectRegistry, type DisposableObject } from './object-registry.js';
+import { createInertiaState, updateInertia, type InertiaState } from './vfx/inertia.js';
+import { DustEmitter, generateDustTexture } from './vfx/dust-emitter.js';
+import { spawnGatherPulse, spawnUnloadPulse, spawnHqPulse, spawnConstructionPulse } from './vfx/feedback-effects.js';
 
 const UNIT_FRAME_SIZE = 256;
 const TERRAIN_STROKE = 0x000000;
@@ -93,6 +96,38 @@ export interface PhaserRendererStats {
   readonly totalObjectCount: number;
   /** Approximate wall-clock duration of the last renderSnapshot() call in milliseconds. */
   readonly lastRenderDurationMs: number;
+  /** Whether visual effects (inertia, dust, feedback) are enabled. */
+  readonly vfxEnabled: boolean;
+  /** Number of active dust emitters (emitters that are currently emitting). */
+  readonly dustEmitterCount: number;
+}
+
+/** Per-harvester VFX state tracked across frames. */
+interface HarvesterVfxState {
+  inertia: InertiaState;
+  dust: DustEmitter;
+  isMoving: boolean;
+  wasGathering: boolean;
+  wasUnloading: boolean;
+  /** Normalized screen-space direction of movement. */
+  screenDirX: number;
+  screenDirY: number;
+}
+
+/** Per-builder VFX state tracked across frames. */
+interface BuilderVfxState {
+  inertia: InertiaState;
+  dust: DustEmitter;
+  isMoving: boolean;
+  /** Normalized screen-space direction of movement. */
+  screenDirX: number;
+  screenDirY: number;
+}
+
+/** Previous construction site progress values for detecting progress milestones. */
+interface ConstructionProgressTracker {
+  readonly key: string;
+  readonly progress: number;
 }
 
 class PhaserProductionScene extends Phaser.Scene {
@@ -119,6 +154,11 @@ class PhaserProductionScene extends Phaser.Scene {
   // Performance counters
   private renderCount = 0;
   private lastRenderDurationMs = 0;
+
+  // VFX state — per-unit inertia, dust, and feedback
+  private readonly harvesterVfx = new Map<number, HarvesterVfxState>();
+  private readonly builderVfx = new Map<number, BuilderVfxState>();
+  private prevConstructionProgress: ConstructionProgressTracker[] = [];
 
   private readonly readyPromise: Promise<void>;
   private resolveReady: (() => void) | null = null;
@@ -151,6 +191,9 @@ class PhaserProductionScene extends Phaser.Scene {
     this.shadowGraphics = this.add.graphics();
     this.shadowGraphics.setDepth(100);
 
+    // Generate dust particle texture at runtime (no external asset)
+    generateDustTexture(this.textures);
+
     this.resolveReady?.();
     this.resolveReady = null;
 
@@ -161,6 +204,14 @@ class PhaserProductionScene extends Phaser.Scene {
   }
 
   getStats(): PhaserRendererStats {
+    let dustEmitterCount = 0;
+    for (const vfx of this.harvesterVfx.values()) {
+      if (vfx.dust.isEmitting) dustEmitterCount++;
+    }
+    for (const vfx of this.builderVfx.values()) {
+      if (vfx.dust.isEmitting) dustEmitterCount++;
+    }
+
     return {
       kind: 'phaser',
       registrySizes: {
@@ -189,6 +240,8 @@ class PhaserProductionScene extends Phaser.Scene {
         this.harvesterRegistry.size +
         this.territoryRegistry.size,
       lastRenderDurationMs: this.lastRenderDurationMs,
+      vfxEnabled: true,
+      dustEmitterCount,
     };
   }
 
@@ -227,25 +280,18 @@ class PhaserProductionScene extends Phaser.Scene {
   private syncTerrain(snapshot: WorldRenderSnapshot): void {
     const identity = this.mapIdentity(snapshot);
     if (identity === this.cachedMapIdentity && this.terrainRenderTexture) {
-      // Terrain unchanged — reuse cached RenderTexture
       return;
     }
 
-    // Rebuild terrain RenderTexture
     if (this.terrainRenderTexture) {
       this.terrainRenderTexture.destroy();
       this.terrainRenderTexture = null;
     }
 
-    // Compute full isometric terrain world bounds.
-    // The isometric diamond has negative X on the left side (tiles with large ty, small tx)
-    // so we must account for that when sizing and positioning the RenderTexture.
     const bounds = terrainWorldBounds(snapshot.map.width, snapshot.map.height);
     const rtWidth = Math.max(1, Math.ceil(bounds.maxX - bounds.minX));
     const rtHeight = Math.max(1, Math.ceil(bounds.maxY - bounds.minY));
 
-    // Create a temporary Graphics object for terrain drawing.
-    // We draw at shifted coordinates so all positions are non-negative within the RT.
     const graphics = this.add.graphics();
     const halfW = TILE_W / 2;
     const halfH = TILE_H / 2;
@@ -274,14 +320,11 @@ class PhaserProductionScene extends Phaser.Scene {
       }
     }
 
-    // Bake into RenderTexture at (0,0) with shifted coords, then reposition to world bounds.
     const rt = this.add.renderTexture(0, 0, rtWidth, rtHeight);
     rt.setDepth(0);
     rt.setOrigin(0, 0);
     rt.draw(graphics);
     rt.setVisible(true);
-    // Position the RT so its top-left corner is at (minX, minY) in world coordinates.
-    // This makes the shifted drawing align correctly with the isometric world.
     rt.setPosition(bounds.minX, bounds.minY);
 
     graphics.destroy();
@@ -297,7 +340,6 @@ class PhaserProductionScene extends Phaser.Scene {
   private syncTerritory(snapshot: WorldRenderSnapshot): void {
     const territory = snapshot.territory;
     if (!territory || territory.width <= 0 || territory.height <= 0) {
-      // No territory data — clear registry
       this.territoryRegistry.clear((_key, obj) => obj.destroy());
       return;
     }
@@ -366,7 +408,6 @@ class PhaserProductionScene extends Phaser.Scene {
         fallback: () => this.createFallbackBox(hq.tx, hq.ty, HQ_FOOTPRINT, '#d4a544', 'HQ'),
       }),
       (_k, obj) => {
-        // HQ doesn't move, but depth may change if camera logic changes
         obj.setDepth(depth);
       },
       (_k, obj) => obj.destroy(),
@@ -423,12 +464,37 @@ class PhaserProductionScene extends Phaser.Scene {
 
   private syncConstructionSites(snapshot: WorldRenderSnapshot): void {
     const currentKeys: string[] = [];
+    const newProgressMap: ConstructionProgressTracker[] = [];
 
     for (const site of snapshot.map.constructionSites) {
-      currentKeys.push(entityKey('cs', site.tx, site.ty));
+      const key = entityKey('cs', site.tx, site.ty);
+      currentKeys.push(key);
+      newProgressMap.push({ key, progress: site.progress });
       const footprint = getBuildingFootprint(site.type);
       this.drawShadow(site.tx, site.ty, footprint, 0.08);
     }
+
+    // Detect construction progress milestones for feedback
+    for (const newTracker of newProgressMap) {
+      const prev = this.prevConstructionProgress.find((p) => p.key === newTracker.key);
+      if (prev) {
+        // Fire construction pulse at ~25%, 50%, 75% milestones
+        const milestones = [0.25, 0.5, 0.75];
+        for (const m of milestones) {
+          if (prev.progress < m && newTracker.progress >= m) {
+            const site = snapshot.map.constructionSites.find(
+              (s) => entityKey('cs', s.tx, s.ty) === newTracker.key,
+            );
+            if (site) {
+              const footprint = getBuildingFootprint(site.type);
+              const center = tileToScreen(site.tx + footprint / 2, site.ty + footprint / 2);
+              spawnConstructionPulse(this, center.x, center.y, this.entityDepth(site.tx, site.ty, footprint));
+            }
+          }
+        }
+      }
+    }
+    this.prevConstructionProgress = newProgressMap;
 
     const siteData = new Map(snapshot.map.constructionSites.map((s) => [entityKey('cs', s.tx, s.ty), s]));
 
@@ -440,10 +506,8 @@ class PhaserProductionScene extends Phaser.Scene {
         return this.createConstructionSite(site);
       },
       (key, obj) => {
-        // Update progress bar — reconstruct the site graphics
         const site = siteData.get(key);
         if (site && obj instanceof Phaser.GameObjects.Graphics) {
-          // Redraw with new progress
           obj.clear();
           const footprint = getBuildingFootprint(site.type);
           const center = tileToScreen(site.tx + footprint / 2, site.ty + footprint / 2);
@@ -594,8 +658,32 @@ class PhaserProductionScene extends Phaser.Scene {
       currentKeys,
       (key) => this.createBuilder(key, snapshot, faction),
       (key, obj) => this.updateBuilder(key, obj, snapshot, faction),
-      (_key, obj) => obj.destroy(),
+      (key, obj) => {
+        // Clean up VFX state when builder is removed
+        const index = Number(key.split('_')[1]);
+        const vfx = this.builderVfx.get(index);
+        if (vfx) {
+          vfx.dust.destroy();
+          this.builderVfx.delete(index);
+        }
+        obj.destroy();
+      },
     );
+  }
+
+  private getOrCreateBuilderVfx(index: number): BuilderVfxState {
+    let vfx = this.builderVfx.get(index);
+    if (!vfx) {
+      vfx = {
+        inertia: createInertiaState(),
+        dust: new DustEmitter(this),
+        isMoving: false,
+        screenDirX: 0,
+        screenDirY: 0,
+      };
+      this.builderVfx.set(index, vfx);
+    }
+    return vfx;
   }
 
   private createBuilder(key: string, snapshot: WorldRenderSnapshot, faction: FactionId): DisposableObject {
@@ -607,6 +695,11 @@ class PhaserProductionScene extends Phaser.Scene {
     const renderTx = builder.phase === 'moving-to-site' ? builder.ftx : builder.tx + 0.5;
     const renderTy = builder.phase === 'moving-to-site' ? builder.fty : builder.ty + 0.5;
     this.drawUnitShadow(renderTx, renderTy, 0.11);
+
+    // Initialize VFX state
+    const vfx = this.getOrCreateBuilderVfx(index);
+    const isMoving = builder.phase === 'moving-to-site';
+    vfx.isMoving = isMoving;
 
     if (!this.textureExists(keyName)) {
       return this.createUnitFallback(renderTx, renderTy, '#9ad8ff', this.entityDepth(renderTx, renderTy, 1));
@@ -630,13 +723,42 @@ class PhaserProductionScene extends Phaser.Scene {
     const builder = snapshot.map.builders[index];
     if (!builder) return;
 
+    const keyName = builderKey(faction);
     const renderTx = builder.phase === 'moving-to-site' ? builder.ftx : builder.tx + 0.5;
     const renderTy = builder.phase === 'moving-to-site' ? builder.fty : builder.ty + 0.5;
     this.drawUnitShadow(renderTx, renderTy, 0.11);
 
-    if (!(obj instanceof Phaser.GameObjects.Sprite)) return;
+    const vfx = this.getOrCreateBuilderVfx(index);
+    const isMoving = builder.phase === 'moving-to-site';
 
-    const keyName = builderKey(faction);
+    // Compute screen-space direction for inertia
+    if (isMoving && vfx.isMoving) {
+      const prev = snapshot.map.builders[index];
+      if (prev) {
+        const prevRenderTx = prev.phase === 'moving-to-site' ? prev.ftx : prev.tx + 0.5;
+        const prevRenderTy = prev.phase === 'moving-to-site' ? prev.fty : prev.ty + 0.5;
+        const dx = renderTx - prevRenderTx;
+        const dy = renderTy - prevRenderTy;
+        const len = Math.hypot(dx, dy);
+        if (len > 0.001) {
+          const prevCenter = tileToScreen(prevRenderTx, prevRenderTy);
+          const currCenter = tileToScreen(renderTx, renderTy);
+          const sdx = currCenter.x - prevCenter.x;
+          const sdy = currCenter.y - prevCenter.y;
+          const slen = Math.hypot(sdx, sdy);
+          if (slen > 0.001) {
+            vfx.screenDirX = sdx / slen;
+            vfx.screenDirY = sdy / slen;
+          }
+        }
+      }
+    }
+
+    // Update inertia
+    updateInertia(vfx.inertia, isMoving, vfx.screenDirX, vfx.screenDirY);
+    vfx.isMoving = isMoving;
+
+    if (!(obj instanceof Phaser.GameObjects.Sprite)) return;
     if (!this.textureExists(keyName)) return;
 
     const target = builder.path[builder.pathIndex] ?? { tx: builder.targetTx, ty: builder.targetTy };
@@ -645,12 +767,27 @@ class PhaserProductionScene extends Phaser.Scene {
     const center = tileToScreen(renderTx, renderTy);
     const profile = SPRITE_PROFILES.builder_base;
     const fitted = containFit(UNIT_FRAME_SIZE, UNIT_FRAME_SIZE, profile.size[0], profile.size[1]);
+    const depth = this.entityDepth(renderTx, renderTy, 1);
 
-    obj.setPosition(center.x, center.y - profile.groundOffset);
-    obj.setDepth(this.entityDepth(renderTx, renderTy, 1));
+    // Apply inertia offset to visual position (does NOT change logical position)
+    const baseX = center.x;
+    const baseY = center.y - profile.groundOffset;
+    obj.setPosition(baseX + vfx.inertia.offsetX, baseY + vfx.inertia.offsetY);
+    obj.setAngle(vfx.inertia.rotation);
+    obj.setDepth(depth);
     if (obj instanceof Phaser.GameObjects.Sprite) {
       obj.setFrame(row * 8 + col);
       obj.setDisplaySize(fitted.drawWidth, fitted.drawHeight);
+    }
+
+    // Dust: start/stop based on movement
+    if (isMoving && !vfx.dust.isEmitting) {
+      vfx.dust.start(baseX, baseY, depth);
+    } else if (!isMoving && vfx.dust.isEmitting) {
+      vfx.dust.stop();
+    }
+    if (vfx.dust.isEmitting) {
+      vfx.dust.updatePosition(baseX, baseY, depth);
     }
   }
 
@@ -668,8 +805,33 @@ class PhaserProductionScene extends Phaser.Scene {
       currentKeys,
       (key) => this.createHarvester(key, snapshot, faction),
       (key, obj) => this.updateHarvester(key, obj, snapshot, faction),
-      (_key, obj) => obj.destroy(),
+      (key, obj) => {
+        const index = Number(key.split('_')[1]);
+        const vfx = this.harvesterVfx.get(index);
+        if (vfx) {
+          vfx.dust.destroy();
+          this.harvesterVfx.delete(index);
+        }
+        obj.destroy();
+      },
     );
+  }
+
+  private getOrCreateHarvesterVfx(index: number): HarvesterVfxState {
+    let vfx = this.harvesterVfx.get(index);
+    if (!vfx) {
+      vfx = {
+        inertia: createInertiaState(),
+        dust: new DustEmitter(this),
+        isMoving: false,
+        wasGathering: false,
+        wasUnloading: false,
+        screenDirX: 0,
+        screenDirY: 0,
+      };
+      this.harvesterVfx.set(index, vfx);
+    }
+    return vfx;
   }
 
   private createHarvester(key: string, snapshot: WorldRenderSnapshot, faction: FactionId): DisposableObject {
@@ -680,6 +842,13 @@ class PhaserProductionScene extends Phaser.Scene {
     const prev = snapshot.prevHarvesterPositions.get(index) ?? { tx: harvester.tx, ty: harvester.ty };
     const keyName = harvesterKey(faction);
     this.drawUnitShadow(harvester.tx, harvester.ty, 0.1);
+
+    // Initialize VFX state
+    const vfx = this.getOrCreateHarvesterVfx(index);
+    const isMoving = harvester.phase === 'moving-to-resource' || harvester.phase === 'moving-to-dropoff';
+    vfx.isMoving = isMoving;
+    vfx.wasGathering = harvester.phase === 'gathering';
+    vfx.wasUnloading = harvester.phase === 'delivering';
 
     if (!this.textureExists(keyName)) {
       return this.createUnitFallback(harvester.tx, harvester.ty, '#5ee89a', this.entityDepth(harvester.tx, harvester.ty, 1));
@@ -710,17 +879,76 @@ class PhaserProductionScene extends Phaser.Scene {
     const keyName = harvesterKey(faction);
     if (!this.textureExists(keyName)) return;
 
+    const vfx = this.getOrCreateHarvesterVfx(index);
+    const isMoving = harvester.phase === 'moving-to-resource' || harvester.phase === 'moving-to-dropoff';
+    const isGathering = harvester.phase === 'gathering';
+    const isUnloading = harvester.phase === 'delivering';
+
+    // Compute screen-space direction for inertia from prev positions
+    if (isMoving) {
+      const dx = harvester.tx - prev.tx;
+      const dy = harvester.ty - prev.ty;
+      if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+        const prevCenter = tileToScreen(prev.tx, prev.ty);
+        const currCenter = tileToScreen(harvester.tx, harvester.ty);
+        const sdx = currCenter.x - prevCenter.x;
+        const sdy = currCenter.y - prevCenter.y;
+        const slen = Math.hypot(sdx, sdy);
+        if (slen > 0.001) {
+          vfx.screenDirX = sdx / slen;
+          vfx.screenDirY = sdy / slen;
+        }
+      }
+    }
+
+    // Update inertia
+    updateInertia(vfx.inertia, isMoving, vfx.screenDirX, vfx.screenDirY);
+
+    // Feedback effects: gather pulse on entering gathering, unload pulse on entering unloading
+    if (isGathering && !vfx.wasGathering) {
+      const center = tileToScreen(harvester.tx, harvester.ty);
+      spawnGatherPulse(this, center.x, center.y - 8, this.entityDepth(harvester.tx, harvester.ty, 1));
+    }
+    if (isUnloading && !vfx.wasUnloading) {
+      const hq = snapshot.map.hq;
+      const hqCenter = tileToScreen(hq.tx + HQ_FOOTPRINT / 2, hq.ty + HQ_FOOTPRINT / 2);
+      spawnUnloadPulse(this, hqCenter.x, hqCenter.y, this.entityDepth(hq.tx, hq.ty, HQ_FOOTPRINT));
+      // HQ pulse on delivery
+      const hqObj = this.hqRegistry.get(entityKey('hq', hq.tx, hq.ty));
+      if (hqObj && hqObj instanceof Phaser.GameObjects.Image) {
+        spawnHqPulse(this, hqObj);
+      }
+    }
+    vfx.wasGathering = isGathering;
+    vfx.wasUnloading = isUnloading;
+    vfx.isMoving = isMoving;
+
     const row = directionToRow(harvester.tx - prev.tx, harvester.ty - prev.ty);
     const col = harvesterAnimColumn(harvester.phase, snapshot.ticks);
     const center = tileToScreen(harvester.tx, harvester.ty);
     const profile = SPRITE_PROFILES.harvester_base;
     const fitted = containFit(UNIT_FRAME_SIZE, UNIT_FRAME_SIZE, profile.size[0], profile.size[1]);
+    const depth = this.entityDepth(harvester.tx, harvester.ty, 1);
 
-    obj.setPosition(center.x, center.y - profile.groundOffset);
-    obj.setDepth(this.entityDepth(harvester.tx, harvester.ty, 1));
+    // Apply inertia offset to visual position
+    const baseX = center.x;
+    const baseY = center.y - profile.groundOffset;
+    obj.setPosition(baseX + vfx.inertia.offsetX, baseY + vfx.inertia.offsetY);
+    obj.setAngle(vfx.inertia.rotation);
+    obj.setDepth(depth);
     if (obj instanceof Phaser.GameObjects.Sprite) {
       obj.setFrame(row * 8 + col);
       obj.setDisplaySize(fitted.drawWidth, fitted.drawHeight);
+    }
+
+    // Dust: start/stop based on movement
+    if (isMoving && !vfx.dust.isEmitting) {
+      vfx.dust.start(baseX, baseY, depth);
+    } else if (!isMoving && vfx.dust.isEmitting) {
+      vfx.dust.stop();
+    }
+    if (vfx.dust.isEmitting) {
+      vfx.dust.updatePosition(baseX, baseY, depth);
     }
   }
 
@@ -804,9 +1032,6 @@ class PhaserProductionScene extends Phaser.Scene {
       });
       text.setOrigin(0.5);
       text.setDepth(this.entityDepth(tx, ty, footprint) + 0.01);
-      // Return a container-like wrapper that groups both — but Phaser doesn't have
-      // a lightweight container for this, so return graphics and manage text lifecycle
-      // separately via a group object
       const container = this.add.container(0, 0);
       container.add(graphics);
       container.add(text);
@@ -887,7 +1112,7 @@ class PhaserProductionScene extends Phaser.Scene {
     return Boolean(node && !node.infinite && node.remaining <= 0);
   }
 
-  /** Destroy all registries and terrain cache. */
+  /** Destroy all registries, terrain cache, and VFX state. */
   destroyAll(): void {
     this.hqRegistry.clear((_k, obj) => obj.destroy());
     this.buildingRegistry.clear((_k, obj) => obj.destroy());
@@ -904,6 +1129,16 @@ class PhaserProductionScene extends Phaser.Scene {
     this.cachedTerrainBounds = null;
     this.renderCount = 0;
     this.lastRenderDurationMs = 0;
+    // Destroy VFX state
+    for (const vfx of this.harvesterVfx.values()) {
+      vfx.dust.destroy();
+    }
+    this.harvesterVfx.clear();
+    for (const vfx of this.builderVfx.values()) {
+      vfx.dust.destroy();
+    }
+    this.builderVfx.clear();
+    this.prevConstructionProgress = [];
   }
 }
 
