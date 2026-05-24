@@ -49,9 +49,9 @@ The migration audit must produce a written comparison with risk assessment, effo
 
 ## Recommendation
 
-1. **Return to MAPGEN-RESOURCE-BALANCE-01 first.** The civil gameplay loop needs mapgen balance work before visual polish. Resource distribution, starter pockets, and edge terrain are the immediate priority.
-2. **Treat Phaser as validated research.** The spike confirmed that Phaser can do the render/camera/animation/particle/VFX tasks for an isometric RTS. This knowledge is available for future VISUAL-MOTION-FEEDBACK-01 implementation or for a migration discussion when the time is right.
-3. **Do not start migration now.** The production renderer works, tests pass, and the game is playable. A renderer migration is a high-risk, high-effort change with no immediate gameplay benefit.
+1. **Immediate next decision step: PHASER-MIGRATION-AUDIT-01.** The project is still small enough that a renderer migration would be manageable now but will become exponentially harder later. The spike proved Phaser can do the job — now the audit must decide whether it should. The audit must compare options A/B/C and produce a written recommendation before any gameplay work continues.
+2. **MAPGEN-RESOURCE-BALANCE-01 remains the next gameplay block**, but it should be paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C. If the audit picks option A (keep Canvas 2D), gameplay work resumes unchanged. If the audit picks option B or C (Phaser render layer or full Phaser), mapgen and economy work should account for the new render architecture from the start rather than building on a renderer that will be replaced.
+3. **Migration is not approved automatically.** No production renderer migration has started. The audit decides; the spike does not.
 
 ## Spike artifacts
 

@@ -188,9 +188,11 @@ Civil loop before combat.
 
 The project rule remains: do not start combat, enemy AI, faction bonuses, or military systems until the civil baseline is playtested further.
 
-Current focus is mapgen and resource balance refinement — the civil economy works, pathfinding exists, map validation uses BFS, and telemetry tracks passability performance. The next step is ensuring map generation produces well-balanced resource distributions for the first 10+ minutes of gameplay.
+Current focus is the **PHASER-MIGRATION-AUDIT-01** decision gate. The civil economy works, pathfinding exists, map validation uses BFS, and telemetry tracks passability performance. The Phaser spike proved Phaser can handle render/camera/animation/particles/VFX. The project is still small enough that a renderer decision now avoids costly rewrites later.
 
-Next planned block: **MAPGEN-RESOURCE-BALANCE-01**.
+Immediate next decision step: **PHASER-MIGRATION-AUDIT-01**.
+
+MAPGEN-RESOURCE-BALANCE-01 remains the next gameplay block, but it should be paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C. If the audit picks option A (keep Canvas 2D), gameplay work resumes unchanged. If the audit picks option B or C, mapgen work should account for the new render architecture from the start.
 
 ## 5. New manual QA observations to fix
 
@@ -355,9 +357,27 @@ This belongs to movement/visual QA, not mapgen.
 
 The following blocks are planned in this order. Each requires a Full Audit before implementation unless already completed. Implementation is split into up to 3 stage PRs per block.
 
+### Block 0 — PHASER-MIGRATION-AUDIT-01
+
+Status: **immediate next decision step.** Must complete before Block 1.
+
+Type: Full Audit.
+
+Goal:
+
+- decide whether the production renderer stays Canvas 2D or migrates to Phaser;
+- compare three options with risk assessment, effort estimate, and rollback plan:
+  - **Option A** — keep Canvas 2D, port visual ideas from the spike (inertia, dust, feedback);
+  - **Option B** — replace only render/camera/animation/VFX layer with Phaser, keep GameWorld/GameState/systems/UI;
+  - **Option C** — full Phaser runtime migration (replace entire game loop with Phaser scenes/systems);
+- produce written recommendation;
+- MAPGEN-RESOURCE-BALANCE-01 pauses until this audit decides.
+
+Rationale: the project is still small enough that a renderer change is manageable now. Waiting makes migration exponentially harder. The spike proved Phaser can do the job; the audit decides whether it should.
+
 ### Block 1 — MAPGEN-RESOURCE-BALANCE-01
 
-Status: **immediate next focus.** Not yet started.
+Status: **paused until PHASER-MIGRATION-AUDIT-01 decides A/B/C.** Not yet started.
 
 Type: Full Audit, then 3 stage PRs.
 
@@ -501,9 +521,11 @@ Do not use Codex by default for small fixes.
 
 ## 8. Next recommended action
 
-1. Run **MAPGEN-RESOURCE-BALANCE-01** Full Audit.
-2. Implement in 3 stage PRs following the audit plan.
-3. After MAPGEN-RESOURCE-BALANCE-01 is merged, proceed to **SAVE-LOAD-MVP-01** Full Audit.
-4. Continue through the ordered sequence: VISUAL-MOTION-FEEDBACK-01 → UI-SHELL-ARCH-01 → GAMEWORLD-SPLIT-01.
-5. COMBAT-READINESS-01 remains blocked until blocks 1–3 are merged and playtested.
-6. Reassess sequence if priorities change, but do not skip ahead to combat.
+1. Run **PHASER-MIGRATION-AUDIT-01** Full Audit — compare options A/B/C with risk, effort, and rollback.
+2. After audit decides:
+   - If **A** (keep Canvas 2D): proceed to **MAPGEN-RESOURCE-BALANCE-01** Full Audit unchanged.
+   - If **B** (Phaser render layer): plan MAPGEN-RESOURCE-BALANCE-01 accounting for Phaser render integration.
+   - If **C** (full Phaser): plan MAPGEN-RESOURCE-BALANCE-01 as part of Phaser runtime migration.
+3. Continue through the ordered sequence: MAPGEN-RESOURCE-BALANCE-01 → SAVE-LOAD-MVP-01 → VISUAL-MOTION-FEEDBACK-01 → UI-SHELL-ARCH-01 → GAMEWORLD-SPLIT-01.
+4. COMBAT-READINESS-01 remains blocked until blocks 1–3 are merged and playtested.
+5. Reassess sequence if priorities change, but do not skip ahead to combat.
